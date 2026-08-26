@@ -15,12 +15,45 @@ UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
 
 
+async def seed_initial_users():
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.crud.crud_usuario import crear_usuario, get_usuario_by_username
+        from app.schemas.usuario import UsuarioCreate
+
+        async with AsyncSessionLocal() as db:
+            if not await get_usuario_by_username(db, "admin"):
+                await crear_usuario(
+                    db,
+                    UsuarioCreate(
+                        username="admin",
+                        password="admin123",
+                        rol="ADMIN",
+                    ),
+                )
+                print("✅ Seed: Usuario 'admin' creado automáticamente (Password: admin123).")
+
+            if not await get_usuario_by_username(db, "chofer1"):
+                await crear_usuario(
+                    db,
+                    UsuarioCreate(
+                        username="chofer1",
+                        password="chofer123",
+                        rol="CONDUCTOR",
+                    ),
+                )
+                print("✅ Seed: Usuario 'chofer1' creado automáticamente (Password: chofer123).")
+    except Exception as e:
+        print(f"⚠️ Error al sembrar usuarios iniciales: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic: Try creating tables if database is available
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        await seed_initial_users()
     except Exception as e:
         print(f"[WARNING] Could not connect to PostgreSQL database on startup: {e}")
         print("Please verify PostgreSQL is running and check your .env configuration.")
@@ -74,5 +107,3 @@ if __name__ == "__main__":
         port=settings.PORT,
         reload=settings.is_reload_enabled,
     )
-
-

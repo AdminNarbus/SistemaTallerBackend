@@ -82,15 +82,37 @@ POSTGRES_PASSWORD=tu_contraseña
 POSTGRES_DB=taller_narbus
 ```
 
-### 4. Ejecutar la Aplicación
+### 4. Ejecución por Perfiles / Entornos
+
+El proyecto cuenta con 3 perfiles preconfigurados de ejecución:
+
+| Perfil | Flag / Comando | Host | Auto-reload | Acceso CORS | Documentación `/docs` |
+|---|---|---|---|---|---|
+| **Dev Full Local** | `python run.py --local` | `127.0.0.1` | ✅ Activado | Estricto (localhost/127.0.0.1) | ✅ Habilitada |
+| **Dev Red Local (LAN)** | `python run.py --lan` | `0.0.0.0` | ✅ Activado | Abierto (Red Local / Capacitor) | ✅ Habilitada |
+| **Producción** | `python run.py --prod` | `0.0.0.0` | ❌ Desactivado | Dominios explícitos `BACKEND_CORS_ORIGINS` | ❌ Deshabilitada (Seguridad) |
+
+#### Ejemplos de comando:
 
 ```bash
-uvicorn app.main:app --reload
+# 1. Desarrollo Full Local (exclusivo para este equipo)
+python run.py --local
+
+# 2. Desarrollo Red Local (para conectar celulares / otros PC de la red)
+python run.py --lan
+
+# 3. Producción
+python run.py --prod
+
+# También puedes especificar la variable ENVIRONMENT en tu archivo .env:
+# ENVIRONMENT=dev_local
+# ENVIRONMENT=dev_lan
+# ENVIRONMENT=production
 ```
 
-El servidor estará corriendo en: `http://127.0.0.1:8000`
-
 ---
+
+
 
 ## 📚 Documentación Interactiva
 

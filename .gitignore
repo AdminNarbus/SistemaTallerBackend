@@ -1,10 +1,69 @@
-# Python
+# Environment & Secrets
+.env*
+!.env.example
+
+
+# Media & User Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Python & Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Virtual Environments
+venv/
+.venv/
 env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Databases & Storage
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs & Temporary Files
+*.log
+logs/
+*.tmp
+*.temp
+
+# Testing & Coverage & Caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build & Distribution
 build/
 develop-eggs/
 dist/
@@ -21,21 +80,3 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-.venv/
-ENV/
-
-# Environment Variables
-.env
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Testing / Coverage
-.coverage
-htmlcov/
-.pytest_cache/

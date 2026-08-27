@@ -1,17 +1,17 @@
-from app.models.base import Base
-from app.models.bus import Bus
-from app.models.conductor import Conductor
-from app.models.item import Item
-from app.models.reporte_neumatico import ReporteNeumatico
-from app.models.taller_solicitud import TallerSolicitud
-from app.models.usuario import Usuario
+from app.core.base import Base
+from app.modules.auth.models.rol import Rol
+from app.modules.auth.models.usuario import Usuario
+from app.modules.buses.models.bus import Bus
+from app.modules.conductores.models.conductor import Conductor
+from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 
 __all__ = [
     "Base",
-    "Item",
     "Conductor",
     "Bus",
     "ReporteNeumatico",
     "TallerSolicitud",
+    "Rol",
     "Usuario",
 ]

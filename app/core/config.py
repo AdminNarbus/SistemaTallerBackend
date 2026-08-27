@@ -73,11 +73,10 @@ class Settings(BaseSettings):
     def effective_cors_origin_regex(self) -> Optional[str]:
         if self.CORS_ORIGIN_REGEX:
             return self.CORS_ORIGIN_REGEX
-        if self.ENVIRONMENT == AppEnvironment.DEV_LAN:
-            return r"^(https?://.*|capacitor://.*)$"
-        elif self.ENVIRONMENT == AppEnvironment.DEV_LOCAL:
-            return r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+        if self.ENVIRONMENT in (AppEnvironment.DEV_LAN, AppEnvironment.DEV_LOCAL):
+            return r"^(https?://.*|http://.*|capacitor://.*)$"
         return None
+
 
     @property
     def docs_url(self) -> Optional[str]:

@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.crud.crud_usuario import get_usuario_by_id
-from app.models.usuario import Usuario
+from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.repository.user_repository import user_repository
 
 SessionDep = Depends(get_db)
 
@@ -37,7 +37,7 @@ async def get_current_user(
     except Exception:
         return None
 
-    user = await get_usuario_by_id(db, user_id=user_id)
+    user = await user_repository.get_by_id(db, user_id=user_id)
     if not user or not user.is_active:
         return None
     return user
@@ -56,3 +56,18 @@ async def require_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def require_supervisor_or_admin(
+    current_user: Usuario = Depends(require_current_user),
+) -> Usuario:
+    """
+    Exige que el usuario autenticado sea SUPERVISOR o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
+    """
+    rol_upper = (current_user.rol or "").upper().strip()
+    if rol_upper not in ["SUPERVISOR", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado: Se requieren permisos de SUPERVISOR o ADMIN.",
+        )
+    return current_user

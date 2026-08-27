@@ -15,51 +15,23 @@ UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
 
 
-async def seed_initial_users():
-    try:
-        from app.core.database import AsyncSessionLocal
-        from app.crud.crud_usuario import crear_usuario, get_usuario_by_username
-        from app.schemas.usuario import UsuarioCreate
-
-        async with AsyncSessionLocal() as db:
-            if not await get_usuario_by_username(db, "admin"):
-                await crear_usuario(
-                    db,
-                    UsuarioCreate(
-                        username="admin",
-                        password="admin123",
-                        rol="ADMIN",
-                    ),
-                )
-                print("✅ Seed: Usuario 'admin' creado automáticamente (Password: admin123).")
-
-            if not await get_usuario_by_username(db, "chofer1"):
-                await crear_usuario(
-                    db,
-                    UsuarioCreate(
-                        username="chofer1",
-                        password="chofer123",
-                        rol="CONDUCTOR",
-                    ),
-                )
-                print("✅ Seed: Usuario 'chofer1' creado automáticamente (Password: chofer123).")
-    except Exception as e:
-        print(f"⚠️ Error al sembrar usuarios iniciales: {e}")
+from app.core.db_patch import apply_db_patches
+from app.core.seed import seed_initial_data
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic: Try creating tables if database is available
     try:
+        await apply_db_patches()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        await seed_initial_users()
+        await seed_initial_data()
     except Exception as e:
-        print(f"[WARNING] Could not connect to PostgreSQL database on startup: {e}")
-        print("Please verify PostgreSQL is running and check your .env configuration.")
+        print(f"[WARNING] Could not connect to database on startup: {e}")
     yield
-    # Shutdown logic: Dispose database engine connections
     await engine.dispose()
+
+
 
 
 app = FastAPI(
@@ -71,7 +43,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configurar middleware CORS dinámico según perfil
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS],
@@ -81,10 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Montar directorio estático de uploads
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
-# Include API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 

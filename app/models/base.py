@@ -1,25 +1,19 @@
-from datetime import datetime
-from sqlalchemy import DateTime, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from app.core.base import Base, TimestampMixin
+from app.modules.auth.models.rol import Rol
+from app.modules.auth.models.usuario import Usuario
+from app.modules.buses.models.bus import Bus
+from app.modules.conductores.models.conductor import Conductor
+from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 
+__all__ = [
+    "Base",
+    "TimestampMixin",
+    "Rol",
+    "Usuario",
+    "Bus",
+    "Conductor",
+    "TallerSolicitud",
+    "ReporteNeumatico",
+]
 
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy ORM models."""
-
-    pass
-
-
-class TimestampMixin:
-    """Mixin adding created_at and updated_at timestamp columns to models."""
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )

@@ -1,5 +1,5 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.api.deps import (
     require_current_user,
     require_supervisor_or_admin,
 )
+from app.core.exceptions import ConflictException, NotFoundException
 from app.core.security import create_access_token
 from app.modules.auth.dtos import (
     TokenDTO,
@@ -111,10 +112,7 @@ async def register(
         db, username=usuario_in.username
     )
     if user_existente:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de usuario ya está registrado en el sistema.",
-        )
+        raise ConflictException("El nombre de usuario ya está registrado en el sistema.")
 
     nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
     access_token = create_access_token(subject=nuevo_usuario.id)
@@ -182,10 +180,7 @@ async def crear_usuario_supervisor(
         db, username=usuario_in.username
     )
     if user_existente:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de usuario ya existe.",
-        )
+        raise ConflictException("El nombre de usuario ya existe.")
 
     nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
     return nuevo_usuario
@@ -214,9 +209,6 @@ async def deshabilitar_usuario(
 
     user_desactivado = await user_repository.desactivar(db, user_id=usuario_id)
     if not user_desactivado:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="El usuario especificado no fue encontrado.",
-        )
+        raise NotFoundException("El usuario especificado no fue encontrado.")
 
     return user_desactivado

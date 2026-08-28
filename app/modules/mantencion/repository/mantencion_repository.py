@@ -4,6 +4,7 @@ from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
@@ -130,7 +131,7 @@ class MantencionRepository:
     ) -> TallerSolicitud:
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         # 1. Marcar mecánicos previos como inactivos si existieran
         for mec in solicitud.mecanicos:
@@ -186,7 +187,7 @@ class MantencionRepository:
         """
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         # Buscar la asignación activa del mecánico
         mecanico_entry = None
@@ -196,7 +197,7 @@ class MantencionRepository:
                 break
 
         if not mecanico_entry:
-            raise ValueError("El mecánico no está asignado activamente a esta solicitud")
+            raise BusinessRuleException("El mecánico no está asignado activamente a esta solicitud")
 
         mecanico_entry.is_activo = False
         mecanico_entry.fecha_desasignacion = datetime.now()
@@ -228,7 +229,7 @@ class MantencionRepository:
         """
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now()
         for mec in solicitud.mecanicos:
@@ -256,7 +257,7 @@ class MantencionRepository:
     ) -> TallerSolicitud:
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         detalle_target = None
         for det in solicitud.detalles:
@@ -265,7 +266,7 @@ class MantencionRepository:
                 break
 
         if not detalle_target:
-            raise ValueError("Detalle de falla no encontrado")
+            raise NotFoundException("Detalle de falla no encontrado")
 
         detalle_target.resuelto = resuelto
         if resuelto:
@@ -283,7 +284,7 @@ class MantencionRepository:
     ) -> TallerSolicitud:
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -302,7 +303,7 @@ class MantencionRepository:
     ) -> TallerSolicitud:
         solicitud = await self.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
-            raise ValueError("Solicitud no encontrada")
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now()
         solicitud.estado = "FINALIZADO"

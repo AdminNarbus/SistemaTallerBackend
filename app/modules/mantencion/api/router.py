@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_current_user, require_supervisor_or_admin
@@ -15,6 +15,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
 )
+from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/mantencion", tags=["mantencion"])
 
@@ -71,7 +72,7 @@ async def get_solicitud(
     """Obtiene el detalle completo de una solicitud por su ID."""
     solicitud = await mantencion_service.get_solicitud(db, id)
     if not solicitud:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud de taller no encontrada")
+        raise NotFoundException("Solicitud de taller no encontrada")
     return solicitud
 
 
@@ -83,10 +84,7 @@ async def tomar_trabajo(
     db: AsyncSession = SessionDep,
 ):
     """Auto-asignación de bus como Líder + invitación a colaboradores + comentario inicial opcional."""
-    try:
-        return await mantencion_service.tomar_trabajo(db, solicitud_id=id, lider_id=current_user.id, dto=dto)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.tomar_trabajo(db, solicitud_id=id, lider_id=current_user.id, dto=dto)
 
 
 @router.post("/{id}/desasignarme", response_model=SolicitudDTO)
@@ -97,10 +95,7 @@ async def desasignar_mecanico(
     db: AsyncSession = SessionDep,
 ):
     """Desasignación individual de un mecánico ('[🚪 Salir del Equipo]')."""
-    try:
-        return await mantencion_service.desasignar_mecanico(db, solicitud_id=id, mecanico_id=current_user.id, comentario=comentario)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.desasignar_mecanico(db, solicitud_id=id, mecanico_id=current_user.id, comentario=comentario)
 
 
 @router.post("/{id}/liberar-turno", response_model=SolicitudDTO)
@@ -111,10 +106,7 @@ async def liberar_turno(
     db: AsyncSession = SessionDep,
 ):
     """Liberación / Entrega de turno para el equipo completo ('[🔄 Entregar / Pasar Turno]')."""
-    try:
-        return await mantencion_service.liberar_turno(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.liberar_turno(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
 
 
 @router.patch("/{id}/detalles/{detalle_id}/check", response_model=SolicitudDTO)
@@ -126,12 +118,9 @@ async def check_detalle(
     db: AsyncSession = SessionDep,
 ):
     """Marca o desmarca un check de falla resuelta guardando el timestamp y el ID del mecánico."""
-    try:
-        return await mantencion_service.check_detalle(
-            db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id, resuelto=resuelto
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.check_detalle(
+        db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id, resuelto=resuelto
+    )
 
 
 @router.post("/{id}/comentarios", response_model=SolicitudDTO)
@@ -142,10 +131,7 @@ async def agregar_comentario(
     db: AsyncSession = SessionDep,
 ):
     """Agrega un comentario a la bitácora independiente de la solicitud."""
-    try:
-        return await mantencion_service.agregar_comentario(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.agregar_comentario(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
 
 
 @router.post("/{id}/finalizar", response_model=SolicitudDTO)
@@ -156,9 +142,6 @@ async def finalizar_solicitud(
     db: AsyncSession = SessionDep,
 ):
     """Finaliza los trabajos de la solicitud y deja el bus en estado DISPONIBLE."""
-    try:
-        return await mantencion_service.finalizar_solicitud(
-            db, solicitud_id=id, mecanico_cierre_id=current_user.id, dto=dto
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await mantencion_service.finalizar_solicitud(
+        db, solicitud_id=id, mecanico_cierre_id=current_user.id, dto=dto
+    )

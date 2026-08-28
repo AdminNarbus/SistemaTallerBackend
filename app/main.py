@@ -1,13 +1,22 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
 from app.core.config import AppEnvironment, settings
 from app.core.database import engine
 from app.core.db_patch import apply_db_patches
+from app.core.exceptions import (
+    NarbusException,
+    narbus_exception_handler,
+    http_exception_handler,
+    validation_exception_handler,
+    generic_exception_handler,
+)
 from app.core.seed import seed_initial_data
 
 
@@ -55,6 +64,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+# ─── Exception Handlers Globales ────────────────────────────────────────────
+# El orden de registro importa: del más específico al más genérico.
+app.add_exception_handler(NarbusException, narbus_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(api_router, prefix=settings.API_V1_STR)

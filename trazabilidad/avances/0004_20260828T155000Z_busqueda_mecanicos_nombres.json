@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 4,
+  "id": "AV-0004",
+  "timestamp": "2026-08-28T15:50:00Z",
+  "phase": "backend_taller",
+  "milestone": { "id": "MANT-2", "name": "Búsqueda Autocompletar Mecánicos y Asignación por Nombre", "statusBefore": "in_progress", "statusAfter": "completed" },
+  "type": "completed",
+  "summary": "Implementación del endpoint de búsqueda autocompletar de mecánicos y soporte para asignación de colaboradores por nombre o username.",
+  "scope": {
+    "planned": [
+      "Endpoint de búsqueda autocomplete de mecánicos GET /api/v1/auth/mecanicos/buscar",
+      "Soporte en TomarTrabajoDTO para recibir colaboradores por nombre (colaboradores_nombres)",
+      "Resolución automática de nombres de mecánicos a IDs en MantencionRepository"
+    ],
+    "completed": [
+      "Endpoint GET /api/v1/auth/mecanicos/buscar y alias /api/v1/auth/mecanicos con filtro por query string 'q'",
+      "Propiedad colaboradores_nombres en TomarTrabajoDTO y método get_mecanicos_by_nombres_o_usernames en UserRepository",
+      "Actualización de MantencionRepository.tomar_trabajo para resolver colaboradores por nombre",
+      "Suite de pruebas ampliada (32/32 tests pasados)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    { "path": "app/modules/auth/repository/user_repository.py", "action": "modified", "summary": "Nuevos métodos buscar_mecanicos y get_mecanicos_by_nombres_o_usernames" },
+    { "path": "app/modules/auth/api/router.py", "action": "modified", "summary": "Nuevos endpoints GET /mecanicos y GET /mecanicos/buscar" },
+    { "path": "app/modules/mantencion/dtos/mantencion_dto.py", "action": "modified", "summary": "Campo opcional colaboradores_nombres en TomarTrabajoDTO" },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "Resolución de colaboradores_nombres a IDs de usuario" },
+    { "path": "tests/integration/test_auth_api.py", "action": "modified", "summary": "Prueba de integración para autocomplete de mecánicos" },
+    { "path": "tests/integration/test_mantencion_api.py", "action": "modified", "summary": "Prueba de integración para asignación por nombre de colaboradores" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-004",
+      "title": "Búsqueda Autocomplete por Nombre y Resolución Transparente de IDs",
+      "rationale": "Los usuarios finales no conocen los IDs numéricos internos. Permitir buscar por nombre/username e ingresar nombres directamente en el payload mejora drásticamente la UX sin romper el contrato de base de datos relacional.",
+      "consequences": "El frontend puede enviar una lista de strings con nombres o usernames, y el backend resuelve automáticamente los IDs correspondientes en la BD relacional."
+    }
+  ],
+  "verification": [
+    { "command": ".\\venv\\Scripts\\python.exe -m pytest", "result": "passed", "evidence": "32 passed in 11.04s" }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar el componente de búsqueda autocompletar en el frontend React.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/busqueda-mecanicos", "commit": "local", "dirty": true },
+  "notes": ["Endpoints y DTOs actualizados y verificados."]
+}

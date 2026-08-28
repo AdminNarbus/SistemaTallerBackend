@@ -81,3 +81,33 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     )
     assert fin_res.status_code == 200
     assert fin_res.json()["estado"] == "FINALIZADO"
+
+
+@pytest.mark.asyncio
+async def test_tomar_trabajo_con_colaboradores_nombres(client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data):
+    """Prueba la asignación de colaboradores indicando sus nombres/usernames en lugar de IDs."""
+    # 1. Crear solicitud por conductor
+    sol_payload = {
+        "n_bus": "BUS-777",
+        "descripcion_general": "Revisión eléctrica",
+    }
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    assert create_res.status_code == 201
+    sol_id = create_res.json()["id"]
+
+    # 2. Mecánico 1 toma la solicitud enviando 'colaboradores_nombres'
+    tomar_res = await client.post(
+        f"/api/v1/mantencion/{sol_id}/tomar",
+        json={
+            "colaboradores_nombres": ["mecanico2@narbus.cl", "Mecanico Dos"],
+            "comentario_inicial": "Iniciando trabajo en equipo por nombre"
+        },
+        headers=auth_headers_mecanico1,
+    )
+    assert tomar_res.status_code == 200
+    data = tomar_res.json()
+    assert data["estado"] == "EN_REPARACION"
+    # Verificar que el colaborador fue asignado
+    mecs = data["mecanicos"]
+    assert len(mecs) >= 2
+    assert any(m["mecanico_id"] == seed_test_data["mecanico2"].id for m in mecs)

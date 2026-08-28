@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,6 +145,30 @@ async def get_me(
     Devuelve la información del usuario autenticado que envió el Token Bearer.
     """
     return current_user
+
+
+@router.get(
+    "/mecanicos/buscar",
+    response_model=List[UsuarioResponseDTO],
+    summary="Buscar mecánicos activos por nombre o query string (Autocomplete)",
+)
+@router.get(
+    "/mecanicos",
+    response_model=List[UsuarioResponseDTO],
+    summary="Listar/Buscar mecánicos activos (Autocomplete)",
+)
+async def buscar_mecanicos(
+    q: Optional[str] = Query("", description="Texto a buscar por nombre, apellido o username. Si está vacío, retorna todos."),
+    db: AsyncSession = SessionDep,
+    current_user: Usuario = Depends(require_current_user),
+) -> Any:
+    """
+    Endpoint para el buscador/autocompletar de mecánicos en el frontend.
+    Recibe un string de búsqueda 'q' (o vacío) y retorna la lista de mecánicos activos.
+    """
+    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | usuario_solicitante_id=%s", q, current_user.id)
+    mecanicos = await user_repository.buscar_mecanicos(db, q=q)
+    return mecanicos
 
 
 # =====================================================================

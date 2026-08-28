@@ -86,6 +86,7 @@ class SolicitudCreateDTO(BaseModel):
 
 class TomarTrabajoDTO(BaseModel):
     colaboradores_ids: Optional[List[int]] = None
+    colaboradores_nombres: Optional[List[str]] = None
     comentario_inicial: Optional[str] = None
 
 

@@ -83,3 +83,24 @@ async def test_usuarios_rbac_permissions(client, auth_headers_conductor, auth_he
     sup_id = seed_test_data["supervisor"].id
     self_del = await client.delete(f"/api/v1/auth/usuarios/{sup_id}", headers=auth_headers_supervisor)
     assert self_del.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_buscar_mecanicos_autocomplete(client, auth_headers_mecanico1, seed_test_data):
+    """Prueba el buscador de mecánicos autocompletar en GET /api/v1/auth/mecanicos/buscar."""
+    # 1. Búsqueda vacía -> lista todos los mecánicos activos
+    res_all = await client.get("/api/v1/auth/mecanicos/buscar", headers=auth_headers_mecanico1)
+    assert res_all.status_code == 200
+    mecanicos = res_all.json()
+    assert len(mecanicos) >= 2
+    assert any(m["username"] == "mecanico1@narbus.cl" for m in mecanicos)
+
+    # 2. Búsqueda por query string 'mecanico'
+    res_q = await client.get("/api/v1/auth/mecanicos/buscar?q=mecanico", headers=auth_headers_mecanico1)
+    assert res_q.status_code == 200
+    assert len(res_q.json()) >= 1
+
+    # 3. Alias /mecanicos
+    res_alias = await client.get("/api/v1/auth/mecanicos?q=mecanico1", headers=auth_headers_mecanico1)
+    assert res_alias.status_code == 200
+    assert res_alias.json()[0]["username"] == "mecanico1@narbus.cl"

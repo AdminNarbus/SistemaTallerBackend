@@ -161,19 +161,25 @@ class MantencionRepository:
         db.add(lider_entry)
         logger.info("[MANTENCION] Líder asignado | solicitud_id=%s | lider_id=%s", solicitud_id, lider_id)
 
-        # 3. Asignar colaboradores si fueron seleccionados
-        if dto.colaboradores_ids:
-            for colab_id in dto.colaboradores_ids:
-                if colab_id != lider_id:
-                    colab_entry = TallerSolicitudMecanico(
-                        solicitud_id=solicitud.id,
-                        mecanico_id=colab_id,
-                        es_lider_responsable=False,
-                        is_activo=True,
-                        fecha_asignacion=datetime.now(),
-                    )
-                    db.add(colab_entry)
-                    logger.info("[MANTENCION] Colaborador asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
+        # 3. Asignar colaboradores si fueron seleccionados (por IDs o por Nombres)
+        target_colab_ids = set(dto.colaboradores_ids or [])
+        if dto.colaboradores_nombres:
+            from app.modules.auth.repository.user_repository import user_repository
+            colab_users = await user_repository.get_mecanicos_by_nombres_o_usernames(db, dto.colaboradores_nombres)
+            for u in colab_users:
+                target_colab_ids.add(u.id)
+
+        for colab_id in target_colab_ids:
+            if colab_id != lider_id:
+                colab_entry = TallerSolicitudMecanico(
+                    solicitud_id=solicitud.id,
+                    mecanico_id=colab_id,
+                    es_lider_responsable=False,
+                    is_activo=True,
+                    fecha_asignacion=datetime.now(),
+                )
+                db.add(colab_entry)
+                logger.info("[MANTENCION] Colaborador asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
 
         # 4. Actualizar estado de la solicitud
         solicitud.estado = "EN_REPARACION"

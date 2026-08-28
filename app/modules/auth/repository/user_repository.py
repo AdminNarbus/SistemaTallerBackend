@@ -108,4 +108,78 @@ class UserRepository:
         return user
 
 
+    async def buscar_mecanicos(
+        self, db: AsyncSession, q: Optional[str] = None
+    ) -> List[Usuario]:
+        """
+        Busca usuarios activos con rol MECÁNICO o ADMIN por nombre, apellido o username.
+        Si q está vacío o es None, retorna todos los mecánicos activos.
+        """
+        from sqlalchemy import or_, and_, func
+        stmt = (
+            select(Usuario)
+            .join(Rol)
+            .where(
+                and_(
+                    Usuario.is_active == True,
+                    Rol.nombre.in_(["MECANICO", "ADMIN"]),
+                )
+            )
+        )
+        if q and q.strip():
+            pattern = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Usuario.username.ilike(pattern),
+                    Usuario.nombre.ilike(pattern),
+                    Usuario.apellido.ilike(pattern),
+                    func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern),
+                )
+            )
+        stmt = stmt.order_by(Usuario.nombre.asc(), Usuario.username.asc())
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_mecanicos_by_nombres_o_usernames(
+        self, db: AsyncSession, nombres: List[str]
+    ) -> List[Usuario]:
+        """
+        Dada una lista de nombres de usuario o nombres completos, resuelve los usuarios mecánicos correspondientes.
+        """
+        from sqlalchemy import or_, and_, func
+        if not nombres:
+            return []
+
+        mecanicos_encontrados = []
+        for item in nombres:
+            clean = item.strip()
+            if not clean:
+                continue
+            pattern = clean
+            pattern_like = f"%{clean}%"
+            stmt = (
+                select(Usuario)
+                .join(Rol)
+                .where(
+                    and_(
+                        Usuario.is_active == True,
+                        Rol.nombre.in_(["MECANICO", "ADMIN"]),
+                        or_(
+                            Usuario.username.ilike(pattern),
+                            Usuario.nombre.ilike(pattern),
+                            func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern),
+                            func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern_like),
+                        ),
+                    )
+                )
+            )
+            res = await db.execute(stmt)
+            users = res.scalars().all()
+            for user in users:
+                if user not in mecanicos_encontrados:
+                    mecanicos_encontrados.append(user)
+
+        return mecanicos_encontrados
+
+
 user_repository = UserRepository()

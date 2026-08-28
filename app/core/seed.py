@@ -37,7 +37,7 @@ async def seed_initial_data():
                             rol=rol,
                         ),
                     )
-                    print(f"[SEED] Usuario '{username}' ({rol}) creado exitosamente.")
+                    logger.info("[SEED] Usuario '%s' (%s) creado exitosamente.", username, rol)
 
             # 2. Sembrar Conductores
             conductores_sembrar = [
@@ -53,7 +53,7 @@ async def seed_initial_data():
                     cond_obj = Conductor(**cond_data)
                     db.add(cond_obj)
                     await db.commit()
-                    print(f"[SEED] Conductor '{cond_data['nombre']}' registrado exitosamente.")
+                    logger.info("[SEED] Conductor '%s' registrado exitosamente.", cond_data['nombre'])
 
             # 3. Sembrar Categorías de Fallas
             cats_sembrar = ["FRENOS", "ELECTRICO", "MOTOR", "CARROCERIA", "CLIMATIZACION", "OTRO"]
@@ -66,7 +66,7 @@ async def seed_initial_data():
                     cat_obj = CategoriaFalla(nombre=cat_nombre, is_active=True)
                     db.add(cat_obj)
                     await db.commit()
-                    print(f"[SEED] Categoría de Falla '{cat_nombre}' creada.")
+                    logger.info("[SEED] Categoría de Falla '%s' creada.", cat_nombre)
                 cat_map[cat_nombre] = cat_obj.id
 
             # 4. Sembrar Fallas de Taller preconcebidas
@@ -89,7 +89,7 @@ async def seed_initial_data():
                         f_obj = FallaTaller(categoria_id=cat_map[cat_n], nombre=falla_n, is_active=True)
                         db.add(f_obj)
                         await db.commit()
-                        print(f"[SEED] Falla de Taller '{falla_n}' ({cat_n}) creada.")
+                        logger.info("[SEED] Falla de Taller '%s' (%s) creada.", falla_n, cat_n)
 
             # 5. Sembrar Solicitudes de Mantención iniciales
             user_chofer = await user_repository.get_by_username(db, "chofer1")
@@ -133,7 +133,7 @@ async def seed_initial_data():
                 db.add(det2)
 
                 await db.commit()
-                print("[SEED] Solicitudes de mantención iniciales creadas exitosamente.")
+                logger.info("[SEED] Solicitudes de mantención iniciales creadas exitosamente.")
 
             # 6. Sembrar Reporte Neumático de prueba
             stmt_neu = select(ReporteNeumatico)
@@ -153,7 +153,7 @@ async def seed_initial_data():
                 )
                 db.add(rep_obj)
                 await db.commit()
-                print("[SEED] Reporte de neumáticos de prueba creado exitosamente.")
+                logger.info("[SEED] Reporte de neumáticos de prueba creado exitosamente.")
 
         except Exception as e:
-            print(f"[SEED ERROR] Error durante la siembra de datos de prueba: {e}")
+            logger.warning("[SEED] Error durante la siembra de datos de prueba: %s", e)

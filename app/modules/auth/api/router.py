@@ -1,5 +1,6 @@
+import logging
 from typing import Any, List
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,8 @@ from app.modules.auth.dtos import (
 from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.repository.user_repository import user_repository
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -36,6 +39,7 @@ async def login(
     Endpoint para autenticación de usuario vía JSON payload.
     Retorna el Token JWT Bearer y los datos del perfil de usuario.
     """
+    logger.info("[AUTH] Intento de login JSON | username='%s'", login_data.username)
     user = await user_repository.authenticate(
         db, username=login_data.username, password=login_data.password
     )
@@ -51,6 +55,7 @@ async def login(
         )
 
     access_token = create_access_token(subject=user.id)
+    logger.info("[AUTH] Token JWT generado | id=%s | username='%s'", user.id, user.username)
 
     return TokenDTO(
         access_token=access_token,
@@ -72,6 +77,7 @@ async def login_access_token(
     """
     Endpoint compatible con OAuth2 Password Flow (Form Data).
     """
+    logger.info("[AUTH] Intento de login OAuth2 form | username='%s'", form_data.username)
     user = await user_repository.authenticate(
         db, username=form_data.username, password=form_data.password
     )
@@ -87,6 +93,7 @@ async def login_access_token(
         )
 
     access_token = create_access_token(subject=user.id)
+    logger.info("[AUTH] Token JWT generado (OAuth2) | id=%s | username='%s'", user.id, user.username)
 
     return TokenDTO(
         access_token=access_token,
@@ -108,6 +115,7 @@ async def register(
     """
     Registra un nuevo usuario en la base de datos y retorna su token de acceso.
     """
+    logger.info("[AUTH] Solicitud de registro | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
     user_existente = await user_repository.get_by_username(
         db, username=usuario_in.username
     )
@@ -116,6 +124,7 @@ async def register(
 
     nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
     access_token = create_access_token(subject=nuevo_usuario.id)
+    logger.info("[AUTH] Registro exitoso | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
 
     return TokenDTO(
         access_token=access_token,

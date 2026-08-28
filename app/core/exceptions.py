@@ -82,6 +82,13 @@ async def narbus_exception_handler(request: Request, exc: NarbusException) -> JS
     Maneja todas las subclases de NarbusException (NotFoundException,
     BusinessRuleException, ConflictException, PermissionException).
     """
+    logger.warning(
+        "[NARBUS_EXCEPTION] %s %s → %s: %s",
+        request.method,
+        request.url.path,
+        exc.error_code,
+        exc.message,
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content=_error_body(exc.error_code, exc.message, exc.detail),
@@ -97,6 +104,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     if exc.status_code == status.HTTP_401_UNAUTHORIZED:
         headers["WWW-Authenticate"] = "Bearer"
 
+    logger.warning(
+        "[HTTP_EXCEPTION] %s %s → HTTP %s: %s",
+        request.method,
+        request.url.path,
+        exc.status_code,
+        exc.detail,
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content=_error_body("HTTP_ERROR", str(exc.detail) if exc.detail else "Error HTTP"),

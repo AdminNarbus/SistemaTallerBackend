@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 5,
+  "id": "AV-HIST-005",
+  "timestamp": "2026-08-27T17:00:00Z",
+  "phase": "autenticacion_jwt",
+  "milestone": {
+    "id": "AUTH-1",
+    "name": "Sistema de Autenticación JWT Bearer",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación completa del sistema de autenticación basado en JWT Bearer. Incluye endpoints de login (JSON y OAuth2 form-data), registro de usuarios, consulta de perfil propio, listado administrativo, creación administrativa y soft-delete. El sistema usa PyJWT + Passlib/Bcrypt para tokens y hashing de contraseñas.",
+  "scope": {
+    "planned": [
+      "Implementar login con JWT.",
+      "Endpoints de gestión de usuarios.",
+      "Middleware de autenticación (deps.py).",
+      "Separar endpoints por rol."
+    ],
+    "completed": [
+      "POST /api/v1/auth/login (JSON payload).",
+      "POST /api/v1/auth/login/token (OAuth2 form-data).",
+      "POST /api/v1/auth/register.",
+      "GET /api/v1/auth/me.",
+      "GET /api/v1/auth/usuarios (requiere supervisor/admin).",
+      "POST /api/v1/auth/usuarios (requiere supervisor/admin).",
+      "DELETE /api/v1/auth/usuarios/{id} (soft-delete, requiere supervisor/admin).",
+      "app/core/security.py: create_access_token y verify_token.",
+      "app/api/deps.py: require_current_user y require_supervisor_or_admin.",
+      "DTOs: UsuarioCreateDTO, UsuarioLoginDTO, UsuarioResponseDTO, TokenDTO.",
+      "UserRepository con métodos authenticate, create, get_by_username, get_by_id, get_all, desactivar."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "OAuth2 con refresh tokens.",
+      "Recuperación de contraseña."
+    ]
+  },
+  "changes": [
+    { "path": "app/core/security.py", "action": "created", "summary": "Funciones create_access_token y verify_token usando PyJWT + Bcrypt." },
+    { "path": "app/api/deps.py", "action": "created", "summary": "Dependencias FastAPI: require_current_user y require_supervisor_or_admin." },
+    { "path": "app/modules/auth/api/router.py", "action": "created", "summary": "7 endpoints de autenticación y gestión de usuarios." },
+    { "path": "app/modules/auth/repository/user_repository.py", "action": "created", "summary": "Repositorio de usuarios con operaciones CRUD y autenticación." },
+    { "path": "app/modules/auth/dtos/", "action": "created", "summary": "DTOs Pydantic para login, registro y respuesta de usuario." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Dos endpoints de login: JSON payload y OAuth2 form-data",
+      "rationale": "El frontend móvil usa JSON (axios/fetch), pero Swagger UI requiere OAuth2PasswordRequestForm para el botón Authorize. Se mantienen ambos para compatibilidad.",
+      "consequences": "POST /login para el frontend, POST /login/token para Swagger. Ambos emiten el mismo JWT."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Soft-delete de usuarios (is_active=False) en vez de DELETE físico",
+      "rationale": "Los usuarios desactivados pueden haber creado solicitudes, comentarios o reportes. Borrarlos físicamente rompería la integridad referencial y el historial de auditoría.",
+      "consequences": "El campo is_active determina si el usuario puede autenticarse. Los registros históricos referenciando al usuario permanecen intactos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Verificación de rol en deps.py como dependencia FastAPI en vez de decorador custom",
+      "rationale": "FastAPI's Depends() es el patrón nativo y composable para inyectar autenticación. Permite reutilizar require_current_user en require_supervisor_or_admin.",
+      "consequences": "Los endpoints protegidos declaran su nivel de acceso en la firma de la función, lo que es legible y auto-documentado por Swagger."
+    }
+  ],
+  "verification": [
+    { "command": "POST /api/v1/auth/login con admin/admin123", "result": "passed", "evidence": "JWT token generado y retornado con perfil de usuario completo." },
+    { "command": "GET /api/v1/auth/me con Authorization: Bearer <token>", "result": "passed", "evidence": "Retorna perfil del usuario autenticado." }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar el repositorio y servicio del módulo de mantención.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/autenticacion-usuarios", "commit": "auth_jwt", "dirty": false },
+  "notes": [
+    "El sistema de autenticación fue validado con el frontend React en sesiones de debugging de errores 401.",
+    "Se resolvió un error de CORS durante las pruebas de integración frontend-backend."
+  ]
+}

@@ -1,5 +1,8 @@
+import logging
 from sqlalchemy import text
 from app.core.database import AsyncSessionLocal
+
+logger = logging.getLogger(__name__)
 
 async def apply_db_patches():
     """Aplica parches de esquema a tablas preexistentes en PostgreSQL para asegurar compatibilidad."""
@@ -18,6 +21,7 @@ async def apply_db_patches():
             try:
                 await db.execute(text(patch_sql))
                 await db.commit()
+                logger.debug("[DB_PATCH] Parche aplicado | sql='%s'", patch_sql[:80])
             except Exception as e:
                 await db.rollback()
-                print(f"[DB PATCH NOTE] {patch_sql} -> {e}")
+                logger.warning("[DB_PATCH] Parche omitido (puede ser normal) | sql='%s...' | error=%s", patch_sql[:60], e)

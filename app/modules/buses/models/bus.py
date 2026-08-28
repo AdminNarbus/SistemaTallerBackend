@@ -1,15 +1,17 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import Optional
 from sqlalchemy import Boolean, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
 
-if TYPE_CHECKING:
-    from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
-
 
 class Bus(Base):
-    """Modelo ORM para la tabla buses existente en la base de datos."""
+    """
+    Modelo ORM para la tabla buses (referencia legacy).
+    NOTA: La tabla buses no se usa activamente en el sistema de taller.
+    Los buses se identifican por su n_bus (string) directamente en las
+    tablas taller_solicitudes y reportes_neumaticos, sin FK a esta tabla.
+    """
 
     __tablename__ = "buses"
     __table_args__ = {"extend_existing": True}
@@ -21,8 +23,4 @@ class Bus(Base):
     modelo: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[Optional[bool]] = mapped_column(
         Boolean, default=True, nullable=True
-    )
-
-    reportes_neumaticos: Mapped[List["ReporteNeumatico"]] = relationship(
-        "ReporteNeumatico", back_populates="bus"
     )

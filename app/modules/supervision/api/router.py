@@ -1,3 +1,4 @@
+import logging
 from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,8 @@ from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.models.usuario import Usuario
 from app.modules.mantencion.services.mantencion_service import mantencion_service
 from app.modules.mantencion.dtos.mantencion_dto import SolicitudDTO
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supervision", tags=["supervision"])
 
@@ -21,4 +24,7 @@ async def get_auditoria_buses_taller(
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
     y la bitácora de comentarios cronológica.
     """
-    return await mantencion_service.list_auditoria(db)
+    logger.info("[SUPERVISION] Solicitud de auditoría de buses en taller | supervisor_id=%s", current_user.id)
+    result = await mantencion_service.list_auditoria(db)
+    logger.debug("[SUPERVISION] Auditoría retornada | total_solicitudes=%s", len(result))
+    return result

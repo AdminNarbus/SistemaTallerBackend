@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 3,
+  "id": "AV-HIST-003",
+  "timestamp": "2026-08-26T09:00:00Z",
+  "phase": "base_de_datos_migracion_002",
+  "milestone": {
+    "id": "DB-2",
+    "name": "Migración 002 — Módulo Neumáticos",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se diseñó e implementó la segunda migración Alembic (002_create_neumaticos_tables.py) creando la tabla reportes_neumaticos para el módulo independiente de inspección de neumáticos. El modelo contempla registro de ruedas inspeccionadas como JSONB, foto de evidencia opcional y campo marca_fuego opcional.",
+  "scope": {
+    "planned": [
+      "Diseñar esquema de reportes de neumáticos.",
+      "Crear migración Alembic 002.",
+      "Implementar modelo ORM ReporteNeumatico.",
+      "Crear endpoints CRUD básicos del módulo."
+    ],
+    "completed": [
+      "Tabla reportes_neumaticos: id, usuario_id (FK → usuarios), n_bus, tipo_bus, ruedas (JSONB), motivo, precio, marca_fuego (nullable), evidencia_url (nullable), fecha_subida.",
+      "Modelo ORM ReporteNeumatico con relación a Usuario.",
+      "Endpoints GET /formularioNeumatico y POST /formularioNeumatico.",
+      "Soporte multipart/form-data para subida de evidencia fotográfica.",
+      "campo marca_fuego definido como opcional."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Módulo de mantención de taller.",
+      "Análisis estadístico de neumáticos."
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/002_create_neumaticos_tables.py", "action": "created", "summary": "Migración que crea la tabla reportes_neumaticos con soporte JSONB para ruedas." },
+    { "path": "app/modules/neumaticos/models/reporte_neumatico.py", "action": "created", "summary": "Modelo ORM de la tabla reportes_neumaticos." },
+    { "path": "app/modules/neumaticos/api/router.py", "action": "created", "summary": "Endpoints GET y POST para el módulo de neumáticos." },
+    { "path": "app/modules/neumaticos/dtos/", "action": "created", "summary": "DTOs de entrada/salida para el formulario de neumáticos." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Campo ruedas como JSONB en vez de tabla relacional",
+      "rationale": "El número y posición de ruedas varía según el tipo de bus (piso simple vs doble piso). Un campo JSONB permite flexibilidad sin necesidad de definir una tabla rígida de posiciones.",
+      "consequences": "El frontend puede enviar cualquier estructura de ruedas. Los reportes son inmutables una vez guardados. Se pierde capacidad de consulta SQL directa por rueda individual."
+    },
+    {
+      "id": "DEC-002",
+      "title": "campo marca_fuego opcional",
+      "rationale": "No todos los reportes de neumáticos requieren identificación de marca_fuego. Forzarlo rompería formularios donde este dato no está disponible.",
+      "consequences": "El campo es nullable=True en la base de datos y Optional en el DTO Pydantic."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Módulo neumáticos completamente independiente de mantención",
+      "rationale": "Los reportes de neumáticos se realizan como inspección preventiva, no necesariamente vinculados a una solicitud de taller. Son procesos de negocio distintos.",
+      "consequences": "Los módulos neumaticos y mantencion son independientes: no comparten tablas ni lógica de servicio."
+    }
+  ],
+  "verification": [
+    { "command": "alembic upgrade head", "result": "passed", "evidence": "Tabla reportes_neumaticos creada con índices en usuario_id y n_bus." }
+  ],
+  "blockers": [],
+  "nextStep": "Diseñar e implementar el módulo de mantención de taller con arquitectura 3NF.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/diseno-base-de-datos", "commit": "db_002", "dirty": false },
+  "notes": [
+    "Este módulo fue diseñado como completamente autónomo del módulo de mantención.",
+    "La decisión de JSONB para ruedas simplificó enormemente el modelo relacional."
+  ]
+}

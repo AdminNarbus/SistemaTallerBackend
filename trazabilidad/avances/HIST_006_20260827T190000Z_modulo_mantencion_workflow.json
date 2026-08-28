@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 6,
+  "id": "AV-HIST-006",
+  "timestamp": "2026-08-27T19:00:00Z",
+  "phase": "modulo_mantencion_workflow",
+  "milestone": {
+    "id": "MANT-1",
+    "name": "Módulo de Mantención — Workflow Completo de Solicitudes",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del flujo completo del módulo de mantención de taller: repositorio, servicio y 11 endpoints REST que cubren el ciclo de vida completo de una solicitud (creación, auto-asignación de mecánicos, colaboradores, entrega de turno, check de fallas resueltas, bitácora de comentarios y cierre final). Arquitectura en 3 capas: router → service → repository.",
+  "scope": {
+    "planned": [
+      "MantencionRepository con toda la lógica de persistencia.",
+      "MantencionService como capa de coordinación.",
+      "11 endpoints REST completos.",
+      "DTOs de entrada/salida."
+    ],
+    "completed": [
+      "GET /api/v1/mantencion/categorias — Catálogo de categorías de falla.",
+      "GET /api/v1/mantencion/fallas — Maestro de fallas activas con filtro por categoría.",
+      "POST /api/v1/mantencion/solicitudes — Crear orden de taller.",
+      "GET /api/v1/mantencion/pendientes — Pestaña 1 mecánico (REPORTADO / PENDIENTE_REASIGNACION).",
+      "GET /api/v1/mantencion/mis-trabajos — Pestaña 2 mecánico (trabajos asignados activos).",
+      "GET /api/v1/mantencion/{id} — Detalle completo de una solicitud.",
+      "POST /api/v1/mantencion/{id}/tomar — Auto-asignación líder + invitar colaboradores.",
+      "POST /api/v1/mantencion/{id}/desasignarme — Salir del equipo individualmente.",
+      "POST /api/v1/mantencion/{id}/liberar-turno — Entrega de turno grupal.",
+      "PATCH /api/v1/mantencion/{id}/detalles/{detalle_id}/check — Marcar/desmarcar falla resuelta.",
+      "POST /api/v1/mantencion/{id}/comentarios — Agregar comentario a la bitácora.",
+      "POST /api/v1/mantencion/{id}/finalizar — Cerrar solicitud y liberar bus.",
+      "MantencionRepository con métodos para cada operación del workflow.",
+      "DTOs de entrada y salida para todas las operaciones."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Notificaciones push a mecánicos.",
+      "Integración con sistema externo de buses."
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "created", "summary": "Repositorio completo con toda la lógica de persistencia del workflow." },
+    { "path": "app/modules/mantencion/services/mantencion_service.py", "action": "created", "summary": "Capa de servicio que coordina la lógica de negocio entre el router y el repositorio." },
+    { "path": "app/modules/mantencion/api/router.py", "action": "created", "summary": "11 endpoints REST del módulo de mantención." },
+    { "path": "app/modules/mantencion/dtos/mantencion_dto.py", "action": "created", "summary": "DTOs Pydantic: SolicitudCreateDTO, TomarTrabajoDTO, LiberarTurnoDTO, FinalizarSolicitudDTO, ComentarioCreateDTO y SolicitudDTO (respuesta)." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Auto-asignación del mecánico como Líder al tomar trabajo",
+      "rationale": "En el flujo de taller, el mecánico que toma el trabajo se convierte automáticamente en el líder responsable. No requiere asignación manual por un supervisor.",
+      "consequences": "El endpoint POST /{id}/tomar crea un TallerSolicitudMecanico con es_lider_responsable=True para el usuario autenticado."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Desasignación individual (desasignarme) vs. entrega grupal (liberar-turno)",
+      "rationale": "Existen dos escenarios distintos: un mecánico sale del equipo temporalmente (desasignarme) vs. todo el equipo entrega el turno al siguiente (liberar-turno). Requieren endpoints separados.",
+      "consequences": "desasignarme marca solo el mecánico autenticado como is_activo=False. liberar-turno marca todo el equipo activo y cambia el estado a PENDIENTE_REASIGNACION."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Arquitectura 3 capas Router → Service → Repository",
+      "rationale": "El router maneja HTTP (validación de entrada/salida), el service maneja la lógica de negocio, el repository maneja la persistencia. Separar responsabilidades facilita el testing y la mantenibilidad.",
+      "consequences": "Los routers no contienen lógica de negocio ni acceso directo a la DB. Los repositorios no conocen la lógica HTTP. Todo acceso a DB pasa por AsyncSession inyectada."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Campo tipo en comentarios para clasificar eventos del workflow",
+      "rationale": "Los comentarios en la bitácora pueden ser de diferentes tipos: GENERAL (nota libre), ASIGNACION (registro de toma de trabajo), LIBERACION (entrega de turno), CIERRE (finalización). Tipificarlos permite filtrar la bitácora por eventos.",
+      "consequences": "El frontend puede mostrar diferentes iconos/colores por tipo de evento en la timeline de la solicitud."
+    }
+  ],
+  "verification": [
+    { "command": "POST /api/v1/mantencion/solicitudes", "result": "passed", "evidence": "Solicitud creada con estado REPORTADO y detalles de falla." },
+    { "command": "POST /api/v1/mantencion/{id}/tomar", "result": "passed", "evidence": "Mecánico líder asignado, estado cambia a EN_REPARACION." },
+    { "command": "POST /api/v1/mantencion/{id}/finalizar", "result": "passed", "evidence": "Solicitud finalizada, mecánico_cierre_id registrado, estado FINALIZADO." }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar módulo de supervisión para auditoría del taller.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/autenticacion-usuarios", "commit": "mantencion_workflow", "dirty": false },
+  "notes": [
+    "Este módulo implementa el flujo de trabajo móvil de 2 pestañas para mecánicos.",
+    "La bitácora cronológica fue el elemento más complejo del diseño.",
+    "Se descubrió y resolvió un bug en la carga lazy de relaciones que causaba DetachedInstanceError."
+  ]
+}

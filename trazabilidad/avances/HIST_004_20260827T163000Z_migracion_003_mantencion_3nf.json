@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 4,
+  "id": "AV-HIST-004",
+  "timestamp": "2026-08-27T16:30:00Z",
+  "phase": "base_de_datos_migracion_003_3nf",
+  "milestone": {
+    "id": "DB-3",
+    "name": "Migración 003 — Diseño e Implementación del Módulo Mantención en 3NF (HITO PRINCIPAL)",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Diseño e implementación del modelo relacional completo del módulo de Taller en Tercera Forma Normal (3NF). Se crearon 6 tablas normalizadas: categorias_falla, fallas_taller, taller_solicitudes, taller_solicitud_detalles, taller_solicitud_mecanicos y taller_solicitud_comentarios. Se eliminó la dependencia transitiva de categoria_id en taller_solicitud_detalles (la categoría se obtiene vía falla_id → fallas_taller → categorias_falla). Se implementó la bitácora de comentarios cronológica como tabla independiente.",
+  "scope": {
+    "planned": [
+      "Diseñar el modelo ER 3NF del módulo de taller.",
+      "Crear la migración Alembic 003.",
+      "Implementar todos los modelos ORM.",
+      "Implementar el workflow completo de solicitudes."
+    ],
+    "completed": [
+      "Tabla categorias_falla: id, nombre (UK), is_active.",
+      "Tabla fallas_taller: id, categoria_id (FK, CASCADE), nombre, is_active.",
+      "Tabla taller_solicitudes: id, n_bus, usuario_creador_id (FK, SET NULL), mecanico_cierre_id (FK, SET NULL), estado, descripcion_general, foto_url, fecha_creacion, fecha_cierre.",
+      "Tabla taller_solicitud_detalles (3NF): id, solicitud_id (FK, CASCADE), falla_id (FK nullable), descripcion_personalizada (falla de texto libre), resuelto (bool), mecanico_resolvio_id (FK nullable), fecha_resolucion.",
+      "Tabla taller_solicitud_mecanicos: id, solicitud_id, mecanico_id, es_lider_responsable, is_activo, fecha_asignacion, fecha_desasignacion.",
+      "Tabla taller_solicitud_comentarios: id, solicitud_id, usuario_id, tipo ('GENERAL','ASIGNACION','LIBERACION','CIERRE'), comentario, fecha_registro.",
+      "Migración idempotente con verificación de existencia.",
+      "6 modelos ORM implementados con relaciones selectin.",
+      "Bus referenciado solo por n_bus (string), sin tabla buses."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Tabla buses eliminada del alcance (referencia directa por n_bus).",
+      "Tabla supervisores (se usa la tabla usuarios con rol SUPERVISOR)."
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/003_create_mantencion_3nf_tables.py", "action": "created", "summary": "Migración 3NF completa del módulo de taller: 6 tablas con FKs, CASCADE e índices." },
+    { "path": "app/modules/mantencion/models/categoria_falla.py", "action": "created", "summary": "Modelo ORM de categorias_falla." },
+    { "path": "app/modules/mantencion/models/falla_taller.py", "action": "created", "summary": "Modelo ORM de fallas_taller con relación a CategoriaFalla." },
+    { "path": "app/modules/mantencion/models/taller_solicitud.py", "action": "created", "summary": "Modelo ORM de taller_solicitudes con relaciones selectin a detalles, mecanicos y comentarios." },
+    { "path": "app/modules/mantencion/models/taller_solicitud_detalle.py", "action": "created", "summary": "Modelo ORM de taller_solicitud_detalles (3NF sin categoria_id redundante)." },
+    { "path": "app/modules/mantencion/models/taller_solicitud_mecanico.py", "action": "created", "summary": "Modelo ORM de taller_solicitud_mecanicos con soft-desasignacion (is_activo, fecha_desasignacion)." },
+    { "path": "app/modules/mantencion/models/taller_solicitud_comentario.py", "action": "created", "summary": "Modelo ORM de bitácora de comentarios con campo tipo para clasificar eventos." },
+    { "path": "app/modules/mantencion/__init__.py", "action": "created", "summary": "Importación centralizada de todos los modelos del módulo de mantención para registro en la Base ORM." },
+    { "path": "app/core/db_patch.py", "action": "created", "summary": "Script de parches ALTER TABLE para columnas faltantes en tablas preexistentes (compatibilidad con esquema heredado)." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "3NF: Eliminación de categoria_id en taller_solicitud_detalles",
+      "rationale": "En el diseño inicial existía una dependencia transitiva: solicitud_detalle.categoria_id dependía de solicitud_detalle.falla_id → falla.categoria_id. Esto viola la 3NF porque categoria_id se puede derivar de falla_id sin necesidad de almacenarlo nuevamente.",
+      "consequences": "La categoría de una falla en un detalle se obtiene vía JOIN: taller_solicitud_detalles → fallas_taller → categorias_falla. El esquema es más limpio y libre de redundancias."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Eliminación de la tabla buses — referencia directa por n_bus (string)",
+      "rationale": "La tabla buses del sistema central no debía replicarse en la base de datos del taller. Los buses se identifican únicamente por su número (n_bus) como string, eliminando la FK y la dependencia al sistema central.",
+      "consequences": "Cero acoplamiento con el sistema central de buses. El módulo de taller es completamente autónomo. Se eliminaron los endpoints /api/v1/buses."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Tabla taller_solicitud_comentarios como bitácora independiente (no campo texto en solicitud)",
+      "rationale": "Los comentarios del mecánico son eventos cronológicos (asignación, liberación de turno, hallazgos, cierre). Un único campo texto plano no permitía trazar quién comentó qué y cuándo.",
+      "consequences": "Cada evento del ciclo de vida de la solicitud genera un registro en la bitácora con tipo, usuario, comentario y timestamp. Trazabilidad completa e inmutable de cada solicitud."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Campo is_activo en taller_solicitud_mecanicos para soft-desasignación",
+      "rationale": "Cuando un mecánico sale del equipo ('Salir del Equipo' o 'Entregar Turno'), no se elimina el registro — se marca is_activo=False con fecha_desasignacion. Esto preserva el historial de quién trabajó en el bus.",
+      "consequences": "El historial de participación de mecánicos en cada solicitud es completo y auditable. Los endpoints de supervisión pueden mostrar todo el equipo que trabajó en un bus."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Fallas de catálogo (falla_id FK) y fallas de texto libre (descripcion_personalizada) en el mismo detalle",
+      "rationale": "El chofer puede seleccionar una falla predefinida del catálogo o escribir una descripción personalizada si la falla no está catalogada. Ambos casos deben convivir en la misma tabla.",
+      "consequences": "falla_id es nullable. Si falla_id=NULL, la descripción viene de descripcion_personalizada. El catálogo usa is_active para desactivar fallas obsoletas sin borrar el historial."
+    }
+  ],
+  "verification": [
+    { "command": "alembic upgrade head", "result": "passed", "evidence": "6 tablas creadas con todos los índices y FK. Parches de ALTER TABLE aplicados correctamente." },
+    { "command": "uvicorn app.main:app --reload (seed)", "result": "passed", "evidence": "Siembra de datos de prueba: 5 usuarios, 3 conductores, 6 categorías de falla, 9 fallas de taller y 2 solicitudes de mantención iniciales creadas." }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar el repositorio de mantención con el workflow completo (tomar trabajo, desasignar, entregar turno, finalizar, comentarios).",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/diseno-base-de-datos", "commit": "003_mantencion_3nf", "dirty": false },
+  "notes": [
+    "Este fue el hito más importante del proyecto. El diseño 3NF es la base de toda la lógica de negocio del taller.",
+    "La decisión de eliminar la tabla buses simplificó enormemente el modelo y lo desacoplò del sistema central.",
+    "El diseño de la bitácora como tabla independiente fue clave para el módulo de supervisión."
+  ]
+}

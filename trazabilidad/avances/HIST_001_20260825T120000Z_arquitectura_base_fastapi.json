@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 1,
+  "id": "AV-HIST-001",
+  "timestamp": "2026-08-25T12:00:00Z",
+  "phase": "arquitectura_base",
+  "milestone": {
+    "id": "ARCH-1",
+    "name": "Configuración Inicial del Proyecto FastAPI",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se estableció la arquitectura base del backend: estructura de carpetas modular, configuración de FastAPI con múltiples entornos (dev_local, dev_lan, production), conexión async a PostgreSQL vía SQLAlchemy 2.0, sistema de configuración centralizado en app/core/config.py con Pydantic-Settings, archivo run.py para levantar el servidor y CORS configurado.",
+  "scope": {
+    "planned": [
+      "Inicializar proyecto FastAPI.",
+      "Configurar múltiples entornos (dev_local, dev_lan, production).",
+      "Establecer conexión async a PostgreSQL.",
+      "Configurar CORS.",
+      "Crear estructura modular base."
+    ],
+    "completed": [
+      "Estructura de directorios app/core, app/modules, app/api creada.",
+      "Settings con Pydantic-Settings y múltiples archivos .env.",
+      "AppEnvironment enum (DEV_LOCAL, DEV_LAN, PRODUCTION).",
+      "Conexión AsyncEngine y AsyncSessionLocal en app/core/database.py.",
+      "CORS configurado con soporte para regex de origen (Capacitor + browser).",
+      "run.py configurado con uvicorn y hot-reload condicional.",
+      "Documentación Swagger/ReDoc deshabilitada en producción.",
+      "requirements.txt con dependencias iniciales."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Implementación de módulos de negocio.",
+      "Migraciones de base de datos."
+    ]
+  },
+  "changes": [
+    { "path": "app/core/config.py", "action": "created", "summary": "Settings centralizado con Pydantic-Settings, AppEnvironment y propiedades para URLs de DB, CORS y JWT." },
+    { "path": "app/core/database.py", "action": "created", "summary": "AsyncEngine y AsyncSessionLocal para conexión async a PostgreSQL." },
+    { "path": "app/core/base.py", "action": "created", "summary": "Base declarativa de SQLAlchemy para todos los modelos ORM." },
+    { "path": "app/main.py", "action": "created", "summary": "Instancia FastAPI con lifespan, CORS, montaje de archivos estáticos e inclusión del router." },
+    { "path": "run.py", "action": "created", "summary": "Script de arranque con uvicorn parametrizado por entorno." },
+    { "path": ".env, .env.dev_local, .env.dev_lan, .env.production, .env.example", "action": "created", "summary": "Archivos de configuración por entorno." },
+    { "path": "requirements.txt", "action": "created", "summary": "Dependencias iniciales del proyecto." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "SQLAlchemy 2.0 Async como capa de persistencia",
+      "rationale": "FastAPI es nativo async y SQLAlchemy 2.0 ofrece soporte completo de AsyncSession, eliminando bloqueos de I/O en operaciones de base de datos.",
+      "consequences": "Todos los repositorios y servicios son funciones async, permitiendo alta concurrencia sin threads adicionales."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Múltiples perfiles de entorno con Pydantic-Settings",
+      "rationale": "El backend debe correr en local, en red LAN del taller y eventualmente en producción con configuraciones muy distintas (CORS, DB, JWT, docs).",
+      "consequences": "Se usa la variable de entorno ENVIRONMENT para seleccionar el perfil. Swagger deshabilitado en producción. CORS abierto en dev."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Arquitectura modular con carpeta app/modules",
+      "rationale": "Separar la lógica por dominio (auth, mantencion, neumaticos, supervision) para facilitar mantenibilidad y crecimiento incremental del sistema.",
+      "consequences": "Cada módulo tiene su propia subcarpeta api/, dtos/, models/, repository/, services/ completamente independiente."
+    }
+  ],
+  "verification": [
+    { "command": "uvicorn app.main:app --reload", "result": "passed", "evidence": "Servidor levanta en localhost:8000 con documentación Swagger disponible." }
+  ],
+  "blockers": [],
+  "nextStep": "Crear la primera migración Alembic con la tabla de roles, conductores y usuarios.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/diseno-base-de-datos", "commit": "initial", "dirty": false },
+  "notes": [
+    "Este avance fue el punto de partida de todo el proyecto.",
+    "Se estableció el patrón modular que se mantiene en todos los módulos posteriores."
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 7,
+  "id": "AV-HIST-007",
+  "timestamp": "2026-08-27T21:00:00Z",
+  "phase": "modulo_supervision",
+  "milestone": {
+    "id": "SUP-1",
+    "name": "Módulo de Supervisión — Auditoría Inmutable del Taller",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del módulo de supervisión: endpoint de auditoría que devuelve el estado completo e inmutable de todas las solicitudes del taller con historial de mecánicos, bitácora de comentarios, detalles de fallas y métricas de tiempo. Acceso restringido a roles SUPERVISOR y ADMIN.",
+  "scope": {
+    "planned": [
+      "Endpoint de dashboard de supervisión.",
+      "Trazabilidad completa de cada solicitud.",
+      "Restricción por rol."
+    ],
+    "completed": [
+      "GET /api/v1/supervision/auditoria/buses-taller — Retorna todas las solicitudes con historial completo.",
+      "Incluye: detalles de fallas resueltas/pendientes, equipo de mecánicos (activos e históricos), bitácora cronológica de comentarios, tiempos de apertura/cierre.",
+      "Acceso restringido a SUPERVISOR y ADMIN via require_supervisor_or_admin.",
+      "DTOs de respuesta de supervisión independientes de los DTOs del módulo de mantención."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Filtros de fecha, bus o mecánico en el dashboard.",
+      "Exportación a Excel o PDF."
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/supervision/api/router.py", "action": "created", "summary": "Endpoint de auditoría con datos completos de trazabilidad del taller." },
+    { "path": "app/modules/supervision/", "action": "created", "summary": "Módulo de supervisión con estructura api/, dtos/." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Módulo de supervisión como módulo independiente, no como sub-ruta de mantención",
+      "rationale": "La supervisión tiene un alcance de lectura global sobre todo el sistema. No es una operación del flujo de taller, sino una vista de auditoría transversal.",
+      "consequences": "Ruta separada /api/v1/supervision/ con su propio router y DTOs. Desacoplado del módulo de mantención."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Vista de auditoría inmutable: solo GET, sin modificaciones",
+      "rationale": "Los supervisores tienen acceso de solo lectura a la trazabilidad. No pueden modificar ni revertir estados de las solicitudes desde este módulo.",
+      "consequences": "El módulo de supervisión no expone ningún endpoint POST, PUT o PATCH. Es puramente de consulta."
+    }
+  ],
+  "verification": [
+    { "command": "GET /api/v1/supervision/auditoria/buses-taller (con token SUPERVISOR)", "result": "passed", "evidence": "Retorna todas las solicitudes con historial completo de mecánicos y comentarios." }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar sistema de manejo centralizado de excepciones.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "develop", "commit": "supervision_module", "dirty": false },
+  "notes": [
+    "La arquitectura de trazabilidad de la BD (bitácora como tabla independiente) facilitó enormemente la implementación de este módulo."
+  ]
+}

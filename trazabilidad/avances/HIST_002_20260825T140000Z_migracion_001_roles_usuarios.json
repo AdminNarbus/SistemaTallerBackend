@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 2,
+  "id": "AV-HIST-002",
+  "timestamp": "2026-08-25T14:00:00Z",
+  "phase": "base_de_datos_migracion_001",
+  "milestone": {
+    "id": "DB-1",
+    "name": "Migración 001 — Tablas Base: roles, conductores, usuarios",
+    "statusBefore": "not_started",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se diseñó e implementó la primera migración Alembic (001_create_usuarios_table.py) creando las tablas fundacionales del sistema: roles, conductores y usuarios con normalización completa. La tabla usuarios referencia a roles mediante FK (rol_id), eliminando el campo de rol como string no normalizado.",
+  "scope": {
+    "planned": [
+      "Diseñar esquema 3NF para roles y usuarios.",
+      "Crear migración Alembic 001.",
+      "Implementar modelos ORM para Rol y Usuario."
+    ],
+    "completed": [
+      "Tabla roles: id (PK), nombre (UK), descripcion.",
+      "Tabla conductores: id (PK), nombre, rut.",
+      "Tabla usuarios: id (PK), nombre, apellido, username (UK), password_hash, rol_id (FK → roles), is_active, created_at, updated_at.",
+      "Migración idempotente (verifica existencia de tablas antes de crearlas).",
+      "Modelos ORM con SQLAlchemy 2.0 Mapped[] style.",
+      "Property rol en Usuario que resuelve nombre desde relación ORM."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Tablas de mantención y neumáticos."
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/001_create_usuarios_table.py", "action": "created", "summary": "Migración que crea roles, conductores y usuarios con claves foráneas y índices." },
+    { "path": "app/modules/auth/models/rol.py", "action": "created", "summary": "Modelo ORM de la tabla roles." },
+    { "path": "app/modules/auth/models/usuario.py", "action": "created", "summary": "Modelo ORM de la tabla usuarios con relación selectin a Rol y property rol." },
+    { "path": "alembic/env.py", "action": "created", "summary": "Configuración de Alembic para migraciones async en PostgreSQL." },
+    { "path": "alembic.ini", "action": "created", "summary": "Archivo de configuración raíz de Alembic." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Tabla roles normalizada (3NF) en vez de campo rol como string en usuarios",
+      "rationale": "Evitar valores de rol arbitrarios o mal escritos. La FK garantiza integridad referencial y permite agregar permisos o descripciones por rol en el futuro sin modificar la tabla usuarios.",
+      "consequences": "El sistema tiene 4 roles predefinidos: ADMIN, SUPERVISOR, MECANICO, CONDUCTOR. Cualquier nuevo rol se agrega como fila en roles sin cambiar el esquema."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Migración idempotente con verificación de tablas existentes",
+      "rationale": "El entorno de desarrollo usa una base de datos preexistente con tablas del sistema anterior. Las migraciones deben poder ejecutarse sin romper datos ya existentes.",
+      "consequences": "Cada migración verifica inspector.get_table_names() antes de CREATE TABLE, permitiendo ejecutar alembic upgrade head múltiples veces sin errores."
+    },
+    {
+      "id": "DEC-003",
+      "title": "SQLAlchemy 2.0 Mapped[] style para tipado estático de modelos",
+      "rationale": "El estilo Mapped[tipo] provee type hints nativos, eliminando la ambigüedad y mejorando la compatibilidad con mypy y el autocompletado del IDE.",
+      "consequences": "Todos los modelos ORM del proyecto usan Mapped[tipo] = mapped_column() en vez del estilo legacy Column()."
+    }
+  ],
+  "verification": [
+    { "command": "alembic upgrade head", "result": "passed", "evidence": "Tablas roles, conductores y usuarios creadas exitosamente en narbus_taller_db." }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar sistema de autenticación JWT sobre el modelo Usuario.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/diseno-base-de-datos", "commit": "db_001", "dirty": false },
+  "notes": [
+    "Este fue el primer diseño de base de datos del proyecto.",
+    "La normalización de roles fue clave para la arquitectura de permisos del sistema."
+  ]
+}

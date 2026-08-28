@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 6,
+  "id": "AV-0006",
+  "timestamp": "2026-08-28T19:45:00Z",
+  "phase": "modulo_supervision",
+  "milestone": {
+    "id": "SUP-1",
+    "name": "Módulo de Supervisión de Taller y Métricas KPI",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación backend completa para el módulo de supervisión de taller: endpoint de auditoría con filtros por bus, estado y mecánico, y endpoint de resumen/KPIs generales del taller (desglose por estado, % resoluciones y fallas por categoría).",
+  "scope": {
+    "planned": [
+      "Endpoint de auditoría completa de solicitudes de taller.",
+      "Endpoint de resumen y métricas KPI del taller.",
+      "Soporte de filtros por bus, estado y mecánico.",
+      "Restricción de seguridad por rol (SUPERVISOR o ADMIN)."
+    ],
+    "completed": [
+      "GET /api/v1/supervision/auditoria/buses-taller con parámetros n_bus, estado y mecanico_id.",
+      "GET /api/v1/supervision/resumen-taller con telemetría de estados, % de fallas resueltas y categorías más frecuentes.",
+      "DTOs Pydantic dedicados en app/modules/supervision/dtos/supervision_dto.py.",
+      "SupervisionService y SupervisionRepository estructurados con SQLAlchemy async e inmutabilidad de datos.",
+      "Protección estricta con require_supervisor_or_admin.",
+      "Pruebas de integración automatizadas en tests/integration/test_supervision_api.py (100% pasando)."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Componentes de Frontend (manejados en repositorio ProtoNeumaticos)."
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "created",
+      "summary": "DTOs de Pydantic para métricas de taller, contadores de estado y desgloses por categoría."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "created",
+      "summary": "Repositorio con consultas optimizadas y filtros para la auditoría de solicitudes."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "created",
+      "summary": "Servicio de supervisión para procesamiento de auditoría y cálculo de KPIs analíticos."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Controladores REST /auditoria/buses-taller y /resumen-taller protegidos por rol."
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Suite de pruebas para control de acceso, filtros y estructura de respuesta de resumen KPI."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Supervisión puramente de visualización y consulta (Solo GET)",
+      "rationale": "El rol supervisor monitorea la trazabilidad global del taller y métricas sin modificar los estados del flujo técnico de los mecánicos.",
+      "consequences": "Endpoints de lectura seguros sin efectos secundarios sobre las solicitudes."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Endpoint de Resumen KPI independiente",
+      "rationale": "Permite al cliente obtener indicadores generales en una sola llamada sin requerir procesar todas las solicitudes individualmente.",
+      "consequences": "Carga rápida para paneles de control superiores."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest",
+      "result": "passed",
+      "evidence": "34 passed in 11.99s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidación de documentación de trazabilidad y reporte al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/modulo-supervision-taller",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Cumplimiento 100% de AGENTS.md en la arquitectura backend."
+  ]
+}

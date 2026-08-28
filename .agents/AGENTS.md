@@ -1,5 +1,9 @@
 # Reglas e Instrucciones para Agentes AI (.agents/AGENTS.md)
 
+## 0. Enfoque Exclusivo Backend
+- **Repositorio Backend Autónomo:** Este repositorio es exclusivamente de **Backend API** (`BackendTallerNarbus`). El Frontend se maneja en un repositorio completamente separado.
+- **Sin Interferencia de Frontend:** Todos los diseños, especificaciones, avances y planes corresponden 100% a endpoints, modelos de datos, servicios, repositorios y reglas de negocio del Backend.
+
 ## 1. Entorno de Ejecución y Base de Datos
 - **Entorno Local Estricto:** Toda la ejecución, desarrollo y pruebas se realizan de forma **local** (`dev_local`).
 - **Restricción de Base de Datos:** Solo se permite el uso de consultas de lectura (**GET / SELECT**) a la base de datos de manera directa para operaciones de verificación. Todas las modificaciones deben realizarse mediante código o migraciones de Alembic.
@@ -8,13 +12,13 @@
 - **Uso Obligatorio de Excepciones de Dominio:** El proyecto cuenta con un sistema centralizado de excepciones en `app/core/exceptions.py`.
 - **Regla en Nuevas Funcionalidades:** Toda nueva mejora, endpoint, servicio o repositorio DEBE utilizar las excepciones de dominio existentes (`NotFoundException`, `BusinessRuleException`, `ConflictException`, `PermissionException`) cuando sea necesario, evitando lanzar `ValueError` o usar bloques `try/except` repetitivos en los routers.
 
-## 3. Trazabilidad del Proyecto
+## 3. Trazabilidad del Proyecto (Full Backend)
 - **Estructura de la Carpeta `trazabilidad/`:**
-  - `trazabilidad/avances/`: Contiene archivos JSON numerados secuencialmente registrando cada avance significativo (ej. `0001_YYYYMMDDTHHMMSSZ_descripcion.json`).
-  - `01_ESTADO_ACTUAL_PROYECTO.md`: Documento vivo con el estado general de los módulos y funcionalidades.
-  - `02_CONTENIDO_Y_ALCANZABLE_BACKEND.md`: Especificación de módulos, capas y alcance técnico del backend.
-  - `03_ESPECIFICACION_MODULOS_NARBUS.md`: Detalle de endpoints, flujos y reglas de negocio del sistema de taller.
-  - `04_PLAN_IMPLEMENTACION_BACKEND.md`: Plan global de fases e hitos de desarrollo del Backend.
+  - `trazabilidad/avances/`: Contiene archivos JSON numerados secuencialmente registrando cada avance significativo del backend (ej. `0001_YYYYMMDDTHHMMSSZ_descripcion.json`).
+  - `01_ESTADO_ACTUAL_PROYECTO.md`: Documento vivo con el estado general de los módulos y endpoints.
+  - `02_CONTENIDO_Y_ALCANZABLE_BACKEND.md`: Especificación técnica del alcance del backend.
+  - `03_ESPECIFICACION_MODULOS_NARBUS.md`: Detalle de contratos REST, DTOs y reglas de negocio.
+  - `04_PLAN_IMPLEMENTACION_BACKEND.md`: Plan global de desarrollo del Backend.
 - **Registro JSON de Avances:** Cada registro de avance en `trazabilidad/avances/` debe seguir estrictamente la estructura estándar definida:
   ```json
   {
@@ -25,7 +29,7 @@
     "phase": "backend_taller",
     "milestone": { "id": "MANT-1", "name": "Nombre Hito", "statusBefore": "in_progress", "statusAfter": "completed" },
     "type": "completed",
-    "summary": "Resumen detallado de la tarea completada.",
+    "summary": "Resumen detallado de la tarea de backend completada.",
     "scope": {
       "planned": ["Items planeados..."],
       "completed": ["Items completados..."],
@@ -36,12 +40,12 @@
     "decisions": [],
     "verification": [{ "command": "Comando de prueba", "result": "passed|failed|not_run", "evidence": "Detalle/Salida de la prueba" }],
     "blockers": [],
-    "nextStep": "Siguiente paso a realizar.",
+    "nextStep": "Siguiente paso a realizar en el backend.",
     "git": { "repository": "BackendTallerNarbus", "branch": "develop", "commit": "hash", "dirty": false },
     "notes": ["Notas adicionales..."]
   }
   ```
-- **Resumen del Día / Estado:** Cuando el usuario solicite un resumen o estado del proyecto, se revisará la carpeta `trazabilidad/` y sus registros de avances para generar un reporte preciso del estado actual y lo realizado.
+- **Resumen del Día / Estado:** Cuando el usuario solicite un resumen o estado del proyecto, se revisará la carpeta `trazabilidad/` y sus registros de avances para generar un reporte preciso enfocado 100% en el backend.
 
 ## 4. Logging en el Backend
 - **Uso de Logger:** Se debe implementar logging utilizando el módulo estándar de Python (`logging.getLogger(__name__)`) siempre que sea necesario en servicios, repositorios, middleware y exception handlers.

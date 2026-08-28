@@ -22,7 +22,9 @@
   - `02_CONTENIDO_Y_ALCANZABLE_BACKEND.md`: Especificación técnica del alcance del backend.
   - `03_ESPECIFICACION_MODULOS_NARBUS.md`: Detalle de contratos REST, DTOs y reglas de negocio.
   - `04_PLAN_IMPLEMENTACION_BACKEND.md`: Plan global de desarrollo del Backend.
-- **Registro JSON de Avances:** Cada registro de avance en `trazabilidad/avances/` debe seguir estrictamente la estructura estándar definida:
+- **Registro JSON de Avances Obligatorio (Incluyendo Decisiones Técnicas):** Cada registro de avance en `trazabilidad/avances/` debe incluir de manera **obligatoria** el apartado de `decisions` donde se fundamenten las decisiones tomadas durante la tarea.
+  
+  Estructura JSON estándar:
   ```json
   {
     "schemaVersion": "1.0",
@@ -40,7 +42,14 @@
       "outOfScope": ["Fuera de alcance..."]
     },
     "changes": [{ "path": "ruta/al/archivo", "action": "created|modified|deleted", "summary": "Descripción del cambio" }],
-    "decisions": [],
+    "decisions": [
+      {
+        "id": "DEC-001",
+        "title": "Título de la decisión técnica tomada",
+        "rationale": "Justificación y motivo técnico de la decisión",
+        "consequences": "Efecto o beneficio en la arquitectura del backend"
+      }
+    ],
     "verification": [{ "command": "Comando de prueba", "result": "passed|failed|not_run", "evidence": "Detalle/Salida de la prueba" }],
     "blockers": [],
     "nextStep": "Siguiente paso a realizar en el backend.",

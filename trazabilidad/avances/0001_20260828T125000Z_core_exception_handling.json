@@ -60,8 +60,24 @@
     }
   ],
   "decisions": [
-    "Estandarizar todas las respuestas de error bajo la estructura JSON {'error': {'code': ..., 'message': ..., 'detail': ...}}.",
-    "Preservar el header WWW-Authenticate en el handler de error 401 para cumplir con OAuth2 Bearer."
+    {
+      "id": "DEC-001",
+      "title": "Estructura JSON estandarizada de respuestas de error",
+      "rationale": "Unificar el formato {'error': {'code': ..., 'message': ..., 'detail': ...}} en toda la API para simplificar el consumo desde cualquier cliente o frontend.",
+      "consequences": "Eliminación de respuestas de error dispares y facilidades de parseo global de errores."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Excepciones de dominio en la capa de persistencia/negocio",
+      "rationale": "Sustituir ValueError genericos por subclases semanticas de NarbusException (NotFoundException, BusinessRuleException) directamente en repositorios.",
+      "consequences": "Los controladores (routers) quedan totalmente limpios de bloques try/except y convierten automaticamente las excepciones al codigo HTTP adecuado (404, 422, 409)."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Preservacion de headers custom en handler 401",
+      "rationale": "Mantener el encabezado WWW-Authenticate: Bearer en el handler estandarizado para cumplir con la especificacion OAuth2.",
+      "consequences": "Garantiza compatibilidad estricta con bibliotecas clientes de autenticacion."
+    }
   ],
   "verification": [
     {

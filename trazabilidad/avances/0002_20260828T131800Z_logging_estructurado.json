@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 2,
+  "id": "AV-0002",
+  "timestamp": "2026-08-28T13:18:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "LOG-1",
+    "name": "Implementación de Logging Estructurado",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se implementó el sistema de logging centralizado y estructurado en todo el backend usando el módulo estándar de Python (logging). Se creó un configurador central (logging_config.py) con StreamHandler + RotatingFileHandler por entorno. Se migró todo el proyecto de print() a logger, aplicando niveles DEBUG/INFO/WARNING/CRITICAL en cada capa: core, auth, mantención, neumáticos y supervisión.",
+  "scope": {
+    "planned": [
+      "Crear app/core/logging_config.py con setup_logging().",
+      "Integrar setup_logging() en app/main.py.",
+      "Agregar logging en exception handlers (exceptions.py).",
+      "Agregar logging en auth (repository + router).",
+      "Agregar logging en mantención (service + repository).",
+      "Agregar logging en neumáticos (formulario_neumatico_service).",
+      "Agregar logging en supervisión (router).",
+      "Migrar print() en seed.py y db_patch.py a logger."
+    ],
+    "completed": [
+      "app/core/logging_config.py creado: StreamHandler + RotatingFileHandler (5MB/5 backups), niveles por entorno.",
+      "app/main.py: setup_logging() integrado al inicio, print() del lifespan migrados a logger.info/critical.",
+      "app/core/exceptions.py: narbus_exception_handler y http_exception_handler con logger.warning().",
+      "app/modules/auth/repository/user_repository.py: DEBUG en queries, INFO en create/desactivar, WARNING en authenticate fallido.",
+      "app/modules/auth/api/router.py: INFO en login JSON, login OAuth2 y register; HTTPException importada correctamente.",
+      "app/modules/mantencion/services/mantencion_service.py: INFO en create, tomar, desasignar, liberar, check, comentario, finalizar; DEBUG en listados.",
+      "app/modules/mantencion/repository/mantencion_repository.py: DEBUG en queries, WARNING en not found/regla violada, INFO en asignaciones.",
+      "app/modules/neumaticos/services/formulario_neumatico_service.py: INFO al procesar formulario, INFO al guardar evidencia, WARNING en error BD.",
+      "app/modules/supervision/api/router.py: INFO en auditoría, DEBUG con total resultados.",
+      "app/core/seed.py: todos los print() migrados a logger.info/warning.",
+      "app/core/db_patch.py: print() migrado a logger.warning/debug.",
+      "logs/ ya excluida en .gitignore."
+    ],
+    "pending": [
+      "Suite de pruebas unitarias/integración (Pytest) — Fase 4b pendiente.",
+      "Validación E2E en entorno local — Fase 5."
+    ],
+    "outOfScope": [
+      "Cambios en esquema de base de datos o migraciones Alembic.",
+      "Implementación de pruebas unitarias en esta iteración."
+    ]
+  },
+  "changes": [
+    { "path": "app/core/logging_config.py", "action": "created", "summary": "Módulo central: setup_logging() con StreamHandler + RotatingFileHandler por entorno." },
+    { "path": "app/main.py", "action": "modified", "summary": "Integración de setup_logging(); eliminación de print() del lifespan." },
+    { "path": "app/core/exceptions.py", "action": "modified", "summary": "logger.warning en narbus_exception_handler y http_exception_handler." },
+    { "path": "app/modules/auth/repository/user_repository.py", "action": "modified", "summary": "Logging de autenticación: DEBUG/INFO/WARNING en get_by_username, get_by_id, create, desactivar, authenticate." },
+    { "path": "app/modules/auth/api/router.py", "action": "modified", "summary": "INFO en login JSON/OAuth2 y register; import HTTPException corregido." },
+    { "path": "app/modules/mantencion/services/mantencion_service.py", "action": "modified", "summary": "INFO en todas las operaciones de negocio; DEBUG en listados y consultas." },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "DEBUG en queries, WARNING en not found/violación, INFO en asignaciones de mecánicos." },
+    { "path": "app/modules/neumaticos/services/formulario_neumatico_service.py", "action": "modified", "summary": "INFO en procesamiento y persistencia; WARNING en errores de BD; INFO en evidencia fotográfica." },
+    { "path": "app/modules/supervision/api/router.py", "action": "modified", "summary": "INFO/DEBUG en consulta de auditoría de buses en taller." },
+    { "path": "app/core/seed.py", "action": "modified", "summary": "Todos los print() de siembra reemplazados por logger.info/warning." },
+    { "path": "app/core/db_patch.py", "action": "modified", "summary": "print() de parches DB reemplazados por logger.debug/warning." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-002",
+      "title": "Uso de RotatingFileHandler junto a StreamHandler",
+      "rationale": "Se decidió incluir RotatingFileHandler en todos los entornos para garantizar auditoría persistente en logs/narbus.log (5MB, 5 backups). El StreamHandler cubre la visualización en consola durante desarrollo. El nivel del FileHandler es INFO en dev y WARNING en production, evitando saturación en disco.",
+      "consequences": "Los logs de negocio (INFO+) quedan persistidos en disco, permitiendo auditoría offline y diagnóstico sin necesidad de réplica de consola. La carpeta logs/ está en .gitignore para no versionar archivos de log."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Llamada única a setup_logging() al inicio de app/main.py",
+      "rationale": "Se centraliza la configuración del logger raíz en main.py antes del lifespan para garantizar que todos los módulos importados (incluyendo seed, db_patch, repositories) ya tengan el logger configurado antes de su primera ejecución.",
+      "consequences": "Un único punto de configuración elimina la posibilidad de múltiples basicConfig() conflictivos. Todos los módulos usan logging.getLogger(__name__) sin necesidad de configuración propia."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Prefijos de módulo en mensajes de log",
+      "rationale": "Cada mensaje de log incluye un prefijo de módulo ([AUTH], [MANTENCION], [NEUMATICO], [SUPERVISION], [STARTUP], [SEED], [DB_PATCH]) para facilitar el filtrado en logs/narbus.log sin depender del nombre del logger.",
+      "consequences": "Filtrado rápido por grep/cadenas de búsqueda en el archivo de log. Útil en entornos sin herramientas de observabilidad avanzadas como ELK o Datadog."
+    }
+  ],
+  "verification": [
+    { "command": "uvicorn app.main:app --reload", "result": "not_run", "evidence": "Pendiente ejecución local para verificar formato de logs en consola y archivo." },
+    { "command": "curl -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\"}'", "result": "not_run", "evidence": "Pendiente: debe mostrar INFO en consola y quedar en logs/narbus.log." }
+  ],
+  "blockers": [],
+  "nextStep": "Ejecutar el servidor local para verificar que el formato de log es correcto en consola y en logs/narbus.log. Luego avanzar con la suite de pruebas Pytest (Fase 4b).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/logging-estructurado",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "La carpeta logs/ se crea automáticamente al iniciar la app (os.makedirs en logging_config.py).",
+    "El .gitignore ya tenía logs/ excluido — no requirió modificación.",
+    "El import de HTTPException faltaba en auth/api/router.py — fue corregido como parte de esta tarea."
+  ]
+}

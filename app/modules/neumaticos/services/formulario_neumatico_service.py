@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 from typing import Any, Dict, Optional
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.neumaticos.repository.neumatico_repository import neumatico_repository
 
 UPLOAD_EVIDENCIAS_DIR = os.path.join(os.getcwd(), "uploads", "evidencias")
+
+logger = logging.getLogger(__name__)
 
 
 class FormularioNeumaticoService:
@@ -30,6 +33,13 @@ class FormularioNeumaticoService:
         evidencia_url: Optional[str] = None
         nombre_original_evidencia = "Sin evidencia adjunta"
 
+        logger.info(
+            "[NEUMATICO] Procesando formulario | usuario_id=%s | maquina='%s' | tipo_bus='%s'",
+            usuario_id,
+            maquina,
+            tipo_bus,
+        )
+
         # 1. Almacenamiento local de la evidencia
         if evidencia and evidencia.filename:
             nombre_original_evidencia = evidencia.filename
@@ -43,6 +53,11 @@ class FormularioNeumaticoService:
                 f.write(contenido)
 
             evidencia_url = f"/uploads/evidencias/{nombre_archivo_unico}"
+            logger.info(
+                "[NEUMATICO] Evidencia fotográfica guardada | archivo='%s' | tamaño=%s bytes",
+                nombre_archivo_unico,
+                len(contenido),
+            )
 
         # 2. Parseo de ruedas y precio
         ruedas_lista = ruedas
@@ -76,8 +91,9 @@ class FormularioNeumaticoService:
                     evidencia_url=evidencia_url,
                 )
                 reporte_id = reporte_db.id
+                logger.info("[NEUMATICO] Reporte persistido en BD | id=%s | n_bus='%s'", reporte_id, maquina)
             except Exception as err:
-                print(f"⚠️ Error al guardar reporte de neumáticos en BD: {err}")
+                logger.warning("[NEUMATICO] Error al guardar reporte en BD | usuario_id=%s | error=%s", usuario_id, err)
 
         resumen_procesamiento = (
             f"Datos recibidos del formulario: "

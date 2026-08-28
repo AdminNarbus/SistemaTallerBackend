@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -17,7 +18,12 @@ from app.core.exceptions import (
     validation_exception_handler,
     generic_exception_handler,
 )
+from app.core.logging_config import setup_logging
 from app.core.seed import seed_initial_data
+
+# ─── Inicialización del logging (debe ejecutarse antes del lifespan) ─────────
+setup_logging(environment=settings.ENVIRONMENT.value)
+logger = logging.getLogger(__name__)
 
 
 # Asegurar la existencia del directorio local para uploads/evidencias
@@ -33,15 +39,25 @@ async def lifespan(app: FastAPI):
     """
     try:
         await apply_db_patches()
-        
+
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
         if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
-            print(f"[LIFESPAN] Entorno '{settings.ENVIRONMENT.value}': Ejecutando siembra de datos de prueba...")
+            logger.info(
+                "[STARTUP] Entorno '%s': Ejecutando siembra de datos de prueba...",
+                settings.ENVIRONMENT.value,
+            )
             await seed_initial_data()
         else:
-            print(f"[LIFESPAN] Entorno '{settings.ENVIRONMENT.value}': Omite siembra de datos de prueba.")
+            logger.info(
+                "[STARTUP] Entorno '%s': Siembra de datos omitida (entorno productivo).",
+                settings.ENVIRONMENT.value,
+            )
     except Exception as e:
-        print(f"[WARNING] Error durante el inicio de la aplicación / base de datos: {e}")
+        logger.critical(
+            "[STARTUP] Error crítico durante el inicio de la aplicación: %s",
+            e,
+            exc_info=True,
+        )
     
     yield
     await engine.dispose()

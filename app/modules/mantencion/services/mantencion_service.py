@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,8 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MantencionService:
@@ -141,46 +144,60 @@ class MantencionService:
         return res
 
     async def get_solicitud(self, db: AsyncSession, solicitud_id: int) -> Optional[SolicitudDTO]:
+        logger.debug("[MANTENCION] Consultando solicitud | id=%s", solicitud_id)
         sol = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
         return self._to_solicitud_dto(sol)
 
     async def create_solicitud(self, db: AsyncSession, dto: SolicitudCreateDTO, creador_id: int) -> SolicitudDTO:
+        logger.info("[MANTENCION] Creando solicitud | n_bus='%s' | creador_id=%s", dto.n_bus, creador_id)
         sol = await mantencion_repository.create_solicitud(db, dto, creador_id)
+        logger.info("[MANTENCION] Solicitud creada | id=%s | n_bus='%s' | estado=REPORTADO", sol.id, sol.n_bus)
         return self._to_solicitud_dto(sol)
 
     async def list_pendientes(self, db: AsyncSession) -> List[SolicitudDTO]:
+        logger.debug("[MANTENCION] Listando solicitudes pendientes")
         solicitudes = await mantencion_repository.list_pendientes(db)
         return [self._to_solicitud_dto(s) for s in solicitudes]
 
     async def list_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> List[SolicitudDTO]:
+        logger.debug("[MANTENCION] Listando trabajos activos | mecanico_id=%s", mecanico_id)
         solicitudes = await mantencion_repository.list_mis_trabajos(db, mecanico_id)
         return [self._to_solicitud_dto(s) for s in solicitudes]
 
     async def tomar_trabajo(self, db: AsyncSession, solicitud_id: int, lider_id: int, dto: TomarTrabajoDTO) -> SolicitudDTO:
+        logger.info("[MANTENCION] Tomar trabajo | solicitud_id=%s | lider_id=%s | colaboradores=%s", solicitud_id, lider_id, dto.colaboradores_ids)
         sol = await mantencion_repository.tomar_trabajo(db, solicitud_id, lider_id, dto)
+        logger.info("[MANTENCION] Solicitud en reparación | id=%s | estado=EN_REPARACION", sol.id)
         return self._to_solicitud_dto(sol)
 
     async def desasignar_mecanico(self, db: AsyncSession, solicitud_id: int, mecanico_id: int, comentario: Optional[str] = None) -> SolicitudDTO:
+        logger.info("[MANTENCION] Desasignando mecánico | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
         sol = await mantencion_repository.desasignar_mecanico_individual(db, solicitud_id, mecanico_id, comentario)
         return self._to_solicitud_dto(sol)
 
     async def liberar_turno(self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: LiberarTurnoDTO) -> SolicitudDTO:
+        logger.info("[MANTENCION] Liberar turno | solicitud_id=%s | usuario_id=%s", solicitud_id, usuario_id)
         sol = await mantencion_repository.liberar_turno(db, solicitud_id, usuario_id, dto)
         return self._to_solicitud_dto(sol)
 
     async def check_detalle(self, db: AsyncSession, solicitud_id: int, detalle_id: int, mecanico_id: int, resuelto: bool) -> SolicitudDTO:
+        logger.info("[MANTENCION] Check detalle | solicitud_id=%s | detalle_id=%s | mecanico_id=%s | resuelto=%s", solicitud_id, detalle_id, mecanico_id, resuelto)
         sol = await mantencion_repository.check_detalle(db, solicitud_id, detalle_id, mecanico_id, resuelto)
         return self._to_solicitud_dto(sol)
 
     async def agregar_comentario(self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: ComentarioCreateDTO) -> SolicitudDTO:
+        logger.info("[MANTENCION] Agregando comentario | solicitud_id=%s | usuario_id=%s | tipo=%s", solicitud_id, usuario_id, dto.tipo)
         sol = await mantencion_repository.agregar_comentario(db, solicitud_id, usuario_id, dto)
         return self._to_solicitud_dto(sol)
 
     async def finalizar_solicitud(self, db: AsyncSession, solicitud_id: int, mecanico_cierre_id: int, dto: FinalizarSolicitudDTO) -> SolicitudDTO:
+        logger.info("[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s", solicitud_id, mecanico_cierre_id)
         sol = await mantencion_repository.finalizar_solicitud(db, solicitud_id, mecanico_cierre_id, dto)
+        logger.info("[MANTENCION] Solicitud FINALIZADA | id=%s | n_bus='%s'", sol.id, sol.n_bus)
         return self._to_solicitud_dto(sol)
 
     async def list_auditoria(self, db: AsyncSession) -> List[SolicitudDTO]:
+        logger.debug("[MANTENCION] Consultando auditoría completa de solicitudes")
         solicitudes = await mantencion_repository.list_auditoria(db)
         return [self._to_solicitud_dto(s) for s in solicitudes]
 

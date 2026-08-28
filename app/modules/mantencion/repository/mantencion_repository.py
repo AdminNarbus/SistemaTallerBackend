@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select, update, and_
@@ -19,6 +20,8 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     ComentarioCreateDTO,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MantencionRepository:
     """
@@ -38,6 +41,7 @@ class MantencionRepository:
         return list(res.scalars().all())
 
     async def get_solicitud_by_id(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
+        logger.debug("[MANTENCION] Query get_solicitud_by_id | id=%s", solicitud_id)
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)
@@ -51,11 +55,15 @@ class MantencionRepository:
             )
         )
         res = await db.execute(stmt)
-        return res.scalar_one_or_none()
+        sol = res.scalar_one_or_none()
+        if not sol:
+            logger.warning("[MANTENCION] Solicitud no encontrada | id=%s", solicitud_id)
+        return sol
 
     async def create_solicitud(
         self, db: AsyncSession, dto: SolicitudCreateDTO, creador_id: int
     ) -> TallerSolicitud:
+        logger.debug("[MANTENCION] Persistiendo nueva solicitud | n_bus='%s' | creador_id=%s", dto.n_bus, creador_id)
         solicitud = TallerSolicitud(
             n_bus=dto.n_bus,
             usuario_creador_id=creador_id,
@@ -79,7 +87,9 @@ class MantencionRepository:
                 db.add(detalle)
 
         await db.commit()
-        return await self.get_solicitud_by_id(db, solicitud.id)
+        sol = await self.get_solicitud_by_id(db, solicitud.id)
+        logger.info("[MANTENCION] Solicitud persistida | id=%s | n_bus='%s'", sol.id, sol.n_bus)
+        return sol
 
     async def list_pendientes(self, db: AsyncSession) -> List[TallerSolicitud]:
         """
@@ -148,6 +158,7 @@ class MantencionRepository:
             fecha_asignacion=datetime.now(),
         )
         db.add(lider_entry)
+        logger.info("[MANTENCION] Líder asignado | solicitud_id=%s | lider_id=%s", solicitud_id, lider_id)
 
         # 3. Asignar colaboradores si fueron seleccionados
         if dto.colaboradores_ids:
@@ -161,6 +172,7 @@ class MantencionRepository:
                         fecha_asignacion=datetime.now(),
                     )
                     db.add(colab_entry)
+                    logger.info("[MANTENCION] Colaborador asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
 
         # 4. Actualizar estado de la solicitud
         solicitud.estado = "EN_REPARACION"
@@ -197,6 +209,7 @@ class MantencionRepository:
                 break
 
         if not mecanico_entry:
+            logger.warning("[MANTENCION] Desasignación fallida: mecánico no activo | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
             raise BusinessRuleException("El mecánico no está asignado activamente a esta solicitud")
 
         mecanico_entry.is_activo = False

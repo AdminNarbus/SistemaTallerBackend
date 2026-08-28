@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,8 @@ from app.core.security import get_password_hash, verify_password
 from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
+
+logger = logging.getLogger(__name__)
 
 
 class UserRepository:
@@ -28,14 +31,19 @@ class UserRepository:
         self, db: AsyncSession, username: str
     ) -> Optional[Usuario]:
         """Busca un usuario por su username (case-insensitive)."""
+        logger.debug("[AUTH] Buscando usuario por username='%s'", username.strip())
         stmt = select(Usuario).where(Usuario.username.ilike(username.strip()))
         res = await db.execute(stmt)
-        return res.scalar_one_or_none()
+        user = res.scalar_one_or_none()
+        if not user:
+            logger.warning("[AUTH] Usuario no encontrado | username='%s'", username.strip())
+        return user
 
     async def get_by_id(
         self, db: AsyncSession, user_id: int
     ) -> Optional[Usuario]:
         """Busca un usuario por su ID de clave primaria."""
+        logger.debug("[AUTH] Buscando usuario por id=%s", user_id)
         stmt = select(Usuario).where(Usuario.id == user_id)
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
@@ -52,6 +60,7 @@ class UserRepository:
         self, db: AsyncSession, usuario_in: UsuarioCreateDTO
     ) -> Usuario:
         """Crea un nuevo usuario en la BD encriptando su contraseña y vinculando su rol_id."""
+        logger.debug("[AUTH] Creando usuario | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
         rol_obj = await self.get_or_create_rol(db, usuario_in.rol or "CONDUCTOR")
         password_hash = get_password_hash(usuario_in.password)
         db_usuario = Usuario(
@@ -65,6 +74,7 @@ class UserRepository:
         db.add(db_usuario)
         await db.commit()
         await db.refresh(db_usuario)
+        logger.info("[AUTH] Usuario creado exitosamente | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
         return db_usuario
 
     async def desactivar(
@@ -73,22 +83,28 @@ class UserRepository:
         """Soft-delete: Deshabilita la cuenta estableciendo is_active = False."""
         user = await self.get_by_id(db, user_id=user_id)
         if not user:
+            logger.warning("[AUTH] Intento de desactivar usuario inexistente | id=%s", user_id)
             return None
 
         user.is_active = False
         await db.commit()
         await db.refresh(user)
+        logger.info("[AUTH] Usuario desactivado (soft-delete) | id=%s | username='%s'", user.id, user.username)
         return user
 
     async def authenticate(
         self, db: AsyncSession, username: str, password: str
     ) -> Optional[Usuario]:
         """Valida credenciales ingresadas contra el hash guardado."""
+        logger.debug("[AUTH] Intento de autenticación | username='%s'", username)
         user = await self.get_by_username(db, username)
         if not user:
+            logger.warning("[AUTH] Autenticación fallida: usuario no existe | username='%s'", username)
             return None
         if not verify_password(password, user.password_hash):
+            logger.warning("[AUTH] Autenticación fallida: contraseña incorrecta | username='%s'", username)
             return None
+        logger.info("[AUTH] Autenticación exitosa | id=%s | username='%s'", user.id, username)
         return user
 
 

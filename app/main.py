@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
-from app.core.config import settings
+from app.core.config import AppEnvironment, settings
 from app.core.database import engine
-from app.models.base import Base
+from app.core.db_patch import apply_db_patches
+from app.core.seed import seed_initial_data
 
 
 # Asegurar la existencia del directorio local para uploads/evidencias
@@ -15,23 +16,26 @@ UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
 
 
-from app.core.db_patch import apply_db_patches
-from app.core.seed import seed_initial_data
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Manejo del ciclo de vida de la aplicación.
+    La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
+    """
     try:
         await apply_db_patches()
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        await seed_initial_data()
+        
+        # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
+        if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
+            print(f"[LIFESPAN] Entorno '{settings.ENVIRONMENT.value}': Ejecutando siembra de datos de prueba...")
+            await seed_initial_data()
+        else:
+            print(f"[LIFESPAN] Entorno '{settings.ENVIRONMENT.value}': Omite siembra de datos de prueba.")
     except Exception as e:
-        print(f"[WARNING] Could not connect to database on startup: {e}")
+        print(f"[WARNING] Error durante el inicio de la aplicación / base de datos: {e}")
+    
     yield
     await engine.dispose()
-
-
 
 
 app = FastAPI(

@@ -8,7 +8,10 @@ async def apply_db_patches():
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nombre VARCHAR(100);",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS apellido VARCHAR(100);",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol_id INTEGER REFERENCES roles(id) ON DELETE RESTRICT;",
-        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;",
+        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS usuario_creador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;",
+        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS mecanico_cierre_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;",
+        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS descripcion_general TEXT;",
+        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS fecha_cierre TIMESTAMPTZ;",
     ]
     async with AsyncSessionLocal() as db:
         for patch_sql in patches:

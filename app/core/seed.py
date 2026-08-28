@@ -3,9 +3,12 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
 from app.modules.auth.repository.user_repository import user_repository
-from app.modules.buses.models.bus import Bus
 from app.modules.conductores.models.conductor import Conductor
+from app.modules.mantencion.models.categoria_falla import CategoriaFalla
+from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
+from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 
 logger = logging.getLogger(__name__)
@@ -36,26 +39,7 @@ async def seed_initial_data():
                     )
                     print(f"[SEED] Usuario '{username}' ({rol}) creado exitosamente.")
 
-            # 2. Sembrar Buses
-            buses_sembrar = [
-                {"n_bus": "10", "patente": "AB1234", "marca": "Mercedes-Benz", "modelo": "O500RS"},
-                {"n_bus": "301", "patente": "CD5678", "marca": "Volvo", "modelo": "B11R"},
-                {"n_bus": "302", "patente": "EF9012", "marca": "Scania", "modelo": "K400"},
-                {"n_bus": "500", "patente": "GH3456", "marca": "Marcopolo", "modelo": "G7 1800"},
-                {"n_bus": "750", "patente": "JK7890", "marca": "Mercedes-Benz", "modelo": "Tourismo"},
-                {"n_bus": "850", "patente": "LM1234", "marca": "Volvo", "modelo": "B450R"},
-            ]
-            for bus_data in buses_sembrar:
-                stmt = select(Bus).where(Bus.n_bus == bus_data["n_bus"])
-                res = await db.execute(stmt)
-                bus_exist = res.scalar_one_or_none()
-                if not bus_exist:
-                    bus_obj = Bus(**bus_data, is_active=True)
-                    db.add(bus_obj)
-                    await db.commit()
-                    print(f"[SEED] Bus N° {bus_data['n_bus']} ({bus_data['patente']}) creado exitosamente.")
-
-            # 3. Sembrar Conductores
+            # 2. Sembrar Conductores
             conductores_sembrar = [
                 {"nombre": "Juan Pérez", "rut": "12.345.678-9"},
                 {"nombre": "Carlos Muñoz", "rut": "15.678.901-2"},
@@ -71,48 +55,93 @@ async def seed_initial_data():
                     await db.commit()
                     print(f"[SEED] Conductor '{cond_data['nombre']}' registrado exitosamente.")
 
-            # 4. Sembrar Solicitudes de Mantención
-            user_chofer = await user_repository.get_by_username(db, "chofer1")
-            solicitudes_sembrar = [
-                {
-                    "n_bus": "301",
-                    "descripcion": "Revisión del sistema de frenos y cambio de balatas",
-                    "estado": "PENDIENTE",
-                    "items": [{"sistema": "Frenos", "observacion": "Ruido inusual al frenar a alta velocidad"}],
-                },
-                {
-                    "n_bus": "500",
-                    "descripcion": "Fuga de aceite en compartimento de motor",
-                    "estado": "EN_PROCESO",
-                    "items": [{"sistema": "Motor", "observacion": "Goteo persistente parte posterior"}],
-                },
-                {
-                    "n_bus": "10",
-                    "descripcion": "Reemplazo de ampolletas de luces traseras",
-                    "estado": "FINALIZADO",
-                    "items": [{"sistema": "Eléctrico", "observacion": "Luces de freno no encienden"}],
-                },
+            # 3. Sembrar Categorías de Fallas
+            cats_sembrar = ["FRENOS", "ELECTRICO", "MOTOR", "CARROCERIA", "CLIMATIZACION", "OTRO"]
+            cat_map = {}
+            for cat_nombre in cats_sembrar:
+                stmt_cat = select(CategoriaFalla).where(CategoriaFalla.nombre == cat_nombre)
+                res_cat = await db.execute(stmt_cat)
+                cat_obj = res_cat.scalar_one_or_none()
+                if not cat_obj:
+                    cat_obj = CategoriaFalla(nombre=cat_nombre, is_active=True)
+                    db.add(cat_obj)
+                    await db.commit()
+                    print(f"[SEED] Categoría de Falla '{cat_nombre}' creada.")
+                cat_map[cat_nombre] = cat_obj.id
+
+            # 4. Sembrar Fallas de Taller preconcebidas
+            fallas_sembrar = [
+                ("FRENOS", "Desgaste de balatas / pastillas"),
+                ("FRENOS", "Fuga de aire en cañería de frenos"),
+                ("FRENOS", "Líquido de frenos bajo"),
+                ("ELECTRICO", "Luces principales o de freno quemadas"),
+                ("ELECTRICO", "Batería descargada o alternador defectuoso"),
+                ("MOTOR", "Fuga de aceite en carter"),
+                ("MOTOR", "Sobrecalentamiento de motor"),
+                ("CARROCERIA", "Empaquetadura o parabrisas agrietado"),
+                ("CLIMATIZACION", "Aire acondicionado no enfría"),
             ]
+            for cat_n, falla_n in fallas_sembrar:
+                if cat_n in cat_map:
+                    stmt_f = select(FallaTaller).where(FallaTaller.nombre == falla_n)
+                    res_f = await db.execute(stmt_f)
+                    if not res_f.scalar_one_or_none():
+                        f_obj = FallaTaller(categoria_id=cat_map[cat_n], nombre=falla_n, is_active=True)
+                        db.add(f_obj)
+                        await db.commit()
+                        print(f"[SEED] Falla de Taller '{falla_n}' ({cat_n}) creada.")
+
+            # 5. Sembrar Solicitudes de Mantención iniciales
+            user_chofer = await user_repository.get_by_username(db, "chofer1")
             stmt_count = select(TallerSolicitud)
             res_count = await db.execute(stmt_count)
             if not res_count.scalars().all():
-                for sol_data in solicitudes_sembrar:
-                    sol_obj = TallerSolicitud(
-                        usuario_id=user_chofer.id if user_chofer else None,
-                        **sol_data
-                    )
-                    db.add(sol_obj)
-                await db.commit()
-                print("[SEED] Solicitudes de mantención de prueba creadas exitosamente.")
+                # Solicitud 1: Bus 301 (REPORTADO)
+                sol1 = TallerSolicitud(
+                    n_bus="301",
+                    usuario_creador_id=user_chofer.id if user_chofer else None,
+                    estado="REPORTADO",
+                    descripcion_general="Revisión urgente de sistema de frenos",
+                )
+                db.add(sol1)
+                await db.flush()
 
-            # 5. Sembrar Reporte Neumático de prueba
+                falla_balata = (await db.execute(select(FallaTaller).where(FallaTaller.nombre.like("%balatas%")))).scalar_one_or_none()
+                det1 = TallerSolicitudDetalle(
+                    solicitud_id=sol1.id,
+                    falla_id=falla_balata.id if falla_balata else None,
+                    descripcion_personalizada="Ruido fuerte al presionar pedal de freno",
+                )
+                db.add(det1)
+
+                # Solicitud 2: Bus 500 (REPORTADO)
+                sol2 = TallerSolicitud(
+                    n_bus="500",
+                    usuario_creador_id=user_chofer.id if user_chofer else None,
+                    estado="REPORTADO",
+                    descripcion_general="Luces quemadas lado izquierdo",
+                )
+                db.add(sol2)
+                await db.flush()
+
+                falla_luces = (await db.execute(select(FallaTaller).where(FallaTaller.nombre.like("%Luces%")))).scalar_one_or_none()
+                det2 = TallerSolicitudDetalle(
+                    solicitud_id=sol2.id,
+                    falla_id=falla_luces.id if falla_luces else None,
+                    descripcion_personalizada="Luz alta y baja del sector izquierdo apagadas",
+                )
+                db.add(det2)
+
+                await db.commit()
+                print("[SEED] Solicitudes de mantención iniciales creadas exitosamente.")
+
+            # 6. Sembrar Reporte Neumático de prueba
             stmt_neu = select(ReporteNeumatico)
             res_neu = await db.execute(stmt_neu)
             if not res_neu.scalars().all():
-                bus_301 = (await db.execute(select(Bus).where(Bus.n_bus == "301"))).scalar_one_or_none()
                 rep_obj = ReporteNeumatico(
                     usuario_id=user_chofer.id if user_chofer else None,
-                    bus_id=bus_301.id if bus_301 else None,
+                    n_bus="301",
                     tipo_bus="Doble Piso",
                     ruedas=[
                         {"posicion": "1D", "estado": "Bueno", "presion": 110},

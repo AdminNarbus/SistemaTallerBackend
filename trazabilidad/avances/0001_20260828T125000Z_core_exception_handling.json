@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 1,
+  "id": "AV-0001",
+  "timestamp": "2026-08-28T12:50:00Z",
+  "phase": "core_exception_handling",
+  "milestone": {
+    "id": "CORE-1",
+    "name": "Manejo Centralizado de Excepciones",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se centralizo el manejo de excepciones en app/core/exceptions.py con excepciones de dominio (NotFoundException, BusinessRuleException, ConflictException, PermissionException) y 4 handlers globales registrados en app/main.py. Se refactorizaron los repositorios y routers de mantencion y auth para eliminar try/except repetitivos.",
+  "scope": {
+    "planned": [
+      "Crear app/core/exceptions.py.",
+      "Registrar handlers globales en app/main.py.",
+      "Reemplazar ValueError por excepciones de dominio en repositorios.",
+      "Limpiar try/except en routers."
+    ],
+    "completed": [
+      "Excepciones de dominio y handlers creados.",
+      "Handlers globales integrados en FastAPI app.",
+      "MantencionRepository y Auth Router refactorizados.",
+      "Build verificado en entorno local."
+    ],
+    "pending": [
+      "Expandir el uso de logging con logger.getLogger(__name__) en servicios restantes."
+    ],
+    "outOfScope": [
+      "Modificaciones de esquema de base de datos o migraciones Alembic."
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/exceptions.py",
+      "action": "created",
+      "summary": "Modulo central de excepciones de dominio y handlers globales."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Registro de exception handlers globales en la instancia de FastAPI."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Sustitucion de ValueError por NotFoundException y BusinessRuleException."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Eliminacion de bloques try/except repetitivos en controladores."
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "Uso de ConflictException y NotFoundException."
+    }
+  ],
+  "decisions": [
+    "Estandarizar todas las respuestas de error bajo la estructura JSON {'error': {'code': ..., 'message': ..., 'detail': ...}}.",
+    "Preservar el header WWW-Authenticate en el handler de error 401 para cumplir con OAuth2 Bearer."
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -c \"from app.main import app; print('BUILD OK')\"",
+      "result": "passed",
+      "evidence": "BUILD OK — handlers: [<class 'starlette.exceptions.HTTPException'>, <class 'fastapi.exceptions.RequestValidationError'>, <class 'fastapi.exceptions.WebSocketRequestValidationError'>, <class 'app.core.exceptions.NarbusException'>, <class 'Exception'>]"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar logger estructurado en servicios y seguir registrando avances en trazabilidad/avances/.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "4c373e1",
+    "dirty": false
+  },
+  "notes": [
+    "La rama feature/manejo-excepciones fue unificada satisfactoriamente en develop.",
+    "No se realizo merge a main respetando la estrategia GitFlow."
+  ]
+}

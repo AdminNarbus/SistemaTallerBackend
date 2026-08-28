@@ -50,3 +50,13 @@ class Usuario(Base):
     def rol(self) -> str:
         """Devuelve el nombre del rol en formato texto (ej: 'ADMIN')."""
         return self.rol_rel.nombre if self.rol_rel else "CONDUCTOR"
+
+    @property
+    def nombre_completo(self) -> str:
+        """Devuelve el nombre completo o username del usuario."""
+        if self.nombre and self.apellido:
+            return f"{self.nombre} {self.apellido}"
+        if self.nombre:
+            return self.nombre
+        return self.username
+

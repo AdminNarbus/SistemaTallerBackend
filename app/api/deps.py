@@ -71,3 +71,34 @@ async def require_supervisor_or_admin(
             detail="Acceso denegado: Se requieren permisos de SUPERVISOR o ADMIN.",
         )
     return current_user
+
+
+async def require_mecanico_or_admin(
+    current_user: Usuario = Depends(require_current_user),
+) -> Usuario:
+    """
+    Exige que el usuario autenticado sea MECÁNICO o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
+    """
+    rol_upper = (current_user.rol or "").upper().strip()
+    if rol_upper not in ["MECANICO", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado: Se requieren permisos de MECÁNICO o ADMIN.",
+        )
+    return current_user
+
+
+async def require_conductor_or_admin(
+    current_user: Usuario = Depends(require_current_user),
+) -> Usuario:
+    """
+    Exige que el usuario autenticado sea CONDUCTOR o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
+    """
+    rol_upper = (current_user.rol or "").upper().strip()
+    if rol_upper not in ["CONDUCTOR", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado: Se requieren permisos de CONDUCTOR o ADMIN.",
+        )
+    return current_user
+

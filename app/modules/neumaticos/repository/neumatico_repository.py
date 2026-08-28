@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.buses.models.bus import Bus
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 
 
@@ -22,18 +20,11 @@ class NeumaticoRepository:
         marca_fuego: Optional[str],
         evidencia_url: Optional[str],
     ) -> ReporteNeumatico:
-        bus_id: Optional[int] = None
-        if numero_maquina and str(numero_maquina).strip():
-            res_b = await db.execute(
-                select(Bus.id).where(Bus.n_bus == str(numero_maquina).strip())
-            )
-            bus_id = res_b.scalar_one_or_none()
-
         ahora = datetime.now(timezone.utc)
 
         reporte = ReporteNeumatico(
             usuario_id=usuario_id,
-            bus_id=bus_id,
+            n_bus=numero_maquina,
             tipo_bus=tipo_bus,
             ruedas=ruedas,
             motivo=motivo,

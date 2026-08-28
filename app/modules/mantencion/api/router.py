@@ -2,7 +2,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import SessionDep, require_current_user, require_supervisor_or_admin
+from app.api.deps import (
+    SessionDep,
+    require_current_user,
+    require_supervisor_or_admin,
+    require_mecanico_or_admin,
+    require_conductor_or_admin,
+)
 from app.modules.auth.models.usuario import Usuario
 from app.modules.mantencion.services.mantencion_service import mantencion_service
 from app.modules.mantencion.dtos.mantencion_dto import (
@@ -38,16 +44,16 @@ async def get_fallas(
 @router.post("/solicitudes", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
 async def create_solicitud(
     dto: SolicitudCreateDTO,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_conductor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Creación de reporte/solicitud de taller por chofer o usuario."""
+    """Creación de reporte/solicitud de taller por chofer (CONDUCTOR o ADMIN)."""
     return await mantencion_service.create_solicitud(db, dto, creador_id=current_user.id)
 
 
 @router.get("/pendientes", response_model=List[SolicitudDTO])
 async def list_pendientes(
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE_REASIGNACION)."""
@@ -56,7 +62,7 @@ async def list_pendientes(
 
 @router.get("/mis-trabajos", response_model=List[SolicitudDTO])
 async def list_mis_trabajos(
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta."""
@@ -80,7 +86,7 @@ async def get_solicitud(
 async def tomar_trabajo(
     id: int,
     dto: TomarTrabajoDTO,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Auto-asignación de bus como Líder + invitación a colaboradores + comentario inicial opcional."""
@@ -91,7 +97,7 @@ async def tomar_trabajo(
 async def desasignar_mecanico(
     id: int,
     comentario: Optional[str] = Query(None, description="Comentario opcional de salida"),
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Desasignación individual de un mecánico ('[🚪 Salir del Equipo]')."""
@@ -102,7 +108,7 @@ async def desasignar_mecanico(
 async def liberar_turno(
     id: int,
     dto: LiberarTurnoDTO,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Liberación / Entrega de turno para el equipo completo ('[🔄 Entregar / Pasar Turno]')."""
@@ -114,7 +120,7 @@ async def check_detalle(
     id: int,
     detalle_id: int,
     resuelto: bool = Query(..., description="True para marcar resuelto, False para desmarcar"),
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Marca o desmarca un check de falla resuelta guardando el timestamp y el ID del mecánico."""
@@ -138,7 +144,7 @@ async def agregar_comentario(
 async def finalizar_solicitud(
     id: int,
     dto: FinalizarSolicitudDTO,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Finaliza los trabajos de la solicitud y deja el bus en estado DISPONIBLE."""

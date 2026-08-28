@@ -42,6 +42,7 @@ class MantencionRepository:
 
     async def get_solicitud_by_id(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
         logger.debug("[MANTENCION] Query get_solicitud_by_id | id=%s", solicitud_id)
+        db.expire_all()
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 3,
+  "id": "AV-0003",
+  "timestamp": "2026-08-28T14:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TEST-1",
+    "name": "Suite de Pruebas Automatizadas Backend (Unitarias, Integración y E2E)",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se implementó una suite integral de pruebas automatizadas para el backend de Narbus Taller utilizando pytest, pytest-asyncio, httpx y aiosqlite. Se cubrieron pruebas unitarias para servicios/repositorios/DTOs, pruebas de integración HTTP para todos los endpoints REST con validación RBAC, y pruebas End-to-End de sistema para flujos multiturno de taller, evidencias de neumáticos y respuestas unificadas de excepciones. La suite alcanzó el 100% de éxito (30/30 tests aprobados).",
+  "scope": {
+    "planned": [
+      "Configurar infraestructura de pruebas con pytest, pytest-asyncio y aiosqlite en memoria.",
+      "Crear fixtures asíncronos con aislamiento total de base de datos en tests/conftest.py.",
+      "Implementar pruebas unitarias para auth_service, mantencion_service, neumaticos_service y validaciones DTO/excepciones.",
+      "Implementar pruebas de integración HTTP para endpoints /auth, /mantencion, /formularioNeumatico, /supervision y /health.",
+      "Implementar pruebas End-to-End (E2E) y de sistema para flujos multiturno de taller y manejo unificado de errores.",
+      "Resolver descalibres de modelos ORM y sesiones asíncronas de SQLAlchemy."
+    ],
+    "completed": [
+      "tests/conftest.py: Configuración de DB SQLite en memoria (sqlite+aiosqlite:///:memory:) recreada por test function, cliente HTTPX asíncrono y fixtures con usuarios de todos los roles (CONDUCTOR, MECANICO 1/2, SUPERVISOR, ADMIN).",
+      "tests/unit/test_auth_service.py: Pruebas de hash bcrypt, codificación/decodificación JWT, creación y autenticación de usuarios, y soft delete.",
+      "tests/unit/test_mantencion_service.py: Pruebas de asignación líder/colaboradores, entrega de turno, desasignación y cierre de orden.",
+      "tests/unit/test_neumaticos_service.py: Pruebas de procesamiento de formulario de neumáticos y marca_fuego opcional.",
+      "tests/unit/test_exceptions_and_dtos.py: Pruebas de excepciones de dominio, payload JSON _error_body y validaciones Pydantic.",
+      "tests/integration/test_health_api.py: Pruebas de endpoints GET / y GET /api/v1/health.",
+      "tests/integration/test_auth_api.py: Pruebas de login JSON, login OAuth2 Form, /me y permisos RBAC.",
+      "tests/integration/test_mantencion_api.py: Pruebas de catálogos, creación de solicitud, asignación, check fallas, comentarios y cierre.",
+      "tests/integration/test_neumaticos_api.py: Pruebas de GET y POST multipart form-data con adjuntos de archivos de imagen.",
+      "tests/integration/test_supervision_api.py: Pruebas de control de acceso para supervisores y auditoría de buses en taller.",
+      "tests/e2e/test_flujo_completo_taller_e2e.py: Prueba de sistema simulando el flujo multiturno completo (Conductor -> Mecánico 1 -> Mecánico 2 -> Supervisor).",
+      "tests/e2e/test_flujo_neumaticos_e2e.py: Prueba E2E de inspección de neumáticos y almacenamiento físico de evidencias en /uploads/evidencias/.",
+      "tests/e2e/test_seguridad_excepciones_e2e.py: Prueba de respuestas JSON estandarizadas (401, 403, 404, 422).",
+      "Corrección en neumatico_repository.py: Mapeo corregido de n_bus en sustitución del campo legacy bus_id.",
+      "Corrección en mantencion_repository.py: Integración de db.expire_all() para recarga limpia de relaciones selectinload."
+    ],
+    "pending": [
+      "Etiquetado de versión de release (Git Tagging).",
+      "Merge controlado hacia main y despliegue a entorno Staging/Producción."
+    ],
+    "outOfScope": [
+      "Pruebas de carga o estres en producción.",
+      "Implementación de interfaz frontend."
+    ]
+  },
+  "changes": [
+    { "path": "requirements.txt", "action": "modified", "summary": "Se agregaron dependencias de testing: pytest, pytest-asyncio y aiosqlite." },
+    { "path": "pytest.ini", "action": "created", "summary": "Configuración de Pytest para soporte asíncrono (asyncio_mode = auto)." },
+    { "path": "tests/conftest.py", "action": "created", "summary": "Fixtures de BD en memoria, cliente HTTPX asíncrono y siembra de datos de prueba con roles base." },
+    { "path": "tests/unit/test_auth_service.py", "action": "created", "summary": "Pruebas unitarias para seguridad y repositorio de usuarios." },
+    { "path": "tests/unit/test_mantencion_service.py", "action": "created", "summary": "Pruebas unitarias para la lógica de negocio del módulo taller." },
+    { "path": "tests/unit/test_neumaticos_service.py", "action": "created", "summary": "Pruebas unitarias para el servicio del formulario de neumáticos." },
+    { "path": "tests/unit/test_exceptions_and_dtos.py", "action": "created", "summary": "Pruebas unitarias para excepciones de dominio y esquemas Pydantic DTO." },
+    { "path": "tests/integration/test_health_api.py", "action": "created", "summary": "Pruebas de integración HTTP para endpoints de salud y raíz." },
+    { "path": "tests/integration/test_auth_api.py", "action": "created", "summary": "Pruebas de integración HTTP para autenticación y usuarios (RBAC)." },
+    { "path": "tests/integration/test_mantencion_api.py", "action": "created", "summary": "Pruebas de integración HTTP para endpoints del módulo Mantención Taller." },
+    { "path": "tests/integration/test_neumaticos_api.py", "action": "created", "summary": "Pruebas de integración HTTP para el formulario multipart de neumáticos." },
+    { "path": "tests/integration/test_supervision_api.py", "action": "created", "summary": "Pruebas de integración HTTP para auditoría de supervisores." },
+    { "path": "tests/e2e/test_flujo_completo_taller_e2e.py", "action": "created", "summary": "Prueba E2E del flujo completo de taller entre 4 roles de usuario." },
+    { "path": "tests/e2e/test_flujo_neumaticos_e2e.py", "action": "created", "summary": "Prueba E2E para reporte de neumáticos y servicio de evidencias fotográficas." },
+    { "path": "tests/e2e/test_seguridad_excepciones_e2e.py", "action": "created", "summary": "Pruebas E2E de manejo centralizado de excepciones y códigos de estado HTTP." },
+    { "path": "app/modules/neumaticos/repository/neumatico_repository.py", "action": "modified", "summary": "Corrección de instanciación usando n_bus en lugar de bus_id." },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "Integración de db.expire_all() en get_solicitud_by_id para forzar recarga limpia de relaciones." },
+    { "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md", "action": "modified", "summary": "Actualización del plan marcando completadas las Fases 4 y 5." }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-005",
+      "title": "Aislamiento por test función con SQLite en memoria y aiosqlite",
+      "rationale": "Para garantizar que las pruebas se ejecuten de manera independiente y repetible sin depender de un motor PostgreSQL externo ni modificar datos locales, se utilizó sqlite+aiosqlite:///:memory: creando y destruyendo las tablas en cada fixture de test.",
+      "consequences": "Pruebas extremadamente rápidas (~10s para 30 tests), deterministas y ejecutables en entornos CI/CD sin servicios externos."
+    },
+    {
+      "id": "DEC-006",
+      "title": "Uso de expire_all() previo a consultas con selectinload",
+      "rationale": "SQLAlchemy mantiene en la identity map de la sesión asíncrona las instancias modificadas en memoria. Al agregar elementos a colecciones secundarias mediante relaciones manuales (ej: TallerSolicitudMecanico), llamar a expire_all() asegura que SQLAlchemy vuelva a consultar y poblar los selectinload desde las tablas actualizadas.",
+      "consequences": "Resuelve inconsistencias de lectura de colecciones desactualizadas en los endpoints HTTP."
+    }
+  ],
+  "verification": [
+    { "command": "python -m pytest tests/ -v", "result": "passed", "evidence": "30 passed in 10.46s (100% éxito)" }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar los cambios en la rama develop mediante GitFlow y proceder con el etiquetado de release.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/pruebas-sistema-backend",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los 30 tests pasan de forma consistente en la suite completa.",
+    "El archivo de avance de trazabilidad fue creado en formato JSON siguiendo la secuencia correlativa AV-0003."
+  ]
+}

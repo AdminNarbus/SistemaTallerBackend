@@ -20,7 +20,7 @@ async def test_auditoria_buses_taller_access_control(client, auth_headers_conduc
 
 @pytest.mark.asyncio
 async def test_auditoria_buses_taller_filtros(client, auth_headers_supervisor, seed_test_data):
-    """Prueba los filtros por n_bus y estado en el endpoint de auditoría."""
+    """Prueba los filtros por n_bus, estado y mecanico_nombre en el endpoint de auditoría."""
     # Filtrar por bus 'BUS-101'
     res_bus = await client.get("/api/v1/supervision/auditoria/buses-taller?n_bus=BUS-101", headers=auth_headers_supervisor)
     assert res_bus.status_code == 200
@@ -32,6 +32,12 @@ async def test_auditoria_buses_taller_filtros(client, auth_headers_supervisor, s
     assert res_estado.status_code == 200
     data_estado = res_estado.json()
     assert isinstance(data_estado, list)
+
+    # Filtrar por nombre de mecánico 'Mecanico'
+    res_mec = await client.get("/api/v1/supervision/auditoria/buses-taller?mecanico_nombre=Mecanico", headers=auth_headers_supervisor)
+    assert res_mec.status_code == 200
+    data_mec = res_mec.json()
+    assert isinstance(data_mec, list)
 
 
 @pytest.mark.asyncio

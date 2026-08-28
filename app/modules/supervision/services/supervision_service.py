@@ -24,10 +24,10 @@ class SupervisionService:
         db: AsyncSession,
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
-        mecanico_id: Optional[int] = None,
+        mecanico_nombre: Optional[str] = None,
     ) -> List[SolicitudDTO]:
-        logger.info("[SUPERVISION_SERVICE] Obteniendo auditoria de solicitudes | n_bus=%s | estado=%s", n_bus, estado)
-        solicitudes = await supervision_repository.get_auditoria(db, n_bus=n_bus, estado=estado, mecanico_id=mecanico_id)
+        logger.info("[SUPERVISION_SERVICE] Obteniendo auditoria de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s", n_bus, estado, mecanico_nombre)
+        solicitudes = await supervision_repository.get_auditoria(db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre)
         return [mantencion_service._to_solicitud_dto(s) for s in solicitudes]
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:

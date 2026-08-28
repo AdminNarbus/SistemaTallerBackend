@@ -18,7 +18,7 @@ router = APIRouter(prefix="/supervision", tags=["supervision"])
 async def get_auditoria_buses_taller(
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),
     estado: Optional[str] = Query(None, description="Filtrar por estado (REPORTADO, EN_REPARACION, PENDIENTE_REASIGNACION, FINALIZADO)"),
-    mecanico_id: Optional[int] = Query(None, description="Filtrar por ID de mecánico asignado"),
+    mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
     current_user: Usuario = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
@@ -26,10 +26,10 @@ async def get_auditoria_buses_taller(
     Dashboard Auditor para Supervisores/Administradores:
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
-    y la bitácora de comentarios cronológica. Permite filtros por bus, estado y mecánico.
+    y la bitácora de comentarios cronológica. Permite filtros por bus, estado y nombre/username del mecánico.
     """
-    logger.info("[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s", current_user.id, n_bus, estado)
-    result = await supervision_service.get_auditoria_solicitudes(db, n_bus=n_bus, estado=estado, mecanico_id=mecanico_id)
+    logger.info("[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s", current_user.id, n_bus, estado, mecanico_nombre)
+    result = await supervision_service.get_auditoria_solicitudes(db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre)
     logger.debug("[SUPERVISION] Auditoría retornada | total_solicitudes=%s", len(result))
     return result
 

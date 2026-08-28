@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 5,
+  "id": "AV-0005",
+  "timestamp": "2026-08-28T18:30:00Z",
+  "phase": "backend_taller",
+  "milestone": { "id": "MANT-3", "name": "Comentarios Opcionales en Workflow y Filtro de Rol MECANICO", "statusBefore": "in_progress", "statusAfter": "completed" },
+  "type": "completed",
+  "summary": "Refactorización del workflow de mantención para que los comentarios de bitácora sean completamente opcionales (sin texto por defecto). Adicionalmente, el buscador de colaboradores fue restringido exclusivamente al rol MECANICO, excluyendo el rol ADMIN.",
+  "scope": {
+    "planned": [
+      "Hacer opcional el comentario al tomar trabajo (comentario_inicial)",
+      "Hacer opcional el comentario al liberar turno (comentario)",
+      "Hacer opcional el comentario al finalizar solicitud (comentario_cierre)",
+      "Restringir búsqueda de mecánicos colaboradores solo al rol MECANICO"
+    ],
+    "completed": [
+      "MantencionRepository.tomar_trabajo: solo inserta registro en bitácora si se envía texto no vacío (elimina texto por defecto 'Equipo de mecánicos tomó la orden de mantención.')",
+      "MantencionRepository.liberar_turno: solo inserta registro en bitácora si se envía texto no vacío (elimina texto por defecto 'Turno entregado / liberado...')",
+      "MantencionRepository.finalizar_solicitud: solo inserta registro en bitácora si se envía texto no vacío (elimina texto por defecto 'Trabajos de taller completados...')",
+      "UserRepository.buscar_mecanicos: filtro cambiado de Rol.nombre.in_(['MECANICO', 'ADMIN']) a Rol.nombre == 'MECANICO'",
+      "UserRepository.get_mecanicos_by_nombres_o_usernames: mismo ajuste de filtro de rol"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en los modelos ORM (sin modificaciones de esquema de BD)",
+      "Cambios en los DTOs (los campos ya eran Optional[str])"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "tomar_trabajo, liberar_turno y finalizar_solicitud: comentarios de bitácora ahora son condicionales (solo se insertan si el texto es no vacío). Se elimina la lógica de texto por defecto en los tres métodos."
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "buscar_mecanicos y get_mecanicos_by_nombres_o_usernames: filtro de rol restringido exclusivamente a 'MECANICO' (se eliminó 'ADMIN' de la lista)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-005",
+      "title": "Comentarios de bitácora son eventos voluntarios, no registros automáticos",
+      "rationale": "El sistema generaba automáticamente comentarios de bitácora con texto genérico (ej: 'Equipo de mecánicos tomó la orden...') incluso cuando el mecánico no ingresaba ninguna nota. Esto contaminaba la bitácora con ruido innecesario. La bitácora debe reflejar solo anotaciones reales del técnico.",
+      "consequences": "Las acciones de ciclo de vida (tomar, liberar, finalizar) pueden ejecutarse sin generar ningún registro en taller_solicitud_comentarios. La bitácora queda limpia y solo contiene eventos con contenido real."
+    },
+    {
+      "id": "DEC-006",
+      "title": "Buscador de colaboradores restringido solo al rol MECANICO",
+      "rationale": "Anteriormente, el endpoint de búsqueda de mecánicos también devolvía usuarios con rol ADMIN. Los usuarios ADMIN no deben aparecer en la lista de colaboradores asignables a una orden de taller, ya que su rol es de gestión y no de trabajo operativo en piso.",
+      "consequences": "GET /api/v1/auth/mecanicos/buscar y la resolución interna de colaboradores por nombre ahora excluyen completamente a los ADMINs. Solo mecánicos activos con rol MECANICO pueden ser asignados como colaboradores."
+    }
+  ],
+  "verification": [
+    { "command": "Prueba manual: tomar trabajo sin comentario", "result": "passed", "evidence": "Solicitud pasa a EN_REPARACION sin insertar fila en taller_solicitud_comentarios." },
+    { "command": "Prueba manual: liberar turno sin comentario", "result": "passed", "evidence": "Solicitud pasa a PENDIENTE_REASIGNACION sin registro en bitácora." },
+    { "command": "Prueba manual: finalizar sin comentario", "result": "passed", "evidence": "Solicitud pasa a FINALIZADO sin registro en bitácora." },
+    { "command": "GET /api/v1/auth/mecanicos/buscar", "result": "passed", "evidence": "Retorna solo usuarios con rol MECANICO, sin incluir ADMINs." }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con el flujo de pruebas e2e del dashboard de mecánicos en el frontend React.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/comentarios-opcionales", "commit": "local", "dirty": true },
+  "notes": [
+    "Los DTOs (TomarTrabajoDTO, LiberarTurnoDTO, FinalizarSolicitudDTO) ya declaraban los campos como Optional[str], por lo que no requirieron cambios.",
+    "El campo comentario_inicial en el frontend fue eliminado del modal 'Tomar Trabajo'. Los modales 'Liberar Turno' y 'Finalizar' también eliminaron sus campos de comentario."
+  ]
+}

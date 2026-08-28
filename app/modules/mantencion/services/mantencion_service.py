@@ -15,6 +15,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     LiberarTurnoDTO,
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
+    AgregarColaboradorDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,6 +184,11 @@ class MantencionService:
     async def check_detalle(self, db: AsyncSession, solicitud_id: int, detalle_id: int, mecanico_id: int, resuelto: bool) -> SolicitudDTO:
         logger.info("[MANTENCION] Check detalle | solicitud_id=%s | detalle_id=%s | mecanico_id=%s | resuelto=%s", solicitud_id, detalle_id, mecanico_id, resuelto)
         sol = await mantencion_repository.check_detalle(db, solicitud_id, detalle_id, mecanico_id, resuelto)
+        return self._to_solicitud_dto(sol)
+
+    async def agregar_colaborador(self, db: AsyncSession, solicitud_id: int, lider_id: int, dto: AgregarColaboradorDTO) -> SolicitudDTO:
+        logger.info("[MANTENCION] Agregando colaborador en caliente | solicitud_id=%s | lider_id=%s", solicitud_id, lider_id)
+        sol = await mantencion_repository.agregar_colaborador(db, solicitud_id, lider_id, dto)
         return self._to_solicitud_dto(sol)
 
     async def agregar_comentario(self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: ComentarioCreateDTO) -> SolicitudDTO:

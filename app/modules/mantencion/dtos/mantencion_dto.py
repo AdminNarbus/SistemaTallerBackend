@@ -98,6 +98,11 @@ class FinalizarSolicitudDTO(BaseModel):
     comentario_cierre: Optional[str] = None
 
 
+class AgregarColaboradorDTO(BaseModel):
+    colaborador_id: Optional[int] = None
+    colaborador_nombre: Optional[str] = None
+
+
 class SolicitudDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

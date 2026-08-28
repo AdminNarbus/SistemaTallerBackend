@@ -184,16 +184,74 @@ class MantencionRepository:
         # 4. Actualizar estado de la solicitud
         solicitud.estado = "EN_REPARACION"
 
-        # 5. Agregar comentario opcional de inicio/asignación
-        texto_comentario = dto.comentario_inicial if dto.comentario_inicial else "Equipo de mecánicos tomó la orden de mantención."
-        comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
-            usuario_id=lider_id,
-            tipo="ASIGNACION",
-            comentario=texto_comentario,
-            fecha_registro=datetime.now(),
+        # 5. Agregar comentario opcional de inicio/asignación (solo si se envió texto)
+        if dto.comentario_inicial and dto.comentario_inicial.strip():
+            comentario_entry = TallerSolicitudComentario(
+                solicitud_id=solicitud.id,
+                usuario_id=lider_id,
+                tipo="ASIGNACION",
+                comentario=dto.comentario_inicial.strip(),
+                fecha_registro=datetime.now(),
+            )
+            db.add(comentario_entry)
+
+        await db.commit()
+        return await self.get_solicitud_by_id(db, solicitud_id)
+
+    async def agregar_colaborador(
+        self, db: AsyncSession, solicitud_id: int, lider_id: int, dto
+    ) -> TallerSolicitud:
+        """
+        Agrega un colaborador al equipo de una solicitud EN_REPARACION.
+        Solo el líder activo puede invocar esta acción.
+        """
+        from app.modules.auth.repository.user_repository import user_repository
+
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if solicitud.estado != "EN_REPARACION":
+            raise BusinessRuleException("Solo se pueden agregar colaboradores cuando la solicitud está EN_REPARACION")
+
+        # Verificar que quien invoca es el líder activo
+        es_lider = any(
+            m.mecanico_id == lider_id and m.is_activo and m.es_lider_responsable
+            for m in solicitud.mecanicos
         )
-        db.add(comentario_entry)
+        if not es_lider:
+            raise BusinessRuleException("Solo el mecánico líder activo puede agregar colaboradores")
+
+        # Resolver ID del colaborador (por ID directo o por nombre)
+        colab_id = dto.colaborador_id
+        if not colab_id and dto.colaborador_nombre:
+            encontrados = await user_repository.get_mecanicos_by_nombres_o_usernames(
+                db, [dto.colaborador_nombre]
+            )
+            if not encontrados:
+                raise NotFoundException(f"No se encontró un mecánico con nombre '{dto.colaborador_nombre}'")
+            colab_id = encontrados[0].id
+
+        if not colab_id:
+            raise BusinessRuleException("Debes indicar el ID o nombre del colaborador a agregar")
+
+        if colab_id == lider_id:
+            raise BusinessRuleException("El líder no puede agregarse a sí mismo como colaborador")
+
+        # Verificar que no esté ya activo en la orden
+        ya_activo = any(m.mecanico_id == colab_id and m.is_activo for m in solicitud.mecanicos)
+        if ya_activo:
+            raise BusinessRuleException("El mecánico ya está activo en esta solicitud")
+
+        colab_entry = TallerSolicitudMecanico(
+            solicitud_id=solicitud.id,
+            mecanico_id=colab_id,
+            es_lider_responsable=False,
+            is_activo=True,
+            fecha_asignacion=datetime.now(),
+        )
+        db.add(colab_entry)
+        logger.info("[MANTENCION] Colaborador agregado en caliente | solicitud_id=%s | colab_id=%s | por_lider_id=%s", solicitud_id, colab_id, lider_id)
 
         await db.commit()
         return await self.get_solicitud_by_id(db, solicitud_id)
@@ -222,21 +280,32 @@ class MantencionRepository:
         mecanico_entry.is_activo = False
         mecanico_entry.fecha_desasignacion = datetime.now()
 
-        # Registrar comentario de salida
-        txt = comentario_texto if comentario_texto else "Mecanico se retiró individualmente del equipo."
-        comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
-            usuario_id=mecanico_id,
-            tipo="SALIDA_MECANICO",
-            comentario=txt,
-            fecha_registro=datetime.now(),
-        )
-        db.add(comentario_entry)
+        # Registrar comentario de salida (solo si se proporcionó texto)
+        if comentario_texto and comentario_texto.strip():
+            comentario_entry = TallerSolicitudComentario(
+                solicitud_id=solicitud.id,
+                usuario_id=mecanico_id,
+                tipo="SALIDA_MECANICO",
+                comentario=comentario_texto.strip(),
+                fecha_registro=datetime.now(),
+            )
+            db.add(comentario_entry)
 
-        # Verificar si quedan mecánicos activos en el equipo. Si no queda ninguno, volver a PENDIENTE_REASIGNACION
+        # Verificar mecánicos activos restantes
         activos = [m for m in solicitud.mecanicos if m.is_activo and m.id != mecanico_entry.id]
+
         if not activos:
+            # No queda nadie → volver a pendiente de reasignación
             solicitud.estado = "PENDIENTE_REASIGNACION"
+            logger.info("[MANTENCION] Sin mecánicos activos → PENDIENTE_REASIGNACION | solicitud_id=%s", solicitud_id)
+        elif mecanico_entry.es_lider_responsable:
+            # El líder se fue pero quedan colaboradores → promover al más antiguo
+            nuevo_lider = min(activos, key=lambda m: m.fecha_asignacion)
+            nuevo_lider.es_lider_responsable = True
+            logger.info(
+                "[MANTENCION] Líder salió → colaborador promovido a líder | solicitud_id=%s | nuevo_lider_id=%s",
+                solicitud_id, nuevo_lider.mecanico_id
+            )
 
         await db.commit()
         return await self.get_solicitud_by_id(db, solicitud_id)
@@ -259,15 +328,15 @@ class MantencionRepository:
 
         solicitud.estado = "PENDIENTE_REASIGNACION"
 
-        txt = dto.comentario if dto.comentario else "Turno entregado / liberado para el siguiente equipo de mecánicos."
-        comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
-            usuario_id=usuario_id,
-            tipo="ENTREGA_TURNO",
-            comentario=txt,
-            fecha_registro=now,
-        )
-        db.add(comentario_entry)
+        if dto.comentario and dto.comentario.strip():
+            comentario_entry = TallerSolicitudComentario(
+                solicitud_id=solicitud.id,
+                usuario_id=usuario_id,
+                tipo="ENTREGA_TURNO",
+                comentario=dto.comentario.strip(),
+                fecha_registro=now,
+            )
+            db.add(comentario_entry)
 
         await db.commit()
         return await self.get_solicitud_by_id(db, solicitud_id)
@@ -336,16 +405,16 @@ class MantencionRepository:
                 mec.is_activo = False
                 mec.fecha_desasignacion = now
 
-        # Registrar comentario de cierre
-        txt = dto.comentario_cierre if dto.comentario_cierre else "Trabajos de taller completados. Bus pasa a estado DISPONIBLE."
-        comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
-            usuario_id=mecanico_cierre_id,
-            tipo="CIERRE",
-            comentario=txt,
-            fecha_registro=now,
-        )
-        db.add(comentario_entry)
+        # Registrar comentario de cierre si se proporcionó
+        if dto.comentario_cierre and dto.comentario_cierre.strip():
+            comentario_entry = TallerSolicitudComentario(
+                solicitud_id=solicitud.id,
+                usuario_id=mecanico_cierre_id,
+                tipo="CIERRE",
+                comentario=dto.comentario_cierre.strip(),
+                fecha_registro=now,
+            )
+            db.add(comentario_entry)
 
         await db.commit()
         return await self.get_solicitud_by_id(db, solicitud_id)

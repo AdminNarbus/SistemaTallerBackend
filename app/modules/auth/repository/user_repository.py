@@ -109,11 +109,12 @@ class UserRepository:
 
 
     async def buscar_mecanicos(
-        self, db: AsyncSession, q: Optional[str] = None
+        self, db: AsyncSession, q: Optional[str] = None, exclude_id: Optional[int] = None
     ) -> List[Usuario]:
         """
-        Busca usuarios activos con rol MECÁNICO o ADMIN por nombre, apellido o username.
+        Busca usuarios activos con rol MECÁNICO por nombre, apellido o username.
         Si q está vacío o es None, retorna todos los mecánicos activos.
+        Si exclude_id se provee, ese usuario es excluido de los resultados (ej: el mecánico logueado).
         """
         from sqlalchemy import or_, and_, func
         stmt = (
@@ -122,7 +123,7 @@ class UserRepository:
             .where(
                 and_(
                     Usuario.is_active == True,
-                    Rol.nombre.in_(["MECANICO", "ADMIN"]),
+                    Rol.nombre == "MECANICO",
                 )
             )
         )
@@ -136,6 +137,8 @@ class UserRepository:
                     func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern),
                 )
             )
+        if exclude_id:
+            stmt = stmt.where(Usuario.id != exclude_id)
         stmt = stmt.order_by(Usuario.nombre.asc(), Usuario.username.asc())
         res = await db.execute(stmt)
         return list(res.scalars().all())
@@ -163,7 +166,7 @@ class UserRepository:
                 .where(
                     and_(
                         Usuario.is_active == True,
-                        Rol.nombre.in_(["MECANICO", "ADMIN"]),
+                        Rol.nombre == "MECANICO",
                         or_(
                             Usuario.username.ilike(pattern),
                             Usuario.nombre.ilike(pattern),

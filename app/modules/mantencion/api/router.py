@@ -20,6 +20,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     LiberarTurnoDTO,
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
+    AgregarColaboradorDTO,
 )
 from app.core.exceptions import NotFoundException
 
@@ -127,6 +128,18 @@ async def check_detalle(
     return await mantencion_service.check_detalle(
         db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id, resuelto=resuelto
     )
+
+
+
+@router.post("/{id}/agregar-colaborador", response_model=SolicitudDTO)
+async def agregar_colaborador(
+    id: int,
+    dto: AgregarColaboradorDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Agrega un colaborador al equipo mientras la solicitud está EN_REPARACION. Solo el líder activo puede hacerlo."""
+    return await mantencion_service.agregar_colaborador(db, solicitud_id=id, lider_id=current_user.id, dto=dto)
 
 
 @router.post("/{id}/comentarios", response_model=SolicitudDTO)

@@ -159,15 +159,17 @@ async def get_me(
 )
 async def buscar_mecanicos(
     q: Optional[str] = Query("", description="Texto a buscar por nombre, apellido o username. Si está vacío, retorna todos."),
+    exclude_id: Optional[int] = Query(None, description="ID de usuario a excluir de los resultados (ej: el mecánico logueado)"),
     db: AsyncSession = SessionDep,
     current_user: Usuario = Depends(require_current_user),
 ) -> Any:
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
     Recibe un string de búsqueda 'q' (o vacío) y retorna la lista de mecánicos activos.
+    Si se pasa exclude_id, ese usuario queda fuera de los resultados.
     """
-    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | usuario_solicitante_id=%s", q, current_user.id)
-    mecanicos = await user_repository.buscar_mecanicos(db, q=q)
+    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | usuario_solicitante_id=%s", q, exclude_id, current_user.id)
+    mecanicos = await user_repository.buscar_mecanicos(db, q=q, exclude_id=exclude_id)
     return mecanicos
 
 

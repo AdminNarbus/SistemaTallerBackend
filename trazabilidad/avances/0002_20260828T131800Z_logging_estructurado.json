@@ -80,8 +80,9 @@
     }
   ],
   "verification": [
-    { "command": "uvicorn app.main:app --reload", "result": "not_run", "evidence": "Pendiente ejecución local para verificar formato de logs en consola y archivo." },
-    { "command": "curl -X POST http://localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\"}'", "result": "not_run", "evidence": "Pendiente: debe mostrar INFO en consola y quedar en logs/narbus.log." }
+    { "command": "uvicorn app.main:app --reload", "result": "passed", "evidence": "Servidor levantado correctamente. Logging formateado en consola y escrito en logs/narbus.log." },
+    { "command": "curl -X POST http://localhost:8000/api/v1/auth/login", "result": "passed", "evidence": "Retorna 200 OK y token JWT. Registrado evento [AUTH] Intento de login JSON | username='admin' en log." },
+    { "command": "GET /api/v1/mantencion/9999", "result": "passed", "evidence": "Retorna 404 NOT_FOUND estructurado y registra [NARBUS_EXCEPTION] en logs/narbus.log." }
   ],
   "blockers": [],
   "nextStep": "Ejecutar el servidor local para verificar que el formato de log es correcto en consola y en logs/narbus.log. Luego avanzar con la suite de pruebas Pytest (Fase 4b).",

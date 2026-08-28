@@ -8,7 +8,10 @@
 - **Entorno Local Estricto:** Toda la ejecución, desarrollo y pruebas se realizan de forma **local** (`dev_local`).
 - **Restricción de Base de Datos:** Solo se permite el uso de consultas de lectura (**GET / SELECT**) a la base de datos de manera directa para operaciones de verificación. Todas las modificaciones deben realizarse mediante código o migraciones de Alembic.
 
-## 2. Manejo Centralizado de Excepciones
+## 2. DTOs y Manejo Centralizado de Excepciones
+- **Uso Obligatorio de DTOs (Pydantic Models):**
+  - Todo nuevo endpoint, entrada de datos (`payload`/`request body`) o respuesta (`response_model`) debe contar con su correspondiente **DTO (Data Transfer Object)** definido en la carpeta `dtos/` del módulo respectivo.
+  - No se deben exponer directamente los modelos ORM de SQLAlchemy en los controladores.
 - **Uso Obligatorio de Excepciones de Dominio:** El proyecto cuenta con un sistema centralizado de excepciones en `app/core/exceptions.py`.
 - **Regla en Nuevas Funcionalidades:** Toda nueva mejora, endpoint, servicio o repositorio DEBE utilizar las excepciones de dominio existentes (`NotFoundException`, `BusinessRuleException`, `ConflictException`, `PermissionException`) cuando sea necesario, evitando lanzar `ValueError` o usar bloques `try/except` repetitivos en los routers.
 

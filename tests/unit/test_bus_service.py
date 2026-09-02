@@ -26,15 +26,26 @@ async def test_bus_service_search_and_get(db_session):
     resultados_3 = await bus_service.buscar_sugerencias_buses(db_session, query="3")
     assert resultados_3 == ["301", "339", "342"]
 
-    # Búsqueda de todos los activos (query vacío)
-    todos = await bus_service.buscar_sugerencias_buses(db_session, query=None)
-    assert todos == ["10", "301", "339", "342", "900"]
+    # Búsqueda de todos los activos en catálogo de taller (excluye 10 < 200 y 900 >= 900)
+    todos_taller = await bus_service.buscar_sugerencias_buses(db_session, query=None)
+    assert todos_taller == ["301", "339", "342"]
+
+    # Búsqueda sin filtro de flota (todos los activos en BD)
+    todos_completo = await bus_service.buscar_sugerencias_buses(db_session, query=None, solo_flota_taller=False)
+    assert todos_completo == ["10", "301", "339", "342", "900"]
 
     # Obtener por ID
     bus_dto = await bus_service.get_bus_by_id(db_session, bus_id=3)
     assert bus_dto.n_bus == "339"
     assert bus_dto.patente == "CC3399"
     assert bus_dto.marca == "Volvo"
+    assert bus_dto.en_taller is False
+
+    # Actualizar estado en_taller
+    bus_actualizado = await bus_service.actualizar_en_taller(
+        db_session, bus_id=3, en_taller=True, motivo="Mantenimiento preventivo"
+    )
+    assert bus_actualizado.en_taller is True
 
     # Obtener por n_bus
     bus_por_numero = await bus_service.get_bus_by_n_bus(db_session, n_bus="342")
@@ -47,6 +58,7 @@ async def test_bus_service_search_and_get(db_session):
 
     with pytest.raises(NotFoundException):
         await bus_service.get_bus_by_n_bus(db_session, n_bus="9999")
+
 
 
 @pytest.mark.asyncio

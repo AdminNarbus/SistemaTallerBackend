@@ -22,6 +22,7 @@ class BusBaseDTO(BaseModel):
     tipo: Optional[str] = None
     max_litros: Optional[int] = None
     is_active: Optional[bool] = True
+    en_taller: bool = False
 
 
 class BusCreateDTO(BusBaseDTO):
@@ -42,10 +43,17 @@ class BusAutocompleteDTO(BaseModel):
     modelo: Optional[str] = None
     tipo_bus: Optional[str] = None
     is_active: Optional[bool] = True
+    en_taller: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class BusSearchPayloadDTO(BaseModel):
     query: Optional[str] = None
+
+
+class BusUpdateEnTallerDTO(BaseModel):
+    en_taller: bool
+    motivo: Optional[str] = None
+
 

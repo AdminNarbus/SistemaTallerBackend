@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 9,
+  "id": "AV-0009",
+  "timestamp": "2026-09-02T16:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-2",
+    "name": "Fase 2: Filtro de Flota de Buses y Control de Movimiento (en_taller)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del filtro de flota operativa de buses de taller (exclusión estricta de vehículos con n_bus < 200 o n_bus >= 900) y creación del endpoint PATCH /api/v1/buses/{bus_id}/en-taller protegido por control de acceso para supervisora y administradores.",
+  "scope": {
+    "planned": [
+      "Incorporar campo en_taller en BusBaseDTO, BusAutocompleteDTO y crear BusUpdateEnTallerDTO",
+      "Implementar función de verificación y filtrado de flota operativa 200 <= n_bus < 900 en BusRepository",
+      "Actualizar BusService con parámetro solo_flota_taller y método actualizar_en_taller",
+      "Implementar endpoint PATCH /api/v1/buses/{bus_id}/en-taller protegido con require_supervisor_or_admin",
+      "Actualizar y expandir tests unitarios y de integración para validar filtros y control RBAC"
+    ],
+    "completed": [
+      "DTOs de Buses actualizados con en_taller y DTO de actualización",
+      "BusRepository y BusService filtran por defecto vehículos no operativos de taller (< 200 y >= 900)",
+      "Endpoint PATCH /api/v1/buses/{bus_id}/en-taller funcional con validación de roles SUPERVISOR y ADMIN",
+      "Tests de integración de buses ampliados cubriendo respuestas 200, 401, 403 y 404",
+      "Suite completa de 40 pruebas automatizadas pasando al 100% sin regresiones"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Flujo de asignación atómica de fallas (corresponde a Fase 3)"
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/buses/dtos/bus_dto.py", "action": "modified", "summary": "Incorporación de en_taller en DTOs y creación de BusUpdateEnTallerDTO" },
+    { "path": "app/modules/buses/repository/bus_repository.py", "action": "modified", "summary": "Función es_bus_operativo_taller, parámetro solo_flota_taller y método update_en_taller" },
+    { "path": "app/modules/buses/services/bus_service.py", "action": "modified", "summary": "Soporte de solo_flota_taller en búsqueda/listado y método actualizar_en_taller" },
+    { "path": "app/modules/buses/api/router.py", "action": "modified", "summary": "Endpoint PATCH /{bus_id}/en-taller y parámetro solo_flota_taller en consultas" },
+    { "path": "tests/integration/test_buses_api.py", "action": "modified", "summary": "Pruebas de exclusión de vehículos y pruebas RBAC para PATCH /en-taller" },
+    { "path": "tests/unit/test_bus_service.py", "action": "modified", "summary": "Pruebas unitarias de filtro de flota y actualización de estado en_taller" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-010",
+      "title": "Filtrado por defecto de flota operativa de taller (200 <= n_bus < 900)",
+      "rationale": "Los vehículos con n_bus < 200 o n_bus >= 900 corresponden a vehículos utilitarios, camionetas de apoyo o numeraciones de prueba que no deben congestionar el catálogo de buses de pasajeros de taller. Se configura como filtro activo por defecto en endpoints de búsqueda y listado, manteniendo un flag booleano solo_flota_taller para permitir consultas completas si fuera requerido.",
+      "consequences": "Mecánicos y supervisores solo visualizan buses de pasajeros reales en las sugerencias y autocompletados de taller, mejorando la usabilidad y exactitud de los reportes."
+    },
+    {
+      "id": "DEC-011",
+      "title": "Control RBAC estricto en la conmutación de estado en_taller",
+      "rationale": "El estado en_taller condiciona la disponibilidad de movimiento de la máquina. Para evitar alteraciones indebidas por parte de choferes o usuarios no autorizados, el endpoint PATCH /api/v1/buses/{bus_id}/en-taller se restringe estrictamente a roles SUPERVISOR y ADMIN.",
+      "consequences": "Garantiza seguridad operativa y gobernanza en la toma de decisiones sobre qué buses ingresan físicamente a reparaciones mayores en taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/integration/test_buses_api.py tests/unit/test_bus_service.py -v",
+      "result": "passed",
+      "evidence": "5 passed en 1.25s. Verificación completa de exclusión numérica, búsqueda con/sin filtro y PATCH /en-taller (200, 401, 403, 404)."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "40 passed en 14.06s (100% de la suite de pruebas unitarias, de integración y E2E sin regresiones)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 3: Asignación Atómica de Fallas y Co-responsabilidad (eliminación definitiva de líder, POST /mantencion/{id}/autoasignar, POST /supervision/solicitudes/{id}/asignar y POST /mantencion/{id}/terminar-avance).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "El endpoint PATCH /buses/{bus_id}/en-taller admite payload opcional 'motivo' para trazabilidad y auditoría.",
+    "El catálogo soporta vehículos con números de máquina en formato string que son evaluados numéricamente de forma segura."
+  ]
+}

@@ -27,8 +27,13 @@ async def test_buses_buscar_endpoint(client, db_session):
     assert response_33.status_code == 200
     assert response_33.json() == ["339"]
 
-    # Buscar sin query (todos)
-    response_all = await client.get("/api/v1/buses/buscar")
+    # Buscar sin query (por defecto solo flota taller: excluye '10' que es < 200)
+    response_default = await client.get("/api/v1/buses/buscar")
+    assert response_default.status_code == 200
+    assert response_default.json() == ["301", "339", "342", "405"]
+
+    # Buscar sin query con solo_flota_taller=false (incluye todos)
+    response_all = await client.get("/api/v1/buses/buscar?solo_flota_taller=false")
     assert response_all.status_code == 200
     assert response_all.json() == ["10", "301", "339", "342", "405"]
 
@@ -36,7 +41,7 @@ async def test_buses_buscar_endpoint(client, db_session):
 @pytest.mark.asyncio
 async def test_buses_get_por_id_y_numero_endpoint(client, db_session):
     """Prueba los endpoints de consulta de detalle GET /api/v1/buses/{id} y /numero/{n_bus}."""
-    bus = Bus(id=7, n_bus="339", patente="GH3399", marca="Volvo", modelo="B430", is_active=True)
+    bus = Bus(id=7, n_bus="339", patente="GH3399", marca="Volvo", modelo="B430", is_active=True, en_taller=False)
     db_session.add(bus)
     await db_session.commit()
 
@@ -47,6 +52,7 @@ async def test_buses_get_por_id_y_numero_endpoint(client, db_session):
     assert json_id["id"] == 7
     assert json_id["n_bus"] == "339"
     assert json_id["patente"] == "GH3399"
+    assert json_id["en_taller"] is False
 
     # Get por n_bus
     res_num = await client.get("/api/v1/buses/numero/339")
@@ -58,3 +64,33 @@ async def test_buses_get_por_id_y_numero_endpoint(client, db_session):
     # Inexistente
     res_not_found = await client.get("/api/v1/buses/999")
     assert res_not_found.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_actualizar_en_taller_endpoint(client, db_session, auth_headers_supervisor, auth_headers_conductor):
+    """Prueba la actualización del estado en_taller mediante PATCH /api/v1/buses/{bus_id}/en-taller."""
+    bus = Bus(id=8, n_bus="340", patente="IJ3400", marca="Scania", modelo="K400", is_active=True, en_taller=False)
+    db_session.add(bus)
+    await db_session.commit()
+
+    payload = {"en_taller": True, "motivo": "Ingreso a taller por cambio de frenos"}
+
+    # 1. Sin autenticación -> 401
+    res_unauth = await client.patch("/api/v1/buses/8/en-taller", json=payload)
+    assert res_unauth.status_code == 401
+
+    # 2. Conductor (no supervisor) -> 403
+    res_cond = await client.patch("/api/v1/buses/8/en-taller", json=payload, headers=auth_headers_conductor)
+    assert res_cond.status_code == 403
+
+    # 3. Supervisor -> 200 OK y en_taller pasa a True
+    res_sup = await client.patch("/api/v1/buses/8/en-taller", json=payload, headers=auth_headers_supervisor)
+    assert res_sup.status_code == 200
+    data = res_sup.json()
+    assert data["id"] == 8
+    assert data["en_taller"] is True
+
+    # 4. Bus inexistente con supervisor -> 404
+    res_404 = await client.patch("/api/v1/buses/9999/en-taller", json=payload, headers=auth_headers_supervisor)
+    assert res_404.status_code == 404
+

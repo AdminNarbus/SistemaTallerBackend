@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 11,
+  "id": "AV-0011",
+  "timestamp": "2026-09-02T16:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-4",
+    "name": "Fase 4: Checks de Fallas, Falta de Repuestos, Pauta de Taller Preventiva y Cierre Parcial/Liberación",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación integral del flujo de inspección preventiva y cierre de taller: reporte de falta de repuestos por falla atómica, catálogo y registro de respuestas de los 19 ítems de pauta preventiva, validación estricta de checklist antes de liberar el bus (exigiendo motivo_incompleto_checklist si faltan ítems) y soporte de cierre parcial con justificación obligatoria (motivo_cierre_parcial) si quedan averías no resueltas o faltan repuestos, conmutando automáticamente el estado del bus a en_taller = False.",
+  "scope": {
+    "planned": [
+      "Crear DTOs ReportarRepuestoDTO, PautaTallerItemDTO, PautaRespuestaDTO, PautaBatchUpdateDTO, PautaEstadoResumenDTO y LiberarSolicitudDTO",
+      "Actualizar SolicitudDTO para incluir campos resumen pauta_completada, total_fallas, fallas_resueltas y fallas_con_falta_repuesto",
+      "Implementar reportar_repuesto en MantencionRepository y bitácora de eventos",
+      "Implementar get_pauta_items, get_pauta_respuestas_by_solicitud y guardar_respuestas_pauta en MantencionRepository",
+      "Actualizar finalizar_solicitud con validaciones obligatorias de checklist incompleto y cierre parcial con justificación, y liberación del bus (en_taller = False)",
+      "Exponer endpoints en Mantencion API Router: PATCH /{id}/detalles/{detalle_id}/repuesto, GET /pauta/items, GET /{id}/pauta, POST /{id}/pauta y POST /{id}/liberar",
+      "Crear pruebas de integración completas en tests/integration/test_fase4_checks_pauta_y_liberacion.py"
+    ],
+    "completed": [
+      "DTOs de pauta, repuestos y liberación implementados con validación Pydantic",
+      "Métodos de pauta y repuestos añadidos en repositorio y capa de servicios",
+      "Mapeo completo de contadores de averías y estado de pauta en SolicitudDTO",
+      "Endpoints REST expuestos y protegidos con RBAC según roles del taller",
+      "Manejo de excepciones de negocio (BusinessRuleException) ante intentos de cierre no conformes",
+      "Prueba de integración de 7 etapas creada y pasando al 100%",
+      "Suite completa de 42 pruebas automatizadas pasando exitosamente"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Supervisión avanzada, métricas de taller y alertas en tiempo real (Fase 5)",
+      "Documento de contratos API frontend (Fase 6)"
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/mantencion/dtos/mantencion_dto.py", "action": "modified", "summary": "Nuevos DTOs de repuesto, ítems y respuestas de pauta, resumen de estado y ampliación de SolicitudDTO con contadores" },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "Métodos reportar_repuesto, get_pauta_items, get_pauta_respuestas_by_solicitud, guardar_respuestas_pauta y validaciones en finalizar_solicitud con liberación de bus en taller" },
+    { "path": "app/modules/mantencion/services/mantencion_service.py", "action": "modified", "summary": "Mapeo de respuestas de pauta y contadores de fallas en _to_solicitud_dto, métodos de negocio para pauta, repuestos y liberación" },
+    { "path": "app/modules/mantencion/api/router.py", "action": "modified", "summary": "Endpoints GET /pauta/items, GET /{id}/pauta, POST /{id}/pauta, PATCH /{id}/detalles/{detalle_id}/repuesto y POST /{id}/liberar" },
+    { "path": "app/core/exceptions.py", "action": "modified", "summary": "Reemplazo de caracteres unicode de flechas por '->' para compatibilidad con streams de consola Windows cp1252" },
+    { "path": "tests/integration/test_fase4_checks_pauta_y_liberacion.py", "action": "created", "summary": "Test de integración de 7 pasos validando falta de repuesto, pauta preventiva y validaciones de cierre parcial y liberación" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-014",
+      "title": "Checklist de inspección preventiva condicional con justificación obligatoria",
+      "rationale": "Para garantizar la seguridad vial, los 19 ítems de pauta preventiva deben responderse antes de liberar el bus del taller. Sin embargo, en situaciones de emergencia u horarios justificados, se permite la liberación del bus siempre que se ingrese obligatoriamente un 'motivo_incompleto_checklist' detallado que queda registrado en la bitácora auditable.",
+      "consequences": "Equilibrio entre rigor de mantenimiento preventivo y flexibilidad operativa con total auditoría."
+    },
+    {
+      "id": "DEC-015",
+      "title": "Cierre parcial con motivo obligatorio y liberación física del bus",
+      "rationale": "Cuando un bus tiene fallas no resueltas o paralizadas por falta de repuestos, pero puede operar de forma temporal o debe ser reasignado, se permite cerrar la solicitud y liberar el bus ('en_taller = False') únicamente si se explicita 'motivo_cierre_parcial'. De lo contrario, el sistema rechaza la finalización con HTTP 422.",
+      "consequences": "Elimina el riesgo de buses 'atrapados' en sistema sin ocultar averías pendientes, manteniendo la trazabilidad histórica."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/integration/test_fase4_checks_pauta_y_liberacion.py",
+      "result": "passed",
+      "evidence": "1 passed en 0.94s. Flujo de 7 pasos validado al 100%."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "42 passed en 16.62s. 100% pruebas pasando sin regresiones."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 5: Supervisión Avanzada, Telemetría y Alertas de Taller.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Los 19 ítems de pauta preventiva admiten estados 'OK', 'DEFECTO' o 'NO_APLICA' con observaciones opcionales.",
+    "Al marcar una falla con falta_repuesto = True se genera un evento automático de bitácora."
+  ]
+}

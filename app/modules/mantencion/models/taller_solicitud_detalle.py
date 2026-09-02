@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -9,6 +9,7 @@ from app.modules.mantencion.models.falla_taller import FallaTaller
 if TYPE_CHECKING:
     from app.modules.auth.models.usuario import Usuario
     from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+    from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 
 
 class TallerSolicitudDetalle(Base):
@@ -33,6 +34,8 @@ class TallerSolicitudDetalle(Base):
     mecanico_resolvio_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    falta_repuesto: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    comentario_repuesto: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     fecha_creacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -45,3 +48,7 @@ class TallerSolicitudDetalle(Base):
     solicitud: Mapped["TallerSolicitud"] = relationship("TallerSolicitud", back_populates="detalles")
     falla: Mapped[Optional["FallaTaller"]] = relationship("FallaTaller", lazy="selectin")
     mecanico_resolvio: Mapped[Optional["Usuario"]] = relationship("Usuario", lazy="selectin")
+    asignaciones: Mapped[List["TallerAsignacionFalla"]] = relationship(
+        "TallerAsignacionFalla", back_populates="detalle", cascade="all, delete-orphan", lazy="selectin"
+    )
+

@@ -16,6 +16,17 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
     AgregarColaboradorDTO,
+    MecanicoAsignadoDTO,
+    AsignacionFallaDTO,
+    AutoasignarFallasDTO,
+    AsignarFallasSupervisoraDTO,
+    TerminarAvanceDTO,
+    ReportarRepuestoDTO,
+    PautaTallerItemDTO,
+    PautaRespuestaDTO,
+    PautaBatchUpdateDTO,
+    PautaEstadoResumenDTO,
+    LiberarSolicitudDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +64,46 @@ class MantencionService:
             if det.mecanico_resolvio:
                 mec_resolvio_nombre = f"{det.mecanico_resolvio.nombre or ''} {det.mecanico_resolvio.apellido or ''}".strip() or det.mecanico_resolvio.username
 
+            mecanicos_asignados = []
+            historial_asignaciones = []
+            if hasattr(det, "asignaciones") and det.asignaciones:
+                for asig in det.asignaciones:
+                    mec_nom = None
+                    if asig.mecanico:
+                        mec_nom = f"{asig.mecanico.nombre or ''} {asig.mecanico.apellido or ''}".strip() or asig.mecanico.username
+                    asig_por_nom = None
+                    if asig.asignado_por:
+                        asig_por_nom = f"{asig.asignado_por.nombre or ''} {asig.asignado_por.apellido or ''}".strip() or asig.asignado_por.username
+
+                    asig_dto = AsignacionFallaDTO(
+                        id=asig.id,
+                        solicitud_id=asig.solicitud_id,
+                        detalle_id=asig.detalle_id,
+                        mecanico_id=asig.mecanico_id,
+                        mecanico_nombre=mec_nom,
+                        asignado_por_id=asig.asignado_por_id,
+                        asignado_por_nombre=asig_por_nom,
+                        origen=asig.origen,
+                        is_activo=asig.is_activo,
+                        fecha_asignacion=asig.fecha_asignacion,
+                        fecha_desasignacion=asig.fecha_desasignacion,
+                        resuelto_en_esta_asignacion=asig.resuelto_en_esta_asignacion,
+                        duracion_minutos=asig.duracion_minutos,
+                        comentario=asig.comentario,
+                    )
+                    historial_asignaciones.append(asig_dto)
+                    if asig.is_activo:
+                        mecanicos_asignados.append(
+                            MecanicoAsignadoDTO(
+                                id=asig.mecanico_id,
+                                nombre=mec_nom or f"Mecánico #{asig.mecanico_id}",
+                                origen=asig.origen,
+                                asignado_por_id=asig.asignado_por_id,
+                                asignado_por_nombre=asig_por_nom,
+                                fecha_asignacion=asig.fecha_asignacion,
+                            )
+                        )
+
             detalles_dtos.append(
                 SolicitudDetalleDTO(
                     id=det.id,
@@ -63,8 +114,12 @@ class MantencionService:
                     resuelto=det.resuelto,
                     mecanico_resolvio_id=det.mecanico_resolvio_id,
                     mecanico_resolvio_nombre=mec_resolvio_nombre,
+                    falta_repuesto=getattr(det, "falta_repuesto", False) or False,
+                    comentario_repuesto=getattr(det, "comentario_repuesto", None),
                     fecha_creacion=det.fecha_creacion,
                     fecha_resolucion=det.fecha_resolucion,
+                    mecanicos_asignados=mecanicos_asignados,
+                    historial_asignaciones=historial_asignaciones,
                 )
             )
 
@@ -80,6 +135,8 @@ class MantencionService:
                     solicitud_id=mec.solicitud_id,
                     mecanico_id=mec.mecanico_id,
                     mecanico_nombre=mec_nombre,
+                    asignado_por_id=getattr(mec, "asignado_por_id", None),
+                    duracion_minutos=getattr(mec, "duracion_minutos", None),
                     es_lider_responsable=mec.es_lider_responsable,
                     is_activo=mec.is_activo,
                     fecha_asignacion=mec.fecha_asignacion,
@@ -105,6 +162,29 @@ class MantencionService:
                 )
             )
 
+        pauta_dtos = []
+        if hasattr(sol, "pauta_respuestas") and sol.pauta_respuestas:
+            for pr in sol.pauta_respuestas:
+                item_cat = pr.item.categoria if pr.item else None
+                item_nom = pr.item.item if pr.item else None
+                mec_nom = None
+                if pr.mecanico:
+                    mec_nom = f"{pr.mecanico.nombre or ''} {pr.mecanico.apellido or ''}".strip() or pr.mecanico.username
+                pauta_dtos.append(
+                    PautaRespuestaDTO(
+                        id=pr.id,
+                        solicitud_id=pr.solicitud_id,
+                        item_id=pr.item_id,
+                        item_categoria=item_cat,
+                        item_nombre=item_nom,
+                        estado=pr.estado,
+                        observacion=pr.observacion,
+                        mecanico_id=pr.mecanico_id,
+                        mecanico_nombre=mec_nom,
+                        fecha_registro=pr.fecha_registro,
+                    )
+                )
+
         creador_nombre = None
         if sol.creador:
             creador_nombre = f"{sol.creador.nombre or ''} {sol.creador.apellido or ''}".strip() or sol.creador.username
@@ -114,6 +194,10 @@ class MantencionService:
             mecanico_cierre_nombre = f"{sol.mecanico_cierre.nombre or ''} {sol.mecanico_cierre.apellido or ''}".strip() or sol.mecanico_cierre.username
 
         bus_patente = sol.bus.patente if sol.bus else None
+
+        total_fallas = len(detalles_dtos)
+        fallas_resueltas = len([d for d in detalles_dtos if d.resuelto])
+        fallas_con_falta_repuesto = len([d for d in detalles_dtos if d.falta_repuesto])
 
         return SolicitudDTO(
             id=sol.id,
@@ -127,12 +211,21 @@ class MantencionService:
             estado=sol.estado,
             descripcion_general=sol.descripcion_general,
             foto_url=sol.foto_url,
+            motivo_incompleto_checklist=getattr(sol, "motivo_incompleto_checklist", None),
+            motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
+            pauta_completada=len(pauta_dtos) >= 19,
+            total_fallas=total_fallas,
+            fallas_resueltas=fallas_resueltas,
+            fallas_con_falta_repuesto=fallas_con_falta_repuesto,
             detalles=detalles_dtos,
             mecanicos=mecanicos_dtos,
             comentarios=comentarios_dtos,
+            pauta_respuestas=pauta_dtos,
         )
+
+
 
     async def get_categorias(self, db: AsyncSession) -> List[CategoriaFallaDTO]:
         cats = await mantencion_repository.get_categorias(db)
@@ -211,5 +304,181 @@ class MantencionService:
         solicitudes = await mantencion_repository.list_auditoria(db)
         return [self._to_solicitud_dto(s) for s in solicitudes]
 
+    async def autoasignar_fallas(
+        self, db: AsyncSession, solicitud_id: int, dto: AutoasignarFallasDTO, mecanico_id: int
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s",
+            solicitud_id,
+            mecanico_id,
+            dto.detalles_ids,
+        )
+        sol = await mantencion_repository.autoasignar_fallas_mecanico(
+            db,
+            solicitud_id=solicitud_id,
+            detalles_ids=dto.detalles_ids,
+            mecanico_id=mecanico_id,
+            comentario=dto.comentario,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def asignar_fallas_supervisora(
+        self, db: AsyncSession, solicitud_id: int, dto: AsignarFallasSupervisoraDTO, supervisor_id: int
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Supervisora asignando fallas | solicitud_id=%s, supervisor_id=%s, mecanico_id=%s, fallas=%s",
+            solicitud_id,
+            supervisor_id,
+            dto.mecanico_id,
+            dto.detalles_ids,
+        )
+        sol = await mantencion_repository.asignar_fallas_supervisora(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=dto.mecanico_id,
+            detalles_ids=dto.detalles_ids,
+            supervisor_id=supervisor_id,
+            comentario=dto.comentario,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def terminar_avance(
+        self, db: AsyncSession, solicitud_id: int, dto: TerminarAvanceDTO, mecanico_id: int
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Registrando término de avance | solicitud_id=%s, mecanico_id=%s, fallas=%s",
+            solicitud_id,
+            mecanico_id,
+            dto.detalles_ids,
+        )
+        sol = await mantencion_repository.terminar_avance(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=mecanico_id,
+            detalles_ids=dto.detalles_ids,
+            comentario=dto.comentario,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def reportar_repuesto(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        dto: ReportarRepuestoDTO,
+        mecanico_id: int,
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Reportando repuesto | solicitud_id=%s, detalle_id=%s, falta=%s",
+            solicitud_id,
+            detalle_id,
+            dto.falta_repuesto,
+        )
+        sol = await mantencion_repository.reportar_repuesto(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            mecanico_id=mecanico_id,
+            falta_repuesto=dto.falta_repuesto,
+            comentario=dto.comentario,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def get_pauta_items(self, db: AsyncSession) -> List[PautaTallerItemDTO]:
+        items = await mantencion_repository.get_pauta_items(db)
+        return [PautaTallerItemDTO.model_validate(it) for it in items]
+
+    async def get_pauta_resumen(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> PautaEstadoResumenDTO:
+        items = await mantencion_repository.get_pauta_items(db)
+        total_items = len(items)
+
+        respuestas_orm = await mantencion_repository.get_pauta_respuestas_by_solicitud(
+            db, solicitud_id
+        )
+
+        resp_dtos = []
+        defectos_count = 0
+        for r in respuestas_orm:
+            if r.estado == "DEFECTO":
+                defectos_count += 1
+            cat = r.item.categoria if r.item else None
+            nom = r.item.item if r.item else None
+            mec_nom = (
+                f"{r.mecanico.nombre or ''} {r.mecanico.apellido or ''}".strip()
+                if r.mecanico
+                else None
+            )
+            resp_dtos.append(
+                PautaRespuestaDTO(
+                    id=r.id,
+                    solicitud_id=r.solicitud_id,
+                    item_id=r.item_id,
+                    item_categoria=cat,
+                    item_nombre=nom,
+                    estado=r.estado,
+                    observacion=r.observacion,
+                    mecanico_id=r.mecanico_id,
+                    mecanico_nombre=mec_nom,
+                    fecha_registro=r.fecha_registro,
+                )
+            )
+
+        respondidos = len(resp_dtos)
+        pendientes = max(0, total_items - respondidos)
+
+        return PautaEstadoResumenDTO(
+            total_items=total_items,
+            respondidos=respondidos,
+            pendientes=pendientes,
+            completado=respondidos >= total_items and total_items > 0,
+            items_con_defecto=defectos_count,
+            respuestas=resp_dtos,
+        )
+
+    async def guardar_respuestas_pauta(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: PautaBatchUpdateDTO,
+        mecanico_id: int,
+    ) -> PautaEstadoResumenDTO:
+        logger.info(
+            "[PAUTA] Guardando respuestas de pauta | solicitud_id=%s, total_respuestas=%s",
+            solicitud_id,
+            len(dto.respuestas),
+        )
+        await mantencion_repository.guardar_respuestas_pauta(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=mecanico_id,
+            respuestas=dto.respuestas,
+        )
+        return await self.get_pauta_resumen(db, solicitud_id)
+
+    async def liberar_solicitud(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: LiberarSolicitudDTO,
+        mecanico_id: int,
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Liberación de solicitud solicitada | solicitud_id=%s, mecanico_id=%s, liberar_bus=%s",
+            solicitud_id,
+            mecanico_id,
+            dto.liberar_bus_taller,
+        )
+        sol = await mantencion_repository.finalizar_solicitud(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_cierre_id=mecanico_id,
+            dto=dto,
+        )
+        return self._to_solicitud_dto(sol)
+
 
 mantencion_service = MantencionService()
+
+

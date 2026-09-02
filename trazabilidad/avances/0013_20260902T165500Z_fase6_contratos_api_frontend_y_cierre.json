@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 13,
+  "id": "AV-0013",
+  "timestamp": "2026-09-02T16:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-6",
+    "name": "Fase 6: Documentación Integral de Contratos API para Frontend y Trazabilidad",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Consolidación de la especificación técnica y contratos de API para el equipo de Frontend en trazabilidad/05_CONTRATOS_API_FRONTEND.md. Detalla exhaustivamente todos los endpoints nuevos y modificados, payloads de entrada, respuestas JSON, reglas de validación de negocio, códigos de error HTTP y schemas TypeScript para facilitar la integración en la aplicación cliente.",
+  "scope": {
+    "planned": [
+      "Redactar documento exhaustivo trazabilidad/05_CONTRATOS_API_FRONTEND.md con especificación de endpoints, payloads y schemas",
+      "Documentar el flujo de co-responsabilidad atómica y entrega de avance",
+      "Documentar catálogo y registro de pauta preventiva de 19 ítems y validaciones de cierre parcial",
+      "Documentar endpoints de KPIs de taller y centro de alertas de supervisión",
+      "Actualizar trazabilidad viva en 01_ESTADO_ACTUAL_PROYECTO.md",
+      "Ejecutar suite completa de 43 pruebas automatizadas para verificación final"
+    ],
+    "completed": [
+      "Documento trazabilidad/05_CONTRATOS_API_FRONTEND.md generado con tipados TypeScript completos y ejemplos JSON",
+      "Estatus general de módulos actualizado en trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "Validación de 43 pruebas pasando al 100% en backend local",
+      "Rama feature/sistema-integral-taller-y-pauta sincronizada con GitHub origin"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Implementación de pantallas de Frontend (repositorio cliente independiente)"
+    ]
+  },
+  "changes": [
+    { "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md", "action": "created", "summary": "Guía completa de contratos de API, schemas TypeScript y ejemplos JSON para frontend" },
+    { "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Actualización del estado general de módulos y arquitectura" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-017",
+      "title": "Documentación viva de contratos desacoplada del código fuente",
+      "rationale": "Para garantizar una integración fluida con el equipo de Frontend sin requerir acceso cruzado a repositorios ni especulaciones sobre DTOs, se documenta de forma explícita cada contrato REST con tipos TypeScript equivalentes, endpoints, roles requeridos y ejemplos representativos de éxito y error.",
+      "consequences": "Desarrollo frontend autónomo, reducción de bloqueos de comunicación y cero discrepancias de tipos."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "43 passed en 16.96s (100% verde)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Presentar al usuario el resumen ejecutivo del Sistema Integral de Taller Narbus y los contratos listos para Frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Las 6 fases acordadas fueron ejecutadas y verificadas de extremo a extremo.",
+    "El backend está listo para integración en ambiente local y staging."
+  ]
+}

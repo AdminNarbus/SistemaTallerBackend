@@ -21,10 +21,27 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
     AgregarColaboradorDTO,
+    AutoasignarFallasDTO,
+    AsignarFallasSupervisoraDTO,
+    TerminarAvanceDTO,
+    ReportarRepuestoDTO,
+    PautaTallerItemDTO,
+    PautaEstadoResumenDTO,
+    PautaBatchUpdateDTO,
+    LiberarSolicitudDTO,
 )
 from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/mantencion", tags=["mantencion"])
+
+
+@router.get("/pauta/items", response_model=List[PautaTallerItemDTO])
+async def get_pauta_items(
+    current_user: Usuario = Depends(require_current_user),
+    db: AsyncSession = SessionDep,
+):
+    """Retorna el catálogo maestro de 19 ítems de inspección preventiva de taller."""
+    return await mantencion_service.get_pauta_items(db)
 
 
 @router.get("/categorias", response_model=List[CategoriaFallaDTO])
@@ -57,7 +74,7 @@ async def list_pendientes(
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE_REASIGNACION)."""
+    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE / PENDIENTE_REASIGNACION)."""
     return await mantencion_service.list_pendientes(db)
 
 
@@ -81,6 +98,78 @@ async def get_solicitud(
     if not solicitud:
         raise NotFoundException("Solicitud de taller no encontrada")
     return solicitud
+
+
+@router.get("/{id}/pauta", response_model=PautaEstadoResumenDTO)
+async def get_pauta_solicitud(
+    id: int,
+    current_user: Usuario = Depends(require_current_user),
+    db: AsyncSession = SessionDep,
+):
+    """Retorna el estado de completitud y respuestas de la pauta preventiva para una solicitud."""
+    return await mantencion_service.get_pauta_resumen(db, solicitud_id=id)
+
+
+@router.post("/{id}/pauta", response_model=PautaEstadoResumenDTO)
+async def guardar_respuestas_pauta(
+    id: int,
+    dto: PautaBatchUpdateDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Registra o actualiza en lote respuestas a los ítems de la pauta preventiva."""
+    return await mantencion_service.guardar_respuestas_pauta(
+        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+    )
+
+
+@router.post("/{id}/autoasignar", response_model=SolicitudDTO)
+async def autoasignar_fallas(
+    id: int,
+    dto: AutoasignarFallasDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Autoasignación atómica de fallas por parte de un mecánico.
+    Cada mecánico responde únicamente por las fallas específicas que toma.
+    Soporta co-responsabilidad: si 2 o más mecánicos toman la misma falla, ambos quedan registrados.
+    """
+    return await mantencion_service.autoasignar_fallas(
+        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+    )
+
+
+@router.post("/{id}/asignar", response_model=SolicitudDTO)
+async def asignar_fallas_supervisora(
+    id: int,
+    dto: AsignarFallasSupervisoraDTO,
+    current_user: Usuario = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Asignación atómica de fallas realizada por la supervisora o administradores a un mecánico específico.
+    Permite co-responsabilidad si la falla ya tenía otro mecánico asignado.
+    """
+    return await mantencion_service.asignar_fallas_supervisora(
+        db, solicitud_id=id, dto=dto, supervisor_id=current_user.id
+    )
+
+
+@router.post("/{id}/terminar-avance", response_model=SolicitudDTO)
+async def terminar_avance(
+    id: int,
+    dto: TerminarAvanceDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Cierra el turno o avance del mecánico en sus fallas asignadas, registrando la duración en minutos.
+    Si ya no quedan mecánicos activos en la solicitud, el estado pasa a PENDIENTE.
+    """
+    return await mantencion_service.terminar_avance(
+        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+    )
 
 
 @router.post("/{id}/tomar", response_model=SolicitudDTO)
@@ -130,6 +219,23 @@ async def check_detalle(
     )
 
 
+@router.patch("/{id}/detalles/{detalle_id}/repuesto", response_model=SolicitudDTO)
+async def reportar_repuesto(
+    id: int,
+    detalle_id: int,
+    dto: ReportarRepuestoDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Reporta si una falla no puede continuar por falta de repuestos."""
+    return await mantencion_service.reportar_repuesto(
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        dto=dto,
+        mecanico_id=current_user.id,
+    )
+
 
 @router.post("/{id}/agregar-colaborador", response_model=SolicitudDTO)
 async def agregar_colaborador(
@@ -160,7 +266,22 @@ async def finalizar_solicitud(
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Finaliza los trabajos de la solicitud y deja el bus en estado DISPONIBLE."""
+    """Finaliza los trabajos de la solicitud, verifica pauta preventiva y fallas, liberando el bus de taller."""
     return await mantencion_service.finalizar_solicitud(
         db, solicitud_id=id, mecanico_cierre_id=current_user.id, dto=dto
     )
+
+
+@router.post("/{id}/liberar", response_model=SolicitudDTO)
+async def liberar_solicitud(
+    id: int,
+    dto: LiberarSolicitudDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Cierra y libera el bus de taller. Exige justificación si la pauta está incompleta o si quedan fallas no resueltas."""
+    return await mantencion_service.liberar_solicitud(
+        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+    )
+
+

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 8,
+  "id": "AV-0008",
+  "timestamp": "2026-09-02T16:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-1",
+    "name": "Fase 1: Base de Datos, Modelo Relacional y Migraciones Base",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de la arquitectura de datos relacional para el flujo avanzado de taller y pauta preventiva: creación de la tabla taller_asignacion_fallas para asignación atómica y co-responsabilidad multi-mecánico, tablas pauta_taller_items y taller_solicitud_pauta con siembra inicial, columna en_taller en buses, soporte de falta de repuestos, motivos de cierre y justificación de checklist en solicitudes, acompañados de la migración Alembic 005 y pruebas de integridad.",
+  "scope": {
+    "planned": [
+      "Crear migración Alembic 005_flujo_avanzado_taller_y_pauta",
+      "Modelar tabla taller_asignacion_fallas para relación N:M falla-mecánico-reporte",
+      "Modelar catálogo de pauta preventiva pauta_taller_items y respuestas taller_solicitud_pauta",
+      "Agregar campo en_taller en modelo Bus",
+      "Agregar campos motivo_incompleto_checklist y motivo_cierre_parcial en TallerSolicitud",
+      "Agregar campos falta_repuesto y comentario_repuesto en TallerSolicitudDetalle",
+      "Agregar campos asignado_por_id y duracion_minutos en TallerSolicitudMecanico",
+      "Actualizar db_patch.py para parches de esquema en caliente en dev_local",
+      "Crear y verificar prueba unitaria de integridad de modelos"
+    ],
+    "completed": [
+      "Migración 005_flujo_avanzado_taller_y_pauta.py creada con esquema DDL y siembra inicial de 19 ítems preventivos",
+      "Modelos ORM TallerAsignacionFalla, PautaTallerItem y TallerSolicitudPauta implementados",
+      "Modelos Bus, TallerSolicitud, TallerSolicitudDetalle y TallerSolicitudMecanico actualizados con campos y relaciones",
+      "db_patch.py actualizado con sentencias DDL seguras para PostgreSQL local",
+      "Prueba unitaria tests/unit/test_fase1_models.py creada y aprobada",
+      "Suite completa de 39 pruebas automáticas pasando al 100% sin regresiones"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Lógica de negocio de endpoints de asignación y checks (corresponde a Fases 2, 3 y 4)"
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/005_flujo_avanzado_taller_y_pauta.py", "action": "created", "summary": "Migración Alembic con nuevas tablas, índices y siembra de pauta preventiva" },
+    { "path": "app/modules/mantencion/models/taller_asignacion_falla.py", "action": "created", "summary": "Modelo ORM TallerAsignacionFalla para asignación atómica y co-responsabilidad" },
+    { "path": "app/modules/mantencion/models/pauta_taller.py", "action": "created", "summary": "Modelos ORM PautaTallerItem y TallerSolicitudPauta" },
+    { "path": "app/modules/buses/models/bus.py", "action": "modified", "summary": "Incorporación de columna en_taller (Boolean, default False)" },
+    { "path": "app/modules/mantencion/models/taller_solicitud.py", "action": "modified", "summary": "Campos motivo_incompleto_checklist, motivo_cierre_parcial y relaciones ORM" },
+    { "path": "app/modules/mantencion/models/taller_solicitud_detalle.py", "action": "modified", "summary": "Campos falta_repuesto, comentario_repuesto y relación con asignaciones" },
+    { "path": "app/modules/mantencion/models/taller_solicitud_mecanico.py", "action": "modified", "summary": "Campos asignado_por_id, duracion_minutos y relación con Usuario" },
+    { "path": "app/modules/mantencion/models/__init__.py", "action": "modified", "summary": "Re-exportación de nuevos modelos del módulo de mantención" },
+    { "path": "app/models/__init__.py", "action": "modified", "summary": "Registro de nuevos modelos en Base.metadata para sincronización central" },
+    { "path": "app/core/db_patch.py", "action": "modified", "summary": "Parches DDL en caliente para tablas y columnas en dev_local" },
+    { "path": "tests/unit/test_fase1_models.py", "action": "created", "summary": "Prueba unitaria de verificación de esquema y co-responsabilidad de fallas" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-008",
+      "title": "Desacoplamiento de Asignación por Falla mediante Tabla Intermedia N:M (TallerAsignacionFalla)",
+      "rationale": "En lugar de fijar un único mecanico_asignado_id en la tabla taller_solicitud_detalles, se implementa taller_asignacion_fallas. Esto permite que 2 o más mecánicos se asignen a la misma falla simultáneamente (co-responsabilidad), auditando de manera inmutable quién asignó (supervisor o autoasignación), fechas, duración y si resolvió.",
+      "consequences": "Flexibilidad operativa total en taller: los mecánicos son responsables únicamente de sus fallas asignadas, y si varios colaboran en una misma falla, ambos quedan registrados como co-responsables sin conflictos de concurrencia."
+    },
+    {
+      "id": "DEC-009",
+      "title": "Catálogo Estructurado y Desacoplado para Pauta de Inspección de Taller",
+      "rationale": "Se divide la pauta preventiva en dos entidades: pauta_taller_items (catálogo maestro ordenado y categorizado) y taller_solicitud_pauta (respuestas por solicitud con restricción de unicidad por item).",
+      "consequences": "Permite extender o modificar ítems de revisión preventiva en el futuro sin alterar la estructura de la base de datos, manteniendo trazabilidad exacta de qué mecánico inspeccionó y qué defectos detectó."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_fase1_models.py -v",
+      "result": "passed",
+      "evidence": "1 passed en 0.26s. Verificación completa de inserción, claves foráneas, co-responsabilidad y pauta."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "39 passed en 14.71s (100% de la suite de pruebas unitarias, integración y E2E sin regresiones)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 2: Filtro de Flota de Buses (exclusión < 200 y >= 900) y Control de Movimiento en Taller (PATCH /buses/{id}/en-taller).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "La migración 005 incluye siembra inicial de 19 ítems preventivos de buses divididos en 5 categorías estándar.",
+    "El campo asignado_por_id es genérico a usuarios.id para soportar tanto autoasignaciones como asignaciones de supervisora."
+  ]
+}

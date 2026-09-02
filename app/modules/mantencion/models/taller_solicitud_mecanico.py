@@ -29,6 +29,10 @@ class TallerSolicitudMecanico(Base):
     )
     es_lider_responsable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    asignado_por_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    duracion_minutos: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     fecha_asignacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -39,4 +43,6 @@ class TallerSolicitudMecanico(Base):
 
     # Relaciones
     solicitud: Mapped["TallerSolicitud"] = relationship("TallerSolicitud", back_populates="mecanicos")
-    mecanico: Mapped["Usuario"] = relationship("Usuario", lazy="selectin")
+    mecanico: Mapped["Usuario"] = relationship("Usuario", foreign_keys=[mecanico_id], lazy="selectin")
+    asignado_por: Mapped[Optional["Usuario"]] = relationship("Usuario", foreign_keys=[asignado_por_id], lazy="selectin")
+

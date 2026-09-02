@@ -4,6 +4,8 @@ from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
+from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 
 __all__ = [
     "CategoriaFalla",
@@ -12,4 +14,8 @@ __all__ = [
     "TallerSolicitudDetalle",
     "TallerSolicitudMecanico",
     "TallerSolicitudComentario",
+    "TallerAsignacionFalla",
+    "PautaTallerItem",
+    "TallerSolicitudPauta",
 ]
+

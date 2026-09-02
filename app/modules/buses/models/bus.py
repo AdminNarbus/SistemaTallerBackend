@@ -36,4 +36,8 @@ class Bus(Base):
     is_active: Mapped[Optional[bool]] = mapped_column(
         Boolean, default=True, nullable=True
     )
+    en_taller: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
 

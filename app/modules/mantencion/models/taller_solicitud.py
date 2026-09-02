@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
     from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
     from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
+    from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
+    from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
 
 
 class TallerSolicitud(Base):
@@ -48,6 +50,12 @@ class TallerSolicitud(Base):
     fecha_cierre: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    motivo_incompleto_checklist: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    motivo_cierre_parcial: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
 
     # Relaciones
     bus: Mapped[Optional["Bus"]] = relationship(
@@ -69,4 +77,11 @@ class TallerSolicitud(Base):
     comentarios: Mapped[List["TallerSolicitudComentario"]] = relationship(
         "TallerSolicitudComentario", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
     )
+    asignaciones_fallas: Mapped[List["TallerAsignacionFalla"]] = relationship(
+        "TallerAsignacionFalla", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
+    )
+    pauta_respuestas: Mapped[List["TallerSolicitudPauta"]] = relationship(
+        "TallerSolicitudPauta", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
+    )
+
 

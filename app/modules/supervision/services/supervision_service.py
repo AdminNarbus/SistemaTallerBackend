@@ -32,63 +32,52 @@ class SupervisionService:
         return [mantencion_service._to_solicitud_dto(s) for s in solicitudes]
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:
-        logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller")
-        solicitudes = await supervision_repository.get_auditoria(db)
+        logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller con agregaciones SQL")
+        
+        # 1. Agregaciones SQL nativas en BD
+        conteos_estado = await supervision_repository.get_conteos_por_estado(db)
+        total_solicitudes = sum(conteos_estado.values())
+        reportadas = conteos_estado.get("REPORTADO", 0)
+        pendientes = conteos_estado.get("PENDIENTE", 0)
+        en_reparacion = conteos_estado.get("EN_REPARACION", 0)
+        pendiente_reasignacion = conteos_estado.get("PENDIENTE_REASIGNACION", 0)
+        finalizadas = conteos_estado.get("FINALIZADO", 0)
+
         buses_en_taller_count = await supervision_repository.get_total_buses_en_taller(db)
+        total_fallas, total_resueltas = await supervision_repository.get_conteos_fallas(db)
+        fallas_cat_raw = await supervision_repository.get_fallas_por_categoria(db)
 
-        reportadas = sum(1 for s in solicitudes if s.estado == "REPORTADO")
-        pendientes = sum(1 for s in solicitudes if s.estado == "PENDIENTE")
-        en_reparacion = sum(1 for s in solicitudes if s.estado == "EN_REPARACION")
-        pendiente_reasignacion = sum(1 for s in solicitudes if s.estado == "PENDIENTE_REASIGNACION")
-        finalizadas = sum(1 for s in solicitudes if s.estado == "FINALIZADO")
-
-        total_fallas = 0
-        total_resueltas = 0
+        # 2. Consultar únicamente solicitudes activas (estado != 'FINALIZADO') para alertas y buses activos
+        solicitudes_activas = await supervision_repository.get_solicitudes_activas(db)
+        
         fallas_bloqueadas_por_repuesto = 0
-        cat_counts = {}
-        buses_activos = []
+        buses_activos: List[str] = []
         alertas: List[AlertaSupervisionDTO] = []
 
-        for sol in solicitudes:
-            es_activa = sol.estado != "FINALIZADO"
-            if es_activa and sol.n_bus not in buses_activos:
+        for sol in solicitudes_activas:
+            if sol.n_bus and sol.n_bus not in buses_activos:
                 buses_activos.append(sol.n_bus)
 
-            # Contar fallas de la solicitud
+            # Alertas por falta de repuestos en solicitudes activas
             for det in sol.detalles:
-                total_fallas += 1
-                if det.resuelto:
-                    total_resueltas += 1
-
                 if getattr(det, "falta_repuesto", False):
-                    if es_activa:
-                        fallas_bloqueadas_por_repuesto += 1
-                        alertas.append(
-                            AlertaSupervisionDTO(
-                                tipo="REPUESTO_FALTANTE",
-                                severidad="ALTA",
-                                solicitud_id=sol.id,
-                                n_bus=sol.n_bus,
-                                detalle_id=det.id,
-                                mensaje=(
-                                    f"Falla #{det.id} en Bus {sol.n_bus} detenida por falta de repuestos"
-                                    + (f": {det.comentario_repuesto}" if det.comentario_repuesto else "")
-                                ),
-                            )
+                    fallas_bloqueadas_por_repuesto += 1
+                    alertas.append(
+                        AlertaSupervisionDTO(
+                            tipo="REPUESTO_FALTANTE",
+                            severidad="ALTA",
+                            solicitud_id=sol.id,
+                            n_bus=sol.n_bus,
+                            detalle_id=det.id,
+                            mensaje=(
+                                f"Falla #{det.id} en Bus {sol.n_bus} detenida por falta de repuestos"
+                                + (f": {det.comentario_repuesto}" if det.comentario_repuesto else "")
+                            ),
                         )
+                    )
 
-                cat_nombre = "Personalizada / Sin Categoría"
-                cat_id = None
-                if det.falla and det.falla.categoria:
-                    cat_nombre = det.falla.categoria.nombre
-                    cat_id = det.falla.categoria.id
-
-                if cat_nombre not in cat_counts:
-                    cat_counts[cat_nombre] = {"id": cat_id, "count": 0}
-                cat_counts[cat_nombre]["count"] += 1
-
-            # Revisión de pauta con defectos en órdenes activas
-            if es_activa and hasattr(sol, "pauta_respuestas") and sol.pauta_respuestas:
+            # Alertas por defectos en pauta preventiva en órdenes activas
+            if hasattr(sol, "pauta_respuestas") and sol.pauta_respuestas:
                 for pr in sol.pauta_respuestas:
                     if pr.estado == "DEFECTO":
                         item_txt = pr.item.item if pr.item else f"Ítem #{pr.item_id}"
@@ -102,7 +91,7 @@ class SupervisionService:
                             )
                         )
 
-            # Revisión de buses en reparación sin mecánicos activos
+            # Alertas por buses en reparación sin mecánicos activos
             if sol.estado == "EN_REPARACION":
                 mecs_activos = [m for m in sol.mecanicos if m.is_activo]
                 if not mecs_activos:
@@ -117,7 +106,7 @@ class SupervisionService:
                     )
 
         metricas_estado = MetricasEstadoDTO(
-            total_solicitudes=len(solicitudes),
+            total_solicitudes=total_solicitudes,
             reportadas=reportadas,
             pendientes=pendientes,
             en_reparacion=en_reparacion,
@@ -131,11 +120,11 @@ class SupervisionService:
 
         fallas_por_categoria = [
             CategoriaFrecuenciaDTO(
-                categoria_id=data["id"],
-                categoria_nombre=nombre,
-                total_fallas=data["count"],
+                categoria_id=row[0],
+                categoria_nombre=row[1] or "Personalizada / Sin Categoría",
+                total_fallas=row[2],
             )
-            for nombre, data in cat_counts.items()
+            for row in fallas_cat_raw
         ]
         fallas_por_categoria.sort(key=lambda x: x.total_fallas, reverse=True)
 
@@ -156,4 +145,3 @@ class SupervisionService:
 
 
 supervision_service = SupervisionService()
-

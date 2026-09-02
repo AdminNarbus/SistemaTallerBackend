@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, aliased
@@ -29,6 +29,58 @@ class SupervisionRepository:
         res = await db.execute(stmt)
         return res.scalar() or 0
 
+    async def get_conteos_por_estado(self, db: AsyncSession) -> Dict[str, int]:
+        """Agregación SQL nativa para contar órdenes de taller agrupadas por estado."""
+        stmt = select(TallerSolicitud.estado, func.count(TallerSolicitud.id)).group_by(TallerSolicitud.estado)
+        res = await db.execute(stmt)
+        return {row[0]: row[1] for row in res.all()}
+
+    async def get_conteos_fallas(self, db: AsyncSession) -> Tuple[int, int]:
+        """Agregación SQL nativa: (total_fallas, total_resueltas)."""
+        stmt = select(
+            func.count(TallerSolicitudDetalle.id),
+            func.count(TallerSolicitudDetalle.id).filter(TallerSolicitudDetalle.resuelto == True),
+        )
+        res = await db.execute(stmt)
+        row = res.one_or_none()
+        if not row:
+            return 0, 0
+        return row[0] or 0, row[1] or 0
+
+    async def get_fallas_por_categoria(self, db: AsyncSession) -> List[Tuple[Optional[int], Optional[str], int]]:
+        """Agregación SQL nativa: agrupa conteo de fallas registradas por categoría."""
+        stmt = (
+            select(
+                CategoriaFalla.id,
+                CategoriaFalla.nombre,
+                func.count(TallerSolicitudDetalle.id),
+            )
+            .select_from(TallerSolicitudDetalle)
+            .outerjoin(FallaTaller, TallerSolicitudDetalle.falla_id == FallaTaller.id)
+            .outerjoin(CategoriaFalla, FallaTaller.categoria_id == CategoriaFalla.id)
+            .group_by(CategoriaFalla.id, CategoriaFalla.nombre)
+        )
+        res = await db.execute(stmt)
+        return list(res.all())
+
+    async def get_solicitudes_activas(self, db: AsyncSession) -> List[TallerSolicitud]:
+        """
+        Retorna únicamente solicitudes activas (estado != 'FINALIZADO') con las relaciones
+        necesarias para generar alertas de repuestos, pauta y mecánicos.
+        Evita cargar todo el historial histórico en memoria.
+        """
+        stmt = (
+            select(TallerSolicitud)
+            .where(TallerSolicitud.estado != "FINALIZADO")
+            .options(
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.mecanicos),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.item),
+            )
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().unique().all())
+
     async def get_auditoria(
         self,
         db: AsyncSession,
@@ -57,7 +109,6 @@ class SupervisionRepository:
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
             )
         )
-
 
         if n_bus and n_bus.strip():
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))

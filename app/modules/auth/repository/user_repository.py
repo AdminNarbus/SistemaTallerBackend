@@ -153,36 +153,37 @@ class UserRepository:
         if not nombres:
             return []
 
-        mecanicos_encontrados = []
+        condiciones = []
         for item in nombres:
             clean = item.strip()
             if not clean:
                 continue
             pattern = clean
             pattern_like = f"%{clean}%"
-            stmt = (
-                select(Usuario)
-                .join(Rol)
-                .where(
-                    and_(
-                        Usuario.is_active == True,
-                        Rol.nombre == "MECANICO",
-                        or_(
-                            Usuario.username.ilike(pattern),
-                            Usuario.nombre.ilike(pattern),
-                            func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
-                            func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern_like),
-                        ),
-                    )
+            condiciones.extend([
+                Usuario.username.ilike(pattern),
+                Usuario.nombre.ilike(pattern),
+                func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
+                func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern_like),
+            ])
+
+        if not condiciones:
+            return []
+
+        stmt = (
+            select(Usuario)
+            .join(Rol)
+            .where(
+                and_(
+                    Usuario.is_active == True,
+                    Rol.nombre == "MECANICO",
+                    or_(*condiciones),
                 )
             )
-            res = await db.execute(stmt)
-            users = res.scalars().all()
-            for user in users:
-                if user not in mecanicos_encontrados:
-                    mecanicos_encontrados.append(user)
-
-        return mecanicos_encontrados
+            .distinct()
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
 
 
 user_repository = UserRepository()

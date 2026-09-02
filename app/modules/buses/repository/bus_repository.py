@@ -71,6 +71,9 @@ class BusRepository:
         stmt = select(Bus.n_bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
+        if clean_prefix:
+            stmt = stmt.where(Bus.n_bus.like(f"{clean_prefix}%"))
+        stmt = stmt.order_by(Bus.n_bus.asc())
 
         result = await db.execute(stmt)
         n_buses_raw = result.scalars().all()

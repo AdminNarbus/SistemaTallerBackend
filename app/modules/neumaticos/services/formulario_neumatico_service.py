@@ -77,6 +77,7 @@ class FormularioNeumaticoService:
 
         # 3. Persistencia en BD PostgreSQL
         reporte_id: Optional[int] = None
+        bus_id: Optional[int] = None
         if db is not None:
             try:
                 reporte_db = await neumatico_repository.crear_reporte(
@@ -91,7 +92,8 @@ class FormularioNeumaticoService:
                     evidencia_url=evidencia_url,
                 )
                 reporte_id = reporte_db.id
-                logger.info("[NEUMATICO] Reporte persistido en BD | id=%s | n_bus='%s'", reporte_id, maquina)
+                bus_id = reporte_db.bus_id
+                logger.info("[NEUMATICO] Reporte persistido en BD | id=%s | n_bus='%s' | bus_id=%s", reporte_id, maquina, bus_id)
             except Exception as err:
                 logger.warning("[NEUMATICO] Error al guardar reporte en BD | usuario_id=%s | error=%s", usuario_id, err)
 
@@ -99,6 +101,7 @@ class FormularioNeumaticoService:
             f"Datos recibidos del formulario: "
             f"UsuarioID={usuario_id or 'N/A'}, "
             f"Máquina='{maquina or 'N/A'}', "
+            f"BusID={bus_id or 'N/A'}, "
             f"Tipo de Bus='{tipo_bus or 'N/A'}', "
             f"Ruedas={ruedas_lista or '[]'}, "
             f"Motivo='{motivo or 'N/A'}', "
@@ -111,10 +114,12 @@ class FormularioNeumaticoService:
             "status": "success",
             "message": "Formulario de neumáticos procesado y guardado exitosamente",
             "reporte_id": reporte_id,
+            "bus_id": bus_id,
             "resumen": resumen_procesamiento,
             "datos_recibidos": {
                 "usuario_id": usuario_id,
                 "maquina": maquina,
+                "bus_id": bus_id,
                 "tipo_bus": tipo_bus,
                 "ruedas": ruedas_lista,
                 "motivo": motivo,

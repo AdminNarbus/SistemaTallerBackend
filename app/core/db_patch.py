@@ -15,6 +15,8 @@ async def apply_db_patches():
         "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS mecanico_cierre_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;",
         "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS descripcion_general TEXT;",
         "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS fecha_cierre TIMESTAMPTZ;",
+        "ALTER TABLE taller_solicitudes ADD COLUMN IF NOT EXISTS bus_id INTEGER REFERENCES buses(id) ON DELETE SET NULL;",
+        "ALTER TABLE reportes_neumaticos ADD COLUMN IF NOT EXISTS bus_id INTEGER REFERENCES buses(id) ON DELETE SET NULL;",
     ]
     async with AsyncSessionLocal() as db:
         for patch_sql in patches:

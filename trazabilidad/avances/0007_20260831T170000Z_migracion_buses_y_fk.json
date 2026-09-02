@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 7,
+  "id": "AV-0007",
+  "timestamp": "2026-08-31T17:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BUS-1",
+    "name": "Migración Tabla Buses, Claves Foráneas y Búsqueda",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Migración exitosa de la tabla buses y sus registros desde narbus_local a narbus_taller_db, incorporación de claves foráneas bus_id en taller_solicitudes y reportes_neumaticos con resolución automática a partir de n_bus, y reactivación del módulo y endpoints REST de búsqueda y filtrado de buses.",
+  "scope": {
+    "planned": [
+      "Creación de migración Alembic 004 con copia de registros desde narbus_local.buses",
+      "Agregar columna bus_id a taller_solicitudes y reportes_neumaticos con FK a buses.id",
+      "Actualizar modelo ORM Bus y DTOs correspondientes (BusResponseDTO, BusAutocompleteDTO)",
+      "Implementar BusService y método de búsqueda de prefijos numéricos y alfanuméricos ordenados",
+      "Reactivar y registrar endpoints /buses/buscar y /buses en FastAPI",
+      "Actualizar persistencia en Mantención y Neumáticos para poblar y resolver bus_id",
+      "Crear tests unitarios e integración para el módulo de Buses"
+    ],
+    "completed": [
+      "Migración 004_create_buses_table_and_fk.py ejecutada correctamente poblando la tabla buses y sincronizando secuencias",
+      "Clave foránea bus_id integrada en taller_solicitudes y reportes_neumaticos",
+      "Modelo Bus ORM y DTOs completados con tipado estricto",
+      "BusRepository y BusService implementados con lógica de búsqueda por prefijo",
+      "Endpoints GET /api/v1/buses/buscar, GET /api/v1/buses, GET /api/v1/buses/{id} y GET /api/v1/buses/numero/{n_bus} activos",
+      "Resolución automática de bus_id en creación de solicitudes y reportes",
+      "Suite de 38 pruebas unitarias, integración y e2e pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Pantallas o vistas de Frontend (se gestionan en repositorio desacoplado)"
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/004_create_buses_table_and_fk.py", "action": "created", "summary": "Migración Alembic para crear tabla buses, copiar datos de narbus_local y agregar FKs bus_id" },
+    { "path": "app/modules/buses/models/bus.py", "action": "modified", "summary": "Modelo ORM Bus con columnas completas y relación a catálogo" },
+    { "path": "app/modules/buses/dtos/bus_dto.py", "action": "modified", "summary": "DTOs de Bus (BusBaseDTO, BusResponseDTO, BusAutocompleteDTO, BusSearchPayloadDTO)" },
+    { "path": "app/modules/buses/repository/bus_repository.py", "action": "modified", "summary": "Repositorio con métodos de filtrado de prefijo y consultas por ID y n_bus" },
+    { "path": "app/modules/buses/services/bus_service.py", "action": "created", "summary": "Capa de servicio de negocio para resolución y búsqueda de buses" },
+    { "path": "app/modules/buses/api/router.py", "action": "modified", "summary": "Endpoints REST de búsqueda y detalle de buses" },
+    { "path": "app/api/v1/router.py", "action": "modified", "summary": "Inclusión del router /buses en el API v1" },
+    { "path": "app/modules/mantencion/models/taller_solicitud.py", "action": "modified", "summary": "Inclusión de bus_id y relación ORM con Bus" },
+    { "path": "app/modules/mantencion/dtos/mantencion_dto.py", "action": "modified", "summary": "Inclusión de bus_id y bus_patente en SolicitudDTO" },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "Resolución automática de bus_id y selectinload de bus" },
+    { "path": "app/modules/mantencion/services/mantencion_service.py", "action": "modified", "summary": "Mapeo de bus_id y bus_patente en DTO de solicitud" },
+    { "path": "app/modules/neumaticos/models/reporte_neumatico.py", "action": "modified", "summary": "Inclusión de bus_id y relación ORM con Bus" },
+    { "path": "app/modules/neumaticos/dtos/reporte_neumatico_dto.py", "action": "modified", "summary": "Inclusión de bus_id y n_bus en DTOs" },
+    { "path": "app/modules/neumaticos/repository/neumatico_repository.py", "action": "modified", "summary": "Resolución automática y almacenamiento de bus_id" },
+    { "path": "app/modules/neumaticos/services/formulario_neumatico_service.py", "action": "modified", "summary": "Retorno y logging de bus_id en respuesta" },
+    { "path": "app/core/db_patch.py", "action": "modified", "summary": "Parches de base de datos para asegurar columnas bus_id" },
+    { "path": "tests/unit/test_bus_service.py", "action": "created", "summary": "Pruebas unitarias de búsqueda y asignación automática de bus_id" },
+    { "path": "tests/integration/test_buses_api.py", "action": "created", "summary": "Pruebas de integración para endpoints REST de buses" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-007",
+      "title": "Mantenimiento dual de n_bus (código visible) y bus_id (clave foránea relacional)",
+      "rationale": "Garantiza integridad referencial mediante FK a la tabla buses sin romper la compatibilidad operativa con conductores y mecánicos que ingresan o identifican buses por su número de máquina (ej. '339'). La capa de repositorio resuelve automáticamente el bus_id si no es enviado explícitamente.",
+      "consequences": "Permite navegación relacional en SQLAlchemy, consistencia en auditorías e historial, manteniendo contratos flexibles y desacoplados para los clientes."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\alembic.exe upgrade head",
+      "result": "passed",
+      "evidence": "Migración 004_buses_table_and_fk ejecutada satisfactoriamente en PostgreSQL local."
+    },
+    {
+      "command": "$env:PYTHONPATH='.'; .\\venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "38 passed en 13.46s (100% de la suite de pruebas unitarias, de integración y E2E)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integración del frontend con los nuevos endpoints de autocompletado y catálogo de buses.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/modulo-supervision-taller",
+    "commit": "075dd82",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los 115 registros de buses quedaron sincronizados en la base de datos local del taller.",
+    "La secuencia de id buses_id_seq fue reinicializada al valor máximo."
+  ]
+}

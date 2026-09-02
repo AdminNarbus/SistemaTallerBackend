@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.modules.buses.models.bus import Bus
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
@@ -47,6 +48,7 @@ class MantencionRepository:
             select(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)
             .options(
+                selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
@@ -65,8 +67,16 @@ class MantencionRepository:
         self, db: AsyncSession, dto: SolicitudCreateDTO, creador_id: int
     ) -> TallerSolicitud:
         logger.debug("[MANTENCION] Persistiendo nueva solicitud | n_bus='%s' | creador_id=%s", dto.n_bus, creador_id)
+        
+        bus_id = dto.bus_id
+        if not bus_id and dto.n_bus:
+            clean_nb = str(dto.n_bus).strip()
+            bus_res = await db.execute(select(Bus.id).where(Bus.n_bus == clean_nb))
+            bus_id = bus_res.scalar_one_or_none()
+
         solicitud = TallerSolicitud(
             n_bus=dto.n_bus,
+            bus_id=bus_id,
             usuario_creador_id=creador_id,
             estado="REPORTADO",
             descripcion_general=dto.descripcion_general,
@@ -89,7 +99,7 @@ class MantencionRepository:
 
         await db.commit()
         sol = await self.get_solicitud_by_id(db, solicitud.id)
-        logger.info("[MANTENCION] Solicitud persistida | id=%s | n_bus='%s'", sol.id, sol.n_bus)
+        logger.info("[MANTENCION] Solicitud persistida | id=%s | n_bus='%s' | bus_id=%s", sol.id, sol.n_bus, sol.bus_id)
         return sol
 
     async def list_pendientes(self, db: AsyncSession) -> List[TallerSolicitud]:
@@ -102,6 +112,7 @@ class MantencionRepository:
             .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE_REASIGNACION"]))
             .order_by(TallerSolicitud.fecha_creacion.asc())
             .options(
+                selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
@@ -128,6 +139,7 @@ class MantencionRepository:
             )
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
+                selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
@@ -428,6 +440,7 @@ class MantencionRepository:
             select(TallerSolicitud)
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
+                selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),

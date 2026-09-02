@@ -7,12 +7,13 @@ from app.core.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.modules.auth.models.usuario import Usuario
+    from app.modules.buses.models.bus import Bus
 
 
 class ReporteNeumatico(Base, TimestampMixin):
     """
     Modelo de la tabla reportes_neumaticos.
-    Guarda la trazabilidad de tiempos y el vínculo con el bus (n_bus) y usuario logueado.
+    Guarda la trazabilidad de tiempos y el vínculo con el bus (n_bus, bus_id) y usuario logueado.
     """
 
     __tablename__ = "reportes_neumaticos"
@@ -24,6 +25,9 @@ class ReporteNeumatico(Base, TimestampMixin):
     # Claves foráneas (Foreign Keys) y campos identificadores
     usuario_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    bus_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("buses.id", ondelete="SET NULL"), nullable=True, index=True
     )
     n_bus: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
 
@@ -43,6 +47,8 @@ class ReporteNeumatico(Base, TimestampMixin):
     )
 
     # Relaciones SQLAlchemy ORM
+    bus: Mapped[Optional["Bus"]] = relationship("Bus", foreign_keys=[bus_id], lazy="selectin")
     usuario: Mapped[Optional["Usuario"]] = relationship(
         "Usuario", backref="reportes_neumaticos"
     )
+

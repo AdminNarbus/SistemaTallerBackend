@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 12,
+  "id": "AV-0012",
+  "timestamp": "2026-09-02T16:50:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-5",
+    "name": "Fase 5: Supervisión Avanzada, Telemetría y Alertas",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del módulo de supervisión avanzada y telemetría de taller: dashboard con KPIs enriquecidos (buses_fisicamente_en_taller, fallas_bloqueadas_por_repuesto, órdenes en curso), centro de alertas proactivas (REPUESTO_FALTANTE, DEFECTO_PAUTA, BUS_SIN_MECANICOS) y endpoint dedicado protegido por RBAC exclusivo para supervisores y administradores.",
+  "scope": {
+    "planned": [
+      "Extender MetricasEstadoDTO y ResumenTallerDTO con conteo de buses físicamente en taller y fallas bloqueadas por repuestos",
+      "Crear DTO AlertaSupervisionDTO con tipificación y severidad de alertas operativas",
+      "Implementar get_total_buses_en_taller en SupervisionRepository",
+      "Actualizar get_resumen_taller y crear get_alertas_taller en SupervisionService",
+      "Exponer endpoint GET /api/v1/supervision/alertas en el router de supervisión",
+      "Crear pruebas de integración dedicadas en tests/integration/test_fase5_supervision_y_alertas.py"
+    ],
+    "completed": [
+      "DTOs de métricas y alertas operacionales implementados",
+      "Carga eager optimizada de pauta, asignaciones y buses en consultas de auditoría",
+      "Motor de generación de alertas en tiempo real basado en el estado operativo actual de las solicitudes",
+      "Endpoint GET /api/v1/supervision/alertas protegido con require_supervisor_or_admin",
+      "Suite de 43 pruebas automatizadas pasando al 100% sin regresiones"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Documentación integral de contratos API para frontend (corresponde a Fase 6)"
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/supervision/dtos/supervision_dto.py", "action": "modified", "summary": "Nuevos campos en MetricasEstadoDTO, ResumenTallerDTO y creación de AlertaSupervisionDTO" },
+    { "path": "app/modules/supervision/repository/supervision_repository.py", "action": "modified", "summary": "Método get_total_buses_en_taller y eager loading de bus, pauta y asignaciones en get_auditoria" },
+    { "path": "app/modules/supervision/services/supervision_service.py", "action": "modified", "summary": "Cálculo de buses_fisicamente_en_taller, fallas_bloqueadas_por_repuesto y generador de alertas en tiempo real" },
+    { "path": "app/modules/supervision/api/router.py", "action": "modified", "summary": "Nuevo endpoint GET /api/v1/supervision/alertas con control de acceso RBAC" },
+    { "path": "tests/integration/test_fase5_supervision_y_alertas.py", "action": "created", "summary": "Pruebas de integración de KPIs, centro de alertas y validaciones RBAC" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-016",
+      "title": "Alertas analíticas calculadas en tiempo real sin polling destructivo",
+      "rationale": "En lugar de tablas de alertas estáticas que requieren sincronización y pueden quedar desfasadas, el motor de supervisión calcula las alertas operacionales activas directamente a partir del estado vivo de las solicitudes, averías y respuestas de pauta. Si una avería recibe su repuesto o una pauta es corregida, la alerta se resuelve automáticamente sin intervención manual.",
+      "consequences": "Consistencia de datos absoluta, cero deuda técnica de reconciliación de alertas y reducción de complejidad en la base de datos."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/integration/test_fase5_supervision_y_alertas.py",
+      "result": "passed",
+      "evidence": "1 passed en 0.73s. Alertas y métricas validadas exitosamente."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "43 passed en 16.96s (100% verde sin regresiones en toda la suite)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 6: Documento de Contratos API para Frontend (trazabilidad/05_CONTRATOS_API_FRONTEND.md) y actualización de trazabilidad general.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Las alertas contemplan severidad ALTA para repuestos faltantes y MEDIA para defectos de pauta e inactividad de mecánicos.",
+    "El conteo físico de buses en taller se obtiene consultando el flag en_taller de la tabla buses."
+  ]
+}

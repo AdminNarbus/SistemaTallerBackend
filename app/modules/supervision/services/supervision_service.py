@@ -9,6 +9,7 @@ from app.modules.supervision.dtos.supervision_dto import (
     ResumenTallerDTO,
     MetricasEstadoDTO,
     CategoriaFrecuenciaDTO,
+    AlertaSupervisionDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,34 +34,48 @@ class SupervisionService:
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:
         logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller")
         solicitudes = await supervision_repository.get_auditoria(db)
+        buses_en_taller_count = await supervision_repository.get_total_buses_en_taller(db)
 
         reportadas = sum(1 for s in solicitudes if s.estado == "REPORTADO")
+        pendientes = sum(1 for s in solicitudes if s.estado == "PENDIENTE")
         en_reparacion = sum(1 for s in solicitudes if s.estado == "EN_REPARACION")
         pendiente_reasignacion = sum(1 for s in solicitudes if s.estado == "PENDIENTE_REASIGNACION")
         finalizadas = sum(1 for s in solicitudes if s.estado == "FINALIZADO")
 
-        metricas_estado = MetricasEstadoDTO(
-            total_solicitudes=len(solicitudes),
-            reportadas=reportadas,
-            en_reparacion=en_reparacion,
-            pendiente_reasignacion=pendiente_reasignacion,
-            finalizadas=finalizadas,
-        )
-
         total_fallas = 0
         total_resueltas = 0
+        fallas_bloqueadas_por_repuesto = 0
         cat_counts = {}
-
         buses_activos = []
+        alertas: List[AlertaSupervisionDTO] = []
 
         for sol in solicitudes:
-            if sol.estado != "FINALIZADO" and sol.n_bus not in buses_activos:
+            es_activa = sol.estado != "FINALIZADO"
+            if es_activa and sol.n_bus not in buses_activos:
                 buses_activos.append(sol.n_bus)
 
+            # Contar fallas de la solicitud
             for det in sol.detalles:
                 total_fallas += 1
                 if det.resuelto:
                     total_resueltas += 1
+
+                if getattr(det, "falta_repuesto", False):
+                    if es_activa:
+                        fallas_bloqueadas_por_repuesto += 1
+                        alertas.append(
+                            AlertaSupervisionDTO(
+                                tipo="REPUESTO_FALTANTE",
+                                severidad="ALTA",
+                                solicitud_id=sol.id,
+                                n_bus=sol.n_bus,
+                                detalle_id=det.id,
+                                mensaje=(
+                                    f"Falla #{det.id} en Bus {sol.n_bus} detenida por falta de repuestos"
+                                    + (f": {det.comentario_repuesto}" if det.comentario_repuesto else "")
+                                ),
+                            )
+                        )
 
                 cat_nombre = "Personalizada / Sin Categoría"
                 cat_id = None
@@ -72,13 +87,53 @@ class SupervisionService:
                     cat_counts[cat_nombre] = {"id": cat_id, "count": 0}
                 cat_counts[cat_nombre]["count"] += 1
 
+            # Revisión de pauta con defectos en órdenes activas
+            if es_activa and hasattr(sol, "pauta_respuestas") and sol.pauta_respuestas:
+                for pr in sol.pauta_respuestas:
+                    if pr.estado == "DEFECTO":
+                        item_txt = pr.item.item if pr.item else f"Ítem #{pr.item_id}"
+                        alertas.append(
+                            AlertaSupervisionDTO(
+                                tipo="DEFECTO_PAUTA",
+                                severidad="MEDIA",
+                                solicitud_id=sol.id,
+                                n_bus=sol.n_bus,
+                                mensaje=f"Ítem de pauta preventiva con defecto en Bus {sol.n_bus}: {item_txt}",
+                            )
+                        )
+
+            # Revisión de buses en reparación sin mecánicos activos
+            if sol.estado == "EN_REPARACION":
+                mecs_activos = [m for m in sol.mecanicos if m.is_activo]
+                if not mecs_activos:
+                    alertas.append(
+                        AlertaSupervisionDTO(
+                            tipo="BUS_SIN_MECANICOS",
+                            severidad="MEDIA",
+                            solicitud_id=sol.id,
+                            n_bus=sol.n_bus,
+                            mensaje=f"Bus {sol.n_bus} figura EN_REPARACION pero no tiene mecánicos activos asignados",
+                        )
+                    )
+
+        metricas_estado = MetricasEstadoDTO(
+            total_solicitudes=len(solicitudes),
+            reportadas=reportadas,
+            pendientes=pendientes,
+            en_reparacion=en_reparacion,
+            pendiente_reasignacion=pendiente_reasignacion,
+            finalizadas=finalizadas,
+            buses_fisicamente_en_taller=buses_en_taller_count,
+            fallas_bloqueadas_por_repuesto=fallas_bloqueadas_por_repuesto,
+        )
+
         pct_resolucion = (total_resueltas / total_fallas * 100.0) if total_fallas > 0 else 0.0
 
         fallas_por_categoria = [
             CategoriaFrecuenciaDTO(
                 categoria_id=data["id"],
                 categoria_nombre=nombre,
-                total_fallas=data["count"]
+                total_fallas=data["count"],
             )
             for nombre, data in cat_counts.items()
         ]
@@ -91,7 +146,14 @@ class SupervisionService:
             total_fallas_resueltas=total_resueltas,
             fallas_por_categoria=fallas_por_categoria,
             buses_activos_taller=buses_activos,
+            alertas=alertas,
         )
+
+    async def get_alertas_taller(self, db: AsyncSession) -> List[AlertaSupervisionDTO]:
+        """Retorna exclusivamente las alertas operacionales activas de taller."""
+        resumen = await self.get_resumen_taller(db)
+        return resumen.alertas
 
 
 supervision_service = SupervisionService()
+

@@ -7,12 +7,26 @@ from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.models.usuario import Usuario
 from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
 from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.supervision.dtos.supervision_dto import ResumenTallerDTO
+from app.modules.supervision.dtos.supervision_dto import ResumenTallerDTO, AlertaSupervisionDTO
 from app.modules.supervision.services.supervision_service import supervision_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supervision", tags=["supervision"])
+
+
+@router.get("/alertas", response_model=List[AlertaSupervisionDTO])
+async def get_alertas_taller(
+    current_user: Usuario = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Centro de Alertas de Taller para Supervisores:
+    Retorna alertas operacionales activas: fallas detenidas por falta de repuestos,
+    ítems de pauta preventiva detectados con defecto, y buses en reparación sin mecánicos activos.
+    """
+    logger.info("[SUPERVISION] Consulta centro de alertas | supervisor_id=%s", current_user.id)
+    return await supervision_service.get_alertas_taller(db)
 
 
 @router.get("/auditoria/buses-taller", response_model=List[SolicitudDTO])
@@ -43,11 +57,13 @@ async def get_resumen_taller(
     """
     Resumen General y KPIs del Taller para Supervisores:
     Retorna indicadores clave de rendimiento (KPIs), desglose por estados,
-    porcentaje global de fallas resueltas, categorización de averías más frecuentes y buses activos.
+    porcentaje global de fallas resueltas, categorización de averías más frecuentes,
+    conteo físico de buses en taller y alertas operacionales activas.
     """
     logger.info("[SUPERVISION] Consulta resumen y KPIs del taller | supervisor_id=%s", current_user.id)
     resumen = await supervision_service.get_resumen_taller(db)
     return resumen
+
 
 
 @router.post("/solicitudes/{id}/asignar", response_model=SolicitudDTO)

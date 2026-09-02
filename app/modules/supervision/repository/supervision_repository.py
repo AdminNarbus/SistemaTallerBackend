@@ -8,8 +8,11 @@ from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
+from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
+from app.modules.buses.models.bus import Bus
 from app.modules.auth.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
@@ -19,6 +22,12 @@ class SupervisionRepository:
     """
     Capa de consulta y agregación analítica de datos para Supervisión de Taller.
     """
+
+    async def get_total_buses_en_taller(self, db: AsyncSession) -> int:
+        """Retorna el conteo de buses operativos marcados físicamente en taller."""
+        stmt = select(func.count(Bus.id)).where(Bus.en_taller == True, Bus.is_active == True)
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
     async def get_auditoria(
         self,
@@ -37,12 +46,18 @@ class SupervisionRepository:
             .options(
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.mecanico_cierre),
+                selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.item),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.mecanico),
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
             )
         )
+
 
         if n_bus and n_bus.strip():
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))

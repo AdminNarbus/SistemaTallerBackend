@@ -8,15 +8,28 @@ from app.modules.mantencion.dtos.mantencion_dto import SolicitudDTO
 class MetricasEstadoDTO(BaseModel):
     total_solicitudes: int = Field(0, description="Total histórico/activo de solicitudes de taller")
     reportadas: int = Field(0, description="Solicitudes en estado REPORTADO")
+    pendientes: int = Field(0, description="Solicitudes en estado PENDIENTE")
     en_reparacion: int = Field(0, description="Solicitudes en estado EN_REPARACION")
     pendiente_reasignacion: int = Field(0, description="Solicitudes en estado PENDIENTE_REASIGNACION")
     finalizadas: int = Field(0, description="Solicitudes en estado FINALIZADO")
+    buses_fisicamente_en_taller: int = Field(0, description="Buses de la flota marcados con en_taller = True")
+    fallas_bloqueadas_por_repuesto: int = Field(0, description="Fallas activas que reportan falta de repuestos")
 
 
 class CategoriaFrecuenciaDTO(BaseModel):
     categoria_id: Optional[int] = None
     categoria_nombre: str
     total_fallas: int
+
+
+class AlertaSupervisionDTO(BaseModel):
+    tipo: str = Field(..., description="REPUESTO_FALTANTE | TIEMPO_EXCEDIDO | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
+    severidad: str = Field("MEDIA", description="BAJA | MEDIA | ALTA | CRITICA")
+    solicitud_id: int
+    n_bus: str
+    mensaje: str
+    detalle_id: Optional[int] = None
+    fecha_deteccion: datetime = Field(default_factory=datetime.now)
 
 
 class ResumenTallerDTO(BaseModel):
@@ -26,4 +39,6 @@ class ResumenTallerDTO(BaseModel):
     total_fallas_registradas: int = Field(0, description="Cantidad total de detalles de fallas en taller")
     total_fallas_resueltas: int = Field(0, description="Cantidad de detalles de fallas resueltas")
     fallas_por_categoria: List[CategoriaFrecuenciaDTO] = Field(default_factory=list)
-    buses_activos_taller: List[str] = Field(default_factory=list, description="Lista de n_bus actualmente en taller")
+    buses_activos_taller: List[str] = Field(default_factory=list, description="Lista de n_bus actualmente en órdenes abiertas")
+    alertas: List[AlertaSupervisionDTO] = Field(default_factory=list, description="Alertas activas de supervisión de taller")
+

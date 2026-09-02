@@ -58,6 +58,12 @@ class PermissionException(NarbusException):
     error_code = "FORBIDDEN"
 
 
+class AuthenticationException(NarbusException):
+    """Falla de autenticación, token expirado o credenciales inválidas. → HTTP 401"""
+    status_code = 401
+    error_code = "UNAUTHORIZED"
+
+
 # ─────────────────────────────────────────────────────────
 # Formato de respuesta de error unificado
 # ─────────────────────────────────────────────────────────
@@ -80,7 +86,7 @@ def _error_body(code: str, message: str, detail=None) -> dict:
 async def narbus_exception_handler(request: Request, exc: NarbusException) -> JSONResponse:
     """
     Maneja todas las subclases de NarbusException (NotFoundException,
-    BusinessRuleException, ConflictException, PermissionException).
+    BusinessRuleException, ConflictException, PermissionException, AuthenticationException).
     """
     logger.warning(
         "[NARBUS_EXCEPTION] %s %s → %s: %s",
@@ -89,9 +95,14 @@ async def narbus_exception_handler(request: Request, exc: NarbusException) -> JS
         exc.error_code,
         exc.message,
     )
+    headers = {}
+    if exc.status_code == 401:
+        headers["WWW-Authenticate"] = "Bearer"
+
     return JSONResponse(
         status_code=exc.status_code,
         content=_error_body(exc.error_code, exc.message, exc.detail),
+        headers=headers or None,
     )
 
 

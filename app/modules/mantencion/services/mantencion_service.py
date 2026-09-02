@@ -60,20 +60,14 @@ class MantencionService:
                     categoria=cat_dto,
                 )
 
-            mec_resolvio_nombre = None
-            if det.mecanico_resolvio:
-                mec_resolvio_nombre = f"{det.mecanico_resolvio.nombre or ''} {det.mecanico_resolvio.apellido or ''}".strip() or det.mecanico_resolvio.username
+            mec_resolvio_nombre = det.mecanico_resolvio.nombre_completo if det.mecanico_resolvio else None
 
             mecanicos_asignados = []
             historial_asignaciones = []
             if hasattr(det, "asignaciones") and det.asignaciones:
                 for asig in det.asignaciones:
-                    mec_nom = None
-                    if asig.mecanico:
-                        mec_nom = f"{asig.mecanico.nombre or ''} {asig.mecanico.apellido or ''}".strip() or asig.mecanico.username
-                    asig_por_nom = None
-                    if asig.asignado_por:
-                        asig_por_nom = f"{asig.asignado_por.nombre or ''} {asig.asignado_por.apellido or ''}".strip() or asig.asignado_por.username
+                    mec_nom = asig.mecanico.nombre_completo if asig.mecanico else None
+                    asig_por_nom = asig.asignado_por.nombre_completo if asig.asignado_por else None
 
                     asig_dto = AsignacionFallaDTO(
                         id=asig.id,
@@ -125,9 +119,7 @@ class MantencionService:
 
         mecanicos_dtos = []
         for mec in sol.mecanicos:
-            mec_nombre = None
-            if mec.mecanico:
-                mec_nombre = f"{mec.mecanico.nombre or ''} {mec.mecanico.apellido or ''}".strip() or mec.mecanico.username
+            mec_nombre = mec.mecanico.nombre_completo if mec.mecanico else None
 
             mecanicos_dtos.append(
                 SolicitudMecanicoDTO(
@@ -146,9 +138,7 @@ class MantencionService:
 
         comentarios_dtos = []
         for com in sol.comentarios:
-            usr_nombre = None
-            if com.usuario:
-                usr_nombre = f"{com.usuario.nombre or ''} {com.usuario.apellido or ''}".strip() or com.usuario.username
+            usr_nombre = com.usuario.nombre_completo if com.usuario else None
 
             comentarios_dtos.append(
                 SolicitudComentarioDTO(
@@ -167,9 +157,7 @@ class MantencionService:
             for pr in sol.pauta_respuestas:
                 item_cat = pr.item.categoria if pr.item else None
                 item_nom = pr.item.item if pr.item else None
-                mec_nom = None
-                if pr.mecanico:
-                    mec_nom = f"{pr.mecanico.nombre or ''} {pr.mecanico.apellido or ''}".strip() or pr.mecanico.username
+                mec_nom = pr.mecanico.nombre_completo if pr.mecanico else None
                 pauta_dtos.append(
                     PautaRespuestaDTO(
                         id=pr.id,
@@ -185,13 +173,8 @@ class MantencionService:
                     )
                 )
 
-        creador_nombre = None
-        if sol.creador:
-            creador_nombre = f"{sol.creador.nombre or ''} {sol.creador.apellido or ''}".strip() or sol.creador.username
-
-        mecanico_cierre_nombre = None
-        if sol.mecanico_cierre:
-            mecanico_cierre_nombre = f"{sol.mecanico_cierre.nombre or ''} {sol.mecanico_cierre.apellido or ''}".strip() or sol.mecanico_cierre.username
+        creador_nombre = sol.creador.nombre_completo if sol.creador else None
+        mecanico_cierre_nombre = sol.mecanico_cierre.nombre_completo if sol.mecanico_cierre else None
 
         bus_patente = sol.bus.patente if sol.bus else None
 

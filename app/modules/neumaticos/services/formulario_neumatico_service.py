@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -11,6 +12,11 @@ from app.modules.neumaticos.repository.neumatico_repository import neumatico_rep
 UPLOAD_EVIDENCIAS_DIR = os.path.join(os.getcwd(), "uploads", "evidencias")
 
 logger = logging.getLogger(__name__)
+
+
+def _guardar_archivo_disco(path: str, data: bytes) -> None:
+    with open(path, "wb") as f:
+        f.write(data)
 
 
 class FormularioNeumaticoService:
@@ -49,8 +55,7 @@ class FormularioNeumaticoService:
 
             os.makedirs(UPLOAD_EVIDENCIAS_DIR, exist_ok=True)
             contenido = await evidencia.read()
-            with open(ruta_destino, "wb") as f:
-                f.write(contenido)
+            await asyncio.to_thread(_guardar_archivo_disco, ruta_destino, contenido)
 
             evidencia_url = f"/uploads/evidencias/{nombre_archivo_unico}"
             logger.info(

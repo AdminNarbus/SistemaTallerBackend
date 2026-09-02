@@ -383,3 +383,30 @@ interface PautaRespuestaDTO {
 4. **Dashboard de Supervisión:**
    - Tarjetas destacadas con `Buses en Taller` y `Fallas Bloqueadas por Repuesto`.
    - Bandeja flotante de `Alertas Activas` con badges de severidad (Rojo = Alta, Amarillo = Media).
+
+---
+
+## 9. Módulo de Reportes de Neumáticos
+
+- **Ruta Activa / Oficial:** `POST /api/v1/formularioNeumatico` (Consumido por el cliente Frontend vía `multipart/form-data`).
+- **Ruta Alias Semántica:** `POST /api/v1/neumaticos/reportes` (Ruta RESTful canónica documentada para nuevas integraciones).
+- **Payload:**
+  - `usuario_id` (int, opcional)
+  - `maquina` (string, opcional, n_bus del vehículo)
+  - `tipo_bus` (string, opcional)
+  - `ruedas` (string JSON, opcional, array de posiciones)
+  - `motivo` (string, opcional)
+  - `precio` (string, opcional)
+  - `marca_fuego` (string, opcional)
+  - `evidencia` (UploadFile, opcional, evidencia fotográfica)
+- **Respuesta:**
+  ```typescript
+  interface ReporteNeumaticoResponse {
+    status: "success";
+    message: string;
+    reporte_id: number | null;
+    bus_id: number | null;
+    resumen: string;
+    datos_recibidos: Record<string, any>;
+  }
+  ```

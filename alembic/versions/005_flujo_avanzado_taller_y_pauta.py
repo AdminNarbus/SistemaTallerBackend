@@ -1,6 +1,6 @@
 """Flujo avanzado taller y pauta: asignacion atomica de fallas, pauta preventiva y control en taller
 
-Revision ID: 005_flujo_avanzado_taller_y_pauta
+Revision ID: 005_taller_avanzado_pauta
 Revises: 004_buses_table_and_fk
 Create Date: 2026-09-02 16:00:00.000000
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '005_flujo_avanzado_taller_y_pauta'
+revision: str = '005_taller_avanzado_pauta'
 down_revision: Union[str, None] = '004_buses_table_and_fk'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

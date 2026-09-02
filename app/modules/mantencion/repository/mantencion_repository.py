@@ -14,12 +14,14 @@ from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicit
 from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
+from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 from app.modules.mantencion.dtos.mantencion_dto import (
     SolicitudCreateDTO,
     TomarTrabajoDTO,
     LiberarTurnoDTO,
     FinalizarSolicitudDTO,
     ComentarioCreateDTO,
+    PautaRespuestaCreateDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,8 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
                 selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.asignado_por),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.item),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -67,6 +71,7 @@ class MantencionRepository:
         if not sol:
             logger.warning("[MANTENCION] Solicitud no encontrada | id=%s", solicitud_id)
         return sol
+
 
 
     async def create_solicitud(
@@ -433,29 +438,100 @@ class MantencionRepository:
             raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now()
+
+        # 1. Validar Checklist / Pauta de Taller Preventiva
+        stmt_items = select(PautaTallerItem).where(PautaTallerItem.is_active == True)
+        res_items = await db.execute(stmt_items)
+        items_activos = list(res_items.scalars().all())
+        total_items_pauta = len(items_activos)
+
+        stmt_resp = select(TallerSolicitudPauta).where(TallerSolicitudPauta.solicitud_id == solicitud_id)
+        res_resp = await db.execute(stmt_resp)
+        respuestas_registradas = list(res_resp.scalars().all())
+        items_respondidos = len(respuestas_registradas)
+
+        if total_items_pauta > 0 and items_respondidos < total_items_pauta:
+            if not (dto.motivo_incompleto_checklist and dto.motivo_incompleto_checklist.strip()):
+                raise BusinessRuleException(
+                    f"La pauta preventiva está incompleta ({items_respondidos}/{total_items_pauta} ítems respondidos). "
+                    "Debe completar la pauta o ingresar una justificación en 'motivo_incompleto_checklist'."
+                )
+            solicitud.motivo_incompleto_checklist = dto.motivo_incompleto_checklist.strip()
+        else:
+            solicitud.motivo_incompleto_checklist = dto.motivo_incompleto_checklist
+
+        # 2. Validar Cierre Parcial / Fallas no resueltas o falta de repuesto
+        fallas_no_resueltas = [
+            d for d in solicitud.detalles if not d.resuelto or getattr(d, "falta_repuesto", False)
+        ]
+        if fallas_no_resueltas:
+            if not (dto.motivo_cierre_parcial and dto.motivo_cierre_parcial.strip()):
+                raise BusinessRuleException(
+                    f"Existen {len(fallas_no_resueltas)} falla(s) no resueltas o con falta de repuestos. "
+                    "Para liberar el bus con cierre parcial, debe ingresar una justificación en 'motivo_cierre_parcial'."
+                )
+            solicitud.motivo_cierre_parcial = dto.motivo_cierre_parcial.strip()
+        else:
+            solicitud.motivo_cierre_parcial = dto.motivo_cierre_parcial
+
         solicitud.estado = "FINALIZADO"
         solicitud.mecanico_cierre_id = mecanico_cierre_id
         solicitud.fecha_cierre = now
 
-        # Marcar mecánicos activos como completados
+        # 3. Marcar mecánicos y asignaciones activas como completadas
         for mec in solicitud.mecanicos:
             if mec.is_activo:
                 mec.is_activo = False
                 mec.fecha_desasignacion = now
+                if mec.fecha_asignacion:
+                    mec.duracion_minutos = max(1, int((now - mec.fecha_asignacion).total_seconds() / 60))
 
-        # Registrar comentario de cierre si se proporcionó
-        if dto.comentario_cierre and dto.comentario_cierre.strip():
-            comentario_entry = TallerSolicitudComentario(
-                solicitud_id=solicitud.id,
-                usuario_id=mecanico_cierre_id,
-                tipo="CIERRE",
-                comentario=dto.comentario_cierre.strip(),
-                fecha_registro=now,
+        stmt_asig = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.is_activo == True,
             )
-            db.add(comentario_entry)
+        )
+        res_asig = await db.execute(stmt_asig)
+        for asig in res_asig.scalars().all():
+            asig.is_activo = False
+            asig.fecha_desasignacion = now
+            if asig.fecha_asignacion:
+                asig.duracion_minutos = max(1, int((now - asig.fecha_asignacion).total_seconds() / 60))
+
+        # 4. Liberar bus del taller si corresponde
+        if dto.liberar_bus_taller and solicitud.bus_id:
+            bus = await db.get(Bus, solicitud.bus_id)
+            if bus:
+                bus.en_taller = False
+
+        # 5. Registrar comentario de cierre en bitácora
+        texto_cierre = "Cierre y liberación de trabajos de taller registrados."
+        if dto.comentario_cierre and dto.comentario_cierre.strip():
+            texto_cierre += f" Comentario: {dto.comentario_cierre.strip()}."
+        if solicitud.motivo_cierre_parcial:
+            texto_cierre += f" Motivo cierre parcial: {solicitud.motivo_cierre_parcial}."
+        if solicitud.motivo_incompleto_checklist:
+            texto_cierre += f" Justificación pauta: {solicitud.motivo_incompleto_checklist}."
+
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_cierre_id,
+            tipo="CIERRE",
+            comentario=texto_cierre,
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
 
         await db.commit()
+        logger.info(
+            "[MANTENCION] Solicitud FINALIZADA | id=%s, bus_id=%s, bus_liberado=%s",
+            solicitud.id,
+            solicitud.bus_id,
+            dto.liberar_bus_taller,
+        )
         return await self.get_solicitud_by_id(db, solicitud_id)
+
 
     async def list_auditoria(self, db: AsyncSession) -> List[TallerSolicitud]:
         """
@@ -793,6 +869,144 @@ class MantencionRepository:
         )
         return await self.get_solicitud_by_id(db, solicitud_id)
 
+    async def reportar_repuesto(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        mecanico_id: int,
+        falta_repuesto: bool,
+        comentario: Optional[str] = None,
+    ) -> TallerSolicitud:
+        """
+        Marca o desmarca si una falla específica no puede continuar por falta de repuestos.
+        Registra el evento y comentario en la bitácora de la solicitud.
+        """
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        detalle = next((d for d in solicitud.detalles if d.id == detalle_id), None)
+        if not detalle:
+            raise NotFoundException(f"Detalle con ID {detalle_id} no encontrado en la solicitud")
+
+        detalle.falta_repuesto = falta_repuesto
+        detalle.comentario_repuesto = comentario.strip() if comentario else None
+
+        now = datetime.now()
+        tipo_accion = "FALTA_REPUESTO" if falta_repuesto else "REPUESTO_DISPONIBLE"
+        texto = f"Estado de repuesto para falla #{detalle_id} actualizado: {'FALTA REPUESTO' if falta_repuesto else 'REPUESTO OK'}"
+        if comentario and comentario.strip():
+            texto += f" - Motivo/Detalle: {comentario.strip()}"
+
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_id,
+            tipo=tipo_accion,
+            comentario=texto,
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
+
+        await db.commit()
+        logger.info(
+            "[MANTENCION] Reporte de repuesto | solicitud_id=%s, detalle_id=%s, falta_repuesto=%s",
+            solicitud_id,
+            detalle_id,
+            falta_repuesto,
+        )
+        return await self.get_solicitud_by_id(db, solicitud_id)
+
+    async def get_pauta_items(self, db: AsyncSession) -> List[PautaTallerItem]:
+        """Retorna el catálogo ordenado de ítems activos de la pauta de inspección preventiva."""
+        stmt = (
+            select(PautaTallerItem)
+            .where(PautaTallerItem.is_active == True)
+            .order_by(PautaTallerItem.orden.asc(), PautaTallerItem.id.asc())
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_pauta_respuestas_by_solicitud(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> List[TallerSolicitudPauta]:
+        """Retorna las respuestas de pauta registradas para una solicitud."""
+        stmt = (
+            select(TallerSolicitudPauta)
+            .where(TallerSolicitudPauta.solicitud_id == solicitud_id)
+            .options(
+                selectinload(TallerSolicitudPauta.item),
+                selectinload(TallerSolicitudPauta.mecanico),
+            )
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def guardar_respuestas_pauta(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        respuestas: List[PautaRespuestaCreateDTO],
+    ) -> List[TallerSolicitudPauta]:
+        """
+        Registra o actualiza en batch las respuestas a los ítems de la pauta preventiva para una solicitud.
+        """
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if not respuestas:
+            raise BusinessRuleException("Debe enviar al menos una respuesta de pauta")
+
+        now = datetime.now()
+
+        # Obtener respuestas ya existentes para actualizar o insertar
+        stmt_exist = select(TallerSolicitudPauta).where(TallerSolicitudPauta.solicitud_id == solicitud_id)
+        res_exist = await db.execute(stmt_exist)
+        existentes_map = {r.item_id: r for r in res_exist.scalars().all()}
+
+        # Validar ítems
+        item_ids = [r.item_id for r in respuestas]
+        stmt_items = select(PautaTallerItem.id).where(PautaTallerItem.id.in_(item_ids))
+        res_items = await db.execute(stmt_items)
+        valid_item_ids = set(res_items.scalars().all())
+
+        for r_dto in respuestas:
+            if r_dto.item_id not in valid_item_ids:
+                raise NotFoundException(f"Ítem de pauta con ID {r_dto.item_id} no existe")
+
+            if r_dto.item_id in existentes_map:
+                obj = existentes_map[r_dto.item_id]
+                obj.estado = r_dto.estado
+                obj.observacion = r_dto.observacion
+                obj.mecanico_id = mecanico_id
+                obj.fecha_registro = now
+            else:
+                nuevo = TallerSolicitudPauta(
+                    solicitud_id=solicitud_id,
+                    item_id=r_dto.item_id,
+                    estado=r_dto.estado,
+                    observacion=r_dto.observacion,
+                    mecanico_id=mecanico_id,
+                    fecha_registro=now,
+                )
+                db.add(nuevo)
+
+        # Bitácora
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_id,
+            tipo="CHECKLIST",
+            comentario=f"Mecánico registró/actualizó {len(respuestas)} ítem(s) de la pauta preventiva",
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
+
+        await db.commit()
+        return await self.get_pauta_respuestas_by_solicitud(db, solicitud_id)
+
 
 mantencion_repository = MantencionRepository()
+
 

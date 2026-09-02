@@ -137,6 +137,57 @@ class TerminarAvanceDTO(BaseModel):
     comentario: Optional[str] = None
 
 
+# --- Falta de Repuesto DTOs ---
+class ReportarRepuestoDTO(BaseModel):
+    falta_repuesto: bool = True
+    comentario: Optional[str] = None
+
+
+# --- Pauta de Taller Preventiva DTOs ---
+class PautaTallerItemDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    categoria: str
+    item: str
+    orden: int
+    is_active: bool
+
+
+class PautaRespuestaCreateDTO(BaseModel):
+    item_id: int
+    estado: str  # 'OK' | 'DEFECTO' | 'NO_APLICA'
+    observacion: Optional[str] = None
+
+
+class PautaRespuestaDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    solicitud_id: int
+    item_id: int
+    item_categoria: Optional[str] = None
+    item_nombre: Optional[str] = None
+    estado: str
+    observacion: Optional[str] = None
+    mecanico_id: Optional[int] = None
+    mecanico_nombre: Optional[str] = None
+    fecha_registro: datetime
+
+
+class PautaBatchUpdateDTO(BaseModel):
+    respuestas: List[PautaRespuestaCreateDTO]
+
+
+class PautaEstadoResumenDTO(BaseModel):
+    total_items: int
+    respondidos: int
+    pendientes: int
+    completado: bool
+    items_con_defecto: int
+    respuestas: List[PautaRespuestaDTO] = []
+
+
 class TomarTrabajoDTO(BaseModel):
     colaboradores_ids: Optional[List[int]] = None
     colaboradores_nombres: Optional[List[str]] = None
@@ -149,6 +200,13 @@ class LiberarTurnoDTO(BaseModel):
 
 class FinalizarSolicitudDTO(BaseModel):
     comentario_cierre: Optional[str] = None
+    motivo_incompleto_checklist: Optional[str] = None
+    motivo_cierre_parcial: Optional[str] = None
+    liberar_bus_taller: bool = True
+
+
+class LiberarSolicitudDTO(FinalizarSolicitudDTO):
+    pass
 
 
 class AgregarColaboradorDTO(BaseModel):
@@ -175,8 +233,15 @@ class SolicitudDTO(BaseModel):
     fecha_creacion: datetime
     fecha_cierre: Optional[datetime] = None
 
+    pauta_completada: bool = False
+    total_fallas: int = 0
+    fallas_resueltas: int = 0
+    fallas_con_falta_repuesto: int = 0
+
     detalles: List[SolicitudDetalleDTO] = []
     mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
+    pauta_respuestas: List[PautaRespuestaDTO] = []
+
 
 

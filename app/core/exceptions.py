@@ -105,7 +105,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         headers["WWW-Authenticate"] = "Bearer"
 
     logger.warning(
-        "[HTTP_EXCEPTION] %s %s → HTTP %s: %s",
+        "[HTTP_EXCEPTION] %s %s -> HTTP %s: %s",
         request.method,
         request.url.path,
         exc.status_code,
@@ -144,7 +144,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     sin exponer detalles internos al cliente.
     """
     logger.exception(
-        "[UNHANDLED ERROR] %s %s → %s: %s",
+        "[UNHANDLED ERROR] %s %s -> %s: %s",
         request.method,
         request.url,
         type(exc).__name__,

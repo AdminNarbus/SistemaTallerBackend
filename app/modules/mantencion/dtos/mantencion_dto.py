@@ -23,6 +23,35 @@ class FallaTallerDTO(BaseModel):
     categoria: Optional[CategoriaFallaDTO] = None
 
 
+# --- Asignación Atómica de Fallas DTOs ---
+class MecanicoAsignadoDTO(BaseModel):
+    id: int
+    nombre: str
+    origen: str = "SUPERVISOR"
+    asignado_por_id: Optional[int] = None
+    asignado_por_nombre: Optional[str] = None
+    fecha_asignacion: datetime
+
+
+class AsignacionFallaDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    solicitud_id: int
+    detalle_id: int
+    mecanico_id: int
+    mecanico_nombre: Optional[str] = None
+    asignado_por_id: Optional[int] = None
+    asignado_por_nombre: Optional[str] = None
+    origen: str
+    is_activo: bool
+    fecha_asignacion: datetime
+    fecha_desasignacion: Optional[datetime] = None
+    resuelto_en_esta_asignacion: bool
+    duracion_minutos: Optional[int] = None
+    comentario: Optional[str] = None
+
+
 # --- Detalle Falla DTOs ---
 class SolicitudDetalleCreateDTO(BaseModel):
     falla_id: Optional[int] = None
@@ -40,11 +69,15 @@ class SolicitudDetalleDTO(BaseModel):
     resuelto: bool
     mecanico_resolvio_id: Optional[int] = None
     mecanico_resolvio_nombre: Optional[str] = None
+    falta_repuesto: bool = False
+    comentario_repuesto: Optional[str] = None
     fecha_creacion: datetime
     fecha_resolucion: Optional[datetime] = None
+    mecanicos_asignados: List[MecanicoAsignadoDTO] = []
+    historial_asignaciones: List[AsignacionFallaDTO] = []
 
 
-# --- Mecanico Asignado DTOs ---
+# --- Mecanico Asignado Global DTOs ---
 class SolicitudMecanicoDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,7 +85,10 @@ class SolicitudMecanicoDTO(BaseModel):
     solicitud_id: int
     mecanico_id: int
     mecanico_nombre: Optional[str] = None
-    es_lider_responsable: bool
+    asignado_por_id: Optional[int] = None
+    asignado_por_nombre: Optional[str] = None
+    duracion_minutos: Optional[int] = None
+    es_lider_responsable: bool = False
     is_activo: bool
     fecha_asignacion: datetime
     fecha_desasignacion: Optional[datetime] = None
@@ -83,6 +119,22 @@ class SolicitudCreateDTO(BaseModel):
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
+
+
+class AutoasignarFallasDTO(BaseModel):
+    detalles_ids: List[int]
+    comentario: Optional[str] = None
+
+
+class AsignarFallasSupervisoraDTO(BaseModel):
+    mecanico_id: int
+    detalles_ids: List[int]
+    comentario: Optional[str] = None
+
+
+class TerminarAvanceDTO(BaseModel):
+    detalles_ids: Optional[List[int]] = None
+    comentario: Optional[str] = None
 
 
 class TomarTrabajoDTO(BaseModel):
@@ -118,10 +170,13 @@ class SolicitudDTO(BaseModel):
     estado: str
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
+    motivo_incompleto_checklist: Optional[str] = None
+    motivo_cierre_parcial: Optional[str] = None
     fecha_creacion: datetime
     fecha_cierre: Optional[datetime] = None
 
     detalles: List[SolicitudDetalleDTO] = []
     mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
+
 

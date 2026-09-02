@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.models.usuario import Usuario
-from app.modules.mantencion.dtos.mantencion_dto import SolicitudDTO
+from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
+from app.modules.mantencion.services.mantencion_service import mantencion_service
 from app.modules.supervision.dtos.supervision_dto import ResumenTallerDTO
 from app.modules.supervision.services.supervision_service import supervision_service
 
@@ -47,3 +48,26 @@ async def get_resumen_taller(
     logger.info("[SUPERVISION] Consulta resumen y KPIs del taller | supervisor_id=%s", current_user.id)
     resumen = await supervision_service.get_resumen_taller(db)
     return resumen
+
+
+@router.post("/solicitudes/{id}/asignar", response_model=SolicitudDTO)
+async def asignar_fallas_supervisora(
+    id: int,
+    dto: AsignarFallasSupervisoraDTO,
+    current_user: Usuario = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Asignación directa de fallas por parte de la supervisora a un mecánico específico.
+    Permite co-responsabilidad si la falla ya tenía asignación previa.
+    """
+    logger.info(
+        "[SUPERVISION] Supervisora %s asignando fallas a mecanico_id=%s en solicitud_id=%s",
+        current_user.id,
+        dto.mecanico_id,
+        id,
+    )
+    return await mantencion_service.asignar_fallas_supervisora(
+        db, solicitud_id=id, dto=dto, supervisor_id=current_user.id
+    )
+

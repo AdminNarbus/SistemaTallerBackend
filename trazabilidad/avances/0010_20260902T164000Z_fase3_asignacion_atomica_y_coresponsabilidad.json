@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 10,
+  "id": "AV-0010",
+  "timestamp": "2026-09-02T16:40:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FASE-3",
+    "name": "Fase 3: Asignación Atómica de Fallas y Co-responsabilidad",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del modelo de asignación atómica de fallas y co-responsabilidad multi-mecánico, eliminando la exclusividad de líder único. Cada mecánico responde individualmente por las fallas específicas que toma o le son asignadas, soportando trabajo simultáneo en la misma avería y registro de avance individual con cálculo de duración en minutos.",
+  "scope": {
+    "planned": [
+      "Crear DTOs MecanicoAsignadoDTO, AsignacionFallaDTO, AutoasignarFallasDTO, AsignarFallasSupervisoraDTO y TerminarAvanceDTO",
+      "Actualizar SolicitudDetalleDTO para incluir mecanicos_asignados (activos) e historial_asignaciones",
+      "Implementar autoasignar_fallas_mecanico en MantencionRepository soportando co-responsabilidad",
+      "Implementar asignar_fallas_supervisora en MantencionRepository para asignación dirigida",
+      "Implementar terminar_avance calculando duración en minutos y transición a PENDIENTE si no quedan mecánicos activos",
+      "Exponer endpoints en routers de mantención y supervisión",
+      "Crear pruebas de integración de punta a punta validando co-responsabilidad y permisos RBAC"
+    ],
+    "completed": [
+      "DTOs de asignación atómica y avance creados e integrados en SolicitudDetalleDTO y SolicitudDTO",
+      "Métodos transaccionales implementados en MantencionRepository con control de duplicados y bitácora",
+      "Mapeo de asignaciones activas e historial en MantencionService._to_solicitud_dto",
+      "Endpoints POST /{id}/autoasignar, POST /{id}/terminar-avance y POST /supervision/solicitudes/{id}/asignar funcionales",
+      "Test de integración test_flujo_fase3_asignacion_atomica_y_coresponsabilidad implementado",
+      "Suite completa de 41 pruebas automatizadas pasando al 100% sin regresiones"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Check de falta de repuesto y pauta de taller (corresponde a Fase 4)"
+    ]
+  },
+  "changes": [
+    { "path": "app/modules/mantencion/dtos/mantencion_dto.py", "action": "modified", "summary": "Nuevos DTOs de asignación atómica, avance y ampliación de SolicitudDetalleDTO" },
+    { "path": "app/modules/mantencion/repository/mantencion_repository.py", "action": "modified", "summary": "Métodos autoasignar_fallas_mecanico, asignar_fallas_supervisora y terminar_avance con carga eagerly de asignaciones" },
+    { "path": "app/modules/mantencion/services/mantencion_service.py", "action": "modified", "summary": "Mapeo de asignaciones por detalle y métodos de capa de servicio" },
+    { "path": "app/modules/mantencion/api/router.py", "action": "modified", "summary": "Endpoints POST /{id}/autoasignar, POST /{id}/asignar y POST /{id}/terminar-avance" },
+    { "path": "app/modules/supervision/api/router.py", "action": "modified", "summary": "Endpoint POST /solicitudes/{id}/asignar para asignación por supervisora" },
+    { "path": "tests/integration/test_fase3_asignacion_atomica.py", "action": "created", "summary": "Pruebas de integración para autoasignación, co-responsabilidad y avance" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-012",
+      "title": "Co-responsabilidad atómica por falla eliminando la exclusividad de líder único",
+      "rationale": "En la operativa real de taller Narbus, los mecánicos no se hacen cargo del bus completo bajo un único líder piramidal, sino que toman responsabilidades sobre fallas mecánicas puntuales. Si dos mecánicos trabajan sobre el mismo sistema (ej. radiador), ambos quedan registrados activamente como co-responsables. Si uno de ellos termina su turno o avance, el otro permanece activo sin verse afectado.",
+      "consequences": "Precisión total en la rendición de cuentas, trazabilidad individual de horas invertidas por falla y flexibilidad operativa para turnos rotativos."
+    },
+    {
+      "id": "DEC-013",
+      "title": "Transición automática a PENDIENTE tras finalización de turnos/avances",
+      "rationale": "Cuando todos los mecánicos activos en una solicitud finalizan su avance sin que la totalidad de las averías hayan sido resueltas, la orden no debe quedar huérfana en EN_REPARACION. El sistema conmuta automáticamente su estado a PENDIENTE para que aparezca disponible en la cola de asignación del siguiente turno.",
+      "consequences": "Garantiza que ningún bus con fallas pendientes quede desatendido en el taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/integration/test_fase3_asignacion_atomica.py -v",
+      "result": "passed",
+      "evidence": "1 passed en 1.38s. Flujo de 8 pasos verificado exitosamente."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "41 passed en 15.23s (100% verde sin regresiones en toda la suite)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 4: Checks de Fallas, Falta de Repuestos, Pauta de Taller Preventiva y Cierre Parcial/Liberación.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/sistema-integral-taller-y-pauta",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Los endpoints antiguos como /tomar y /liberar-turno se mantienen por compatibilidad regresiva con la suite.",
+    "El cálculo de duración en minutos se realiza automáticamente al momento de la desasignación."
+  ]
+}

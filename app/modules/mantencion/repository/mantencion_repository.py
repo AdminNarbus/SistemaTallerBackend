@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, update, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,7 @@ from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.dtos.mantencion_dto import (
     SolicitudCreateDTO,
     TomarTrabajoDTO,
@@ -53,8 +54,12 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.asignado_por),
             )
         )
         res = await db.execute(stmt)
@@ -62,6 +67,7 @@ class MantencionRepository:
         if not sol:
             logger.warning("[MANTENCION] Solicitud no encontrada | id=%s", solicitud_id)
         return sol
+
 
     async def create_solicitud(
         self, db: AsyncSession, dto: SolicitudCreateDTO, creador_id: int
@@ -105,18 +111,20 @@ class MantencionRepository:
     async def list_pendientes(self, db: AsyncSession) -> List[TallerSolicitud]:
         """
         Lista buses esperando en taller (Pestaña 1 del Mecánico):
-        Buses en estado REPORTADO o PENDIENTE_REASIGNACION.
+        Buses en estado REPORTADO, PENDIENTE o PENDIENTE_REASIGNACION.
         """
         stmt = (
             select(TallerSolicitud)
-            .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE_REASIGNACION"]))
+            .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]))
             .order_by(TallerSolicitud.fecha_creacion.asc())
             .options(
                 selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -125,15 +133,30 @@ class MantencionRepository:
     async def list_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> List[TallerSolicitud]:
         """
         Lista buses asignados al mecánico actual (Pestaña 2 del Mecánico):
-        Donde el mecánico tiene un registro en taller_solicitud_mecanicos con is_activo = True.
+        Donde el mecánico tiene una asignación activa en taller_solicitud_mecanicos o en taller_asignacion_fallas.
         """
         stmt = (
             select(TallerSolicitud)
-            .join(TallerSolicitudMecanico)
-            .where(
+            .distinct()
+            .outerjoin(
+                TallerSolicitudMecanico,
                 and_(
+                    TallerSolicitudMecanico.solicitud_id == TallerSolicitud.id,
                     TallerSolicitudMecanico.mecanico_id == mecanico_id,
                     TallerSolicitudMecanico.is_activo == True,
+                ),
+            )
+            .outerjoin(
+                TallerAsignacionFalla,
+                and_(
+                    TallerAsignacionFalla.solicitud_id == TallerSolicitud.id,
+                    TallerAsignacionFalla.mecanico_id == mecanico_id,
+                    TallerAsignacionFalla.is_activo == True,
+                ),
+            )
+            .where(
+                and_(
+                    or_(TallerSolicitudMecanico.id.isnot(None), TallerAsignacionFalla.id.isnot(None)),
                     TallerSolicitud.estado == "EN_REPARACION",
                 )
             )
@@ -142,12 +165,15 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.bus),
                 selectinload(TallerSolicitud.creador),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)
         return list(res.scalars().all())
+
 
     async def tomar_trabajo(
         self, db: AsyncSession, solicitud_id: int, lider_id: int, dto: TomarTrabajoDTO
@@ -445,12 +471,328 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def autoasignar_fallas_mecanico(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalles_ids: List[int],
+        mecanico_id: int,
+        comentario: Optional[str] = None,
+    ) -> TallerSolicitud:
+        """
+        Autoasignación atómica de fallas específicas por parte de un mecánico.
+        Soporta co-responsabilidad: si otro mecánico ya tiene la falla, ambos quedan como responsables activos.
+        """
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if not detalles_ids:
+            raise BusinessRuleException("Debe seleccionar al menos una falla para autoasignarse")
+
+        sol_detalles_map = {d.id: d for d in solicitud.detalles}
+        for d_id in detalles_ids:
+            if d_id not in sol_detalles_map:
+                raise NotFoundException(f"La falla con ID {d_id} no pertenece a esta solicitud")
+
+        now = datetime.now()
+        asignadas_count = 0
+
+        # Evitar duplicados activos del mismo mecánico en la misma falla
+        stmt_exist = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.mecanico_id == mecanico_id,
+                TallerAsignacionFalla.detalle_id.in_(detalles_ids),
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res_exist = await db.execute(stmt_exist)
+        activas_existentes = {a.detalle_id for a in res_exist.scalars().all()}
+
+        for d_id in detalles_ids:
+            if d_id in activas_existentes:
+                continue
+
+            nueva_asig = TallerAsignacionFalla(
+                solicitud_id=solicitud_id,
+                detalle_id=d_id,
+                mecanico_id=mecanico_id,
+                asignado_por_id=mecanico_id,
+                origen="AUTOASIGNACION",
+                is_activo=True,
+                fecha_asignacion=now,
+                resuelto_en_esta_asignacion=False,
+            )
+            db.add(nueva_asig)
+            asignadas_count += 1
+
+        # Registrar presencia activa del mecánico en la solicitud (sin rol de líder único)
+        mec_rel_stmt = select(TallerSolicitudMecanico).where(
+            and_(
+                TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                TallerSolicitudMecanico.mecanico_id == mecanico_id,
+                TallerSolicitudMecanico.is_activo == True,
+            )
+        )
+        res_mec_rel = await db.execute(mec_rel_stmt)
+        mec_rel = res_mec_rel.scalar_one_or_none()
+        if not mec_rel:
+            nueva_presencia = TallerSolicitudMecanico(
+                solicitud_id=solicitud_id,
+                mecanico_id=mecanico_id,
+                asignado_por_id=mecanico_id,
+                es_lider_responsable=False,
+                is_activo=True,
+                fecha_asignacion=now,
+            )
+            db.add(nueva_presencia)
+
+        if solicitud.estado in ["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]:
+            solicitud.estado = "EN_REPARACION"
+
+        texto_bitacora = f"Mecánico autoasignó {asignadas_count} falla(s) específica(s) (IDs: {detalles_ids})"
+        if comentario and comentario.strip():
+            texto_bitacora += f": {comentario.strip()}"
+
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_id,
+            tipo="ASIGNACION",
+            comentario=texto_bitacora,
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
+
+        await db.commit()
+        logger.info(
+            "[MANTENCION] Fallas autoasignadas | solicitud_id=%s, mecanico_id=%s, count=%s",
+            solicitud_id,
+            mecanico_id,
+            asignadas_count,
+        )
+        return await self.get_solicitud_by_id(db, solicitud_id)
+
+    async def asignar_fallas_supervisora(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        detalles_ids: List[int],
+        supervisor_id: int,
+        comentario: Optional[str] = None,
+    ) -> TallerSolicitud:
+        """
+        Asignación de fallas por parte de la Supervisora a un mecánico específico.
+        Soporta asignar múltiples mecánicos a la misma falla (co-responsabilidad).
+        """
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if not detalles_ids:
+            raise BusinessRuleException("Debe indicar al menos una falla para asignar")
+
+        sol_detalles_map = {d.id: d for d in solicitud.detalles}
+        for d_id in detalles_ids:
+            if d_id not in sol_detalles_map:
+                raise NotFoundException(f"La falla con ID {d_id} no pertenece a esta solicitud")
+
+        now = datetime.now()
+        asignadas_count = 0
+
+        stmt_exist = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.mecanico_id == mecanico_id,
+                TallerAsignacionFalla.detalle_id.in_(detalles_ids),
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res_exist = await db.execute(stmt_exist)
+        activas_existentes = {a.detalle_id for a in res_exist.scalars().all()}
+
+        for d_id in detalles_ids:
+            if d_id in activas_existentes:
+                continue
+
+            nueva_asig = TallerAsignacionFalla(
+                solicitud_id=solicitud_id,
+                detalle_id=d_id,
+                mecanico_id=mecanico_id,
+                asignado_por_id=supervisor_id,
+                origen="SUPERVISOR",
+                is_activo=True,
+                fecha_asignacion=now,
+                resuelto_en_esta_asignacion=False,
+            )
+            db.add(nueva_asig)
+            asignadas_count += 1
+
+        mec_rel_stmt = select(TallerSolicitudMecanico).where(
+            and_(
+                TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                TallerSolicitudMecanico.mecanico_id == mecanico_id,
+                TallerSolicitudMecanico.is_activo == True,
+            )
+        )
+        res_mec_rel = await db.execute(mec_rel_stmt)
+        mec_rel = res_mec_rel.scalar_one_or_none()
+        if not mec_rel:
+            nueva_presencia = TallerSolicitudMecanico(
+                solicitud_id=solicitud_id,
+                mecanico_id=mecanico_id,
+                asignado_por_id=supervisor_id,
+                es_lider_responsable=False,
+                is_activo=True,
+                fecha_asignacion=now,
+            )
+            db.add(nueva_presencia)
+
+        if solicitud.estado in ["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]:
+            solicitud.estado = "EN_REPARACION"
+
+        texto_bitacora = f"Supervisora asignó {asignadas_count} falla(s) (IDs: {detalles_ids}) al mecánico #{mecanico_id}"
+        if comentario and comentario.strip():
+            texto_bitacora += f": {comentario.strip()}"
+
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=supervisor_id,
+            tipo="ASIGNACION",
+            comentario=texto_bitacora,
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
+
+        await db.commit()
+        logger.info(
+            "[MANTENCION] Supervisora asignó fallas | solicitud_id=%s, supervisor_id=%s, mecanico_id=%s, count=%s",
+            solicitud_id,
+            supervisor_id,
+            mecanico_id,
+            asignadas_count,
+        )
+        return await self.get_solicitud_by_id(db, solicitud_id)
+
+    async def terminar_avance(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        detalles_ids: Optional[List[int]] = None,
+        comentario: Optional[str] = None,
+    ) -> TallerSolicitud:
+        """
+        Finaliza el avance o jornada individual de un mecánico sobre sus fallas asignadas.
+        Calcula duración en minutos y registra si resolvió o no en esta asignación.
+        Si no quedan mecánicos activos en la orden, pasa a PENDIENTE.
+        """
+        solicitud = await self.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        now = datetime.now()
+
+        stmt = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.mecanico_id == mecanico_id,
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        if detalles_ids:
+            stmt = stmt.where(TallerAsignacionFalla.detalle_id.in_(detalles_ids))
+
+        res = await db.execute(stmt)
+        asignaciones_activas = list(res.scalars().all())
+
+        if not asignaciones_activas:
+            raise BusinessRuleException("El mecánico no tiene asignaciones activas para finalizar avance")
+
+        sol_detalles_map = {d.id: d for d in solicitud.detalles}
+
+        for asig in asignaciones_activas:
+            asig.is_activo = False
+            asig.fecha_desasignacion = now
+            if asig.fecha_asignacion:
+                delta = (now - asig.fecha_asignacion).total_seconds() / 60
+                asig.duracion_minutos = max(1, int(delta))
+            det = sol_detalles_map.get(asig.detalle_id)
+            asig.resuelto_en_esta_asignacion = bool(det and det.resuelto)
+            if comentario and comentario.strip():
+                asig.comentario = comentario.strip()
+
+        # Comprobar si al mecánico le quedan otras fallas activas en la solicitud
+        stmt_restantes_mec = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.mecanico_id == mecanico_id,
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res_rest_mec = await db.execute(stmt_restantes_mec)
+        if not res_rest_mec.scalars().all():
+            stmt_pres = select(TallerSolicitudMecanico).where(
+                and_(
+                    TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                    TallerSolicitudMecanico.mecanico_id == mecanico_id,
+                    TallerSolicitudMecanico.is_activo == True,
+                )
+            )
+            res_pres = await db.execute(stmt_pres)
+            presencias = res_pres.scalars().all()
+            for p in presencias:
+                p.is_activo = False
+                p.fecha_desasignacion = now
+                if p.fecha_asignacion:
+                    p.duracion_minutos = max(1, int((now - p.fecha_asignacion).total_seconds() / 60))
+
+        # Comprobar si quedan CUALQUIER mecánico activo en la solicitud
+        stmt_total_activas = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res_total = await db.execute(stmt_total_activas)
+        total_activas = list(res_total.scalars().all())
+
+        if not total_activas:
+            solicitud.estado = "PENDIENTE"
+
+        texto_bitacora = f"Mecánico finalizó avance en {len(asignaciones_activas)} falla(s)"
+        if comentario and comentario.strip():
+            texto_bitacora += f": {comentario.strip()}"
+
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_id,
+            tipo="ENTREGA_TURNO",
+            comentario=texto_bitacora,
+            fecha_registro=now,
+        )
+        db.add(comentario_entry)
+
+        await db.commit()
+        logger.info(
+            "[MANTENCION] Avance finalizado | solicitud_id=%s, mecanico_id=%s, fallas_cerradas=%s, estado_final=%s",
+            solicitud_id,
+            mecanico_id,
+            len(asignaciones_activas),
+            solicitud.estado,
+        )
+        return await self.get_solicitud_by_id(db, solicitud_id)
+
 
 mantencion_repository = MantencionRepository()
+

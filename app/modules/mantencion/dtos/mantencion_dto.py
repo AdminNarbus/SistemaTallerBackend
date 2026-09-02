@@ -79,6 +79,7 @@ class SolicitudComentarioDTO(BaseModel):
 # --- Solicitud Principales DTOs ---
 class SolicitudCreateDTO(BaseModel):
     n_bus: str
+    bus_id: Optional[int] = None
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
@@ -108,6 +109,8 @@ class SolicitudDTO(BaseModel):
 
     id: int
     n_bus: str
+    bus_id: Optional[int] = None
+    bus_patente: Optional[str] = None
     usuario_creador_id: Optional[int] = None
     usuario_creador_nombre: Optional[str] = None
     mecanico_cierre_id: Optional[int] = None
@@ -121,3 +124,4 @@ class SolicitudDTO(BaseModel):
     detalles: List[SolicitudDetalleDTO] = []
     mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
+

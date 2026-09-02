@@ -7,6 +7,7 @@ from app.core.base import Base
 
 if TYPE_CHECKING:
     from app.modules.auth.models.usuario import Usuario
+    from app.modules.buses.models.bus import Bus
     from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
     from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
     from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
@@ -23,6 +24,9 @@ class TallerSolicitud(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
     n_bus: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    bus_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("buses.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     
     usuario_creador_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
@@ -46,6 +50,9 @@ class TallerSolicitud(Base):
     )
 
     # Relaciones
+    bus: Mapped[Optional["Bus"]] = relationship(
+        "Bus", foreign_keys=[bus_id], lazy="selectin"
+    )
     creador: Mapped[Optional["Usuario"]] = relationship(
         "Usuario", foreign_keys=[usuario_creador_id], lazy="selectin"
     )
@@ -62,3 +69,4 @@ class TallerSolicitud(Base):
     comentarios: Mapped[List["TallerSolicitudComentario"]] = relationship(
         "TallerSolicitudComentario", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
     )
+

@@ -11,6 +11,7 @@ class ItemSolicitudDTO(BaseModel):
 class SolicitudMantencionCreateDTO(BaseModel):
     usuario_id: Optional[int] = None
     id_bus: Optional[int] = None
+    bus_id: Optional[int] = None
     n_bus: str
     descripcion: Optional[str] = None
     items: Optional[List[Any]] = None
@@ -22,6 +23,7 @@ class SolicitudMantencionResponseDTO(BaseModel):
     id: int
     usuario_id: Optional[int] = None
     id_bus: Optional[int] = None
+    bus_id: Optional[int] = None
     n_bus: str
     descripcion: Optional[str] = None
     items: Optional[List[Any]] = None
@@ -29,3 +31,4 @@ class SolicitudMantencionResponseDTO(BaseModel):
     estado: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+

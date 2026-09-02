@@ -113,9 +113,13 @@ class MantencionService:
         if sol.mecanico_cierre:
             mecanico_cierre_nombre = f"{sol.mecanico_cierre.nombre or ''} {sol.mecanico_cierre.apellido or ''}".strip() or sol.mecanico_cierre.username
 
+        bus_patente = sol.bus.patente if sol.bus else None
+
         return SolicitudDTO(
             id=sol.id,
             n_bus=sol.n_bus,
+            bus_id=sol.bus_id,
+            bus_patente=bus_patente,
             usuario_creador_id=sol.usuario_creador_id,
             usuario_creador_nombre=creador_nombre,
             mecanico_cierre_id=sol.mecanico_cierre_id,

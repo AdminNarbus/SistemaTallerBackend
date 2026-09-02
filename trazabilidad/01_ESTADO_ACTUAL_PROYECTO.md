@@ -8,12 +8,14 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
 | Módulo | Estado | Descripción |
 | --- | --- | --- |
 | **Auth & Usuarios** | `COMPLETADO` | Autenticación JWT Bearer, gestión de roles (Mecánico, Conductor, Supervisor, Admin) y soft-delete de usuarios. |
+| **Buses (Catálogo y Búsqueda)** | `COMPLETADO` | Catálogo de buses/flota centralizado, claves foráneas relacionales (`bus_id`) y endpoints de autocompletado y búsqueda por prefijo (`/buses/buscar`). |
 | **Mantención Taller** | `COMPLETADO` | Flujo de solicitudes de taller (Reportado, En Reparación, Entregado/Liberado, Finalizado), asignación de mecánico líder y colaboradores, bitácora de comentarios. |
 | **Neumáticos** | `EN PROCESO` | Captura multipart/form-data de formularios de reporte de neumáticos y evidencia fotográfica. |
 | **Supervisión** | `COMPLETADO` | Endpoints de trazabilidad inmutable y auditoría global de taller para supervisores. |
 | **Core & Exceptions** | `COMPLETADO` | Manejo centralizado de excepciones con respuestas JSON estandarizadas (`NotFoundException`, `BusinessRuleException`, `ConflictException`, `PermissionException`). |
 
 ## Arquitectura y Buenas Prácticas
-- **3NF Normalizado:** Eliminación de redundancias en buses (referenciados directamente por `n_bus`).
+- **Integridad Referencial con Flexibilidad Operativa:** Clave foránea `bus_id` enlazada a `buses.id` con resolución automática a partir de `n_bus` para mantener compatibilidad con flujos de conductores y mecánicos.
 - **Excepciones de Dominio:** Sin bloques `try/except` repetitivos en controladores ni lanzamientos genéricos de `ValueError`.
 - **GitFlow:** Integración estricta de features hacia la rama `develop`.
+

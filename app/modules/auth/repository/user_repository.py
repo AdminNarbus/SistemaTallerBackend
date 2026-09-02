@@ -134,7 +134,7 @@ class UserRepository:
                     Usuario.username.ilike(pattern),
                     Usuario.nombre.ilike(pattern),
                     Usuario.apellido.ilike(pattern),
-                    func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern),
+                    func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
                 )
             )
         if exclude_id:
@@ -170,8 +170,8 @@ class UserRepository:
                         or_(
                             Usuario.username.ilike(pattern),
                             Usuario.nombre.ilike(pattern),
-                            func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern),
-                            func.concat(Usuario.nombre, ' ', Usuario.apellido).ilike(pattern_like),
+                            func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
+                            func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern_like),
                         ),
                     )
                 )

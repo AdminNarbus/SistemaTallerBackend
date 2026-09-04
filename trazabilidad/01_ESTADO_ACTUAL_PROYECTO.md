@@ -22,6 +22,7 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
 - **Optimizaciones de Rendimiento SQL:** Agregaciones nativas `GROUP BY`, filtros `LIKE` indexados por prefijo y eliminación de consultas N+1 en bucles de mecánicos.
 - **I/O Asíncrono no Bloqueante:** Escritura de evidencias fotográficas en thread pool con `asyncio.to_thread` para proteger el bucle de eventos principal.
 - **Desacoplamiento de Servicios:** Separación estricta de routers y repositorios mediante `AuthService` y servicios de dominio.
-- **GitFlow:** Desarrollo bajo rama `feature/refactor-calidad-rendimiento-y-buenas-practicas`.
+- **Separación de Capas Service vs Repository (Módulo Mantención):** `MantencionService` asume el 100% de la lógica de negocio, validaciones (`BusinessRuleException`), cálculos de duración y control transaccional (`await db.commit()`), mientras que `MantencionRepository` se mantiene como persistencia pura (SQLAlchemy queries, métodos atómicos `add_*`, sin commits ni reglas de negocio). Eliminación de código muerto y artefactos huérfanos (`formulario_mantencion_service.py`, `taller_solicitud_repository.py`, `taller_solicitud_dto.py`).
+- **GitFlow:** Desarrollo bajo ramas `feature/*` integradas a `develop`.
 
 

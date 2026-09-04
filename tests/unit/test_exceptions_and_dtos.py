@@ -8,7 +8,7 @@ from app.core.exceptions import (
     PermissionException,
     _error_body,
 )
-from app.modules.mantencion.dtos.taller_solicitud_dto import SolicitudMantencionCreateDTO
+from app.modules.mantencion.dtos.mantencion_dto import SolicitudCreateDTO
 
 
 def test_domain_exceptions_status_codes_and_payload():
@@ -47,9 +47,9 @@ def test_error_body_structure():
 def test_dto_pydantic_validation():
     """Prueba las validaciones Pydantic para los DTOs de entrada."""
     # Válido
-    valid_dto = SolicitudMantencionCreateDTO(n_bus="BUS-001", descripcion="Falla de frenos")
+    valid_dto = SolicitudCreateDTO(n_bus="BUS-001", descripcion_general="Falla de frenos")
     assert valid_dto.n_bus == "BUS-001"
 
     # Inválido por campo requerido faltante (n_bus es obligatorio)
     with pytest.raises(ValidationError):
-        SolicitudMantencionCreateDTO()
+        SolicitudCreateDTO()

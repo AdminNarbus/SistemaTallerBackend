@@ -252,6 +252,7 @@ class SolicitudDTO(BaseModel):
 
     detalles: List[SolicitudDetalleDTO] = []
     mecanicos: List[SolicitudMecanicoDTO] = []
+    historial_mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
     pauta_respuestas: List[PautaRespuestaDTO] = []
 

@@ -135,4 +135,5 @@ async def test_flujo_completo_taller_e2e(
     assert target_auditoria["estado"] == "FINALIZADO"
     # Verificar que el historial inmutable registre los comentarios y asignaciones
     assert len(target_auditoria["comentarios"]) >= 4
-    assert len(target_auditoria["mecanicos"]) >= 3
+    assert len(target_auditoria["historial_mecanicos"]) >= 3
+    assert len(target_auditoria["mecanicos"]) == 2

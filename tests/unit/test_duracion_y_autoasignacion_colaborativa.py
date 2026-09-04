@@ -10,7 +10,10 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     SolicitudDetalleCreateDTO,
     AutoasignarFallasDTO,
     FinalizarSolicitudDTO,
+    TerminarAvanceDTO,
+    ReportarRepuestoDTO,
 )
+from app.core.exceptions import BusinessRuleException
 
 
 def test_calcular_duracion_minutos_unit():
@@ -243,5 +246,92 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
 
     pendientes = await mantencion_service.list_pendientes(db_session)
     assert any(s.id == solicitud.id for s in pendientes)
+
+
+@pytest.mark.asyncio
+async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
+    """
+    Regla de Negocio:
+    1. Una falla en espera de repuesto (falta_repuesto=True) NO puede marcarse como resuelta.
+    2. Una falla ya resuelta (resuelto=True) NO puede marcarse con falta de repuesto sin desmarcarla antes.
+    3. Al declarar el repuesto como disponible (falta_repuesto=False), se permite marcarla como resuelta.
+    """
+    mecanico_id = 2
+    conductor_id = 3
+
+    # 1. Crear solicitud con 1 falla
+    dto_crear = SolicitudCreateDTO(
+        n_bus="700",
+        descripcion_general="Falla en suspensión neumática",
+        detalles=[
+            SolicitudDetalleCreateDTO(descripcion_personalizada="Pulmón de aire pinchado"),
+        ],
+    )
+    solicitud = await mantencion_service.create_solicitud(
+        db_session, dto=dto_crear, creador_id=conductor_id
+    )
+    detalle_id = solicitud.detalles[0].id
+
+    # 2. Reportar falta de repuesto para este detalle
+    await mantencion_service.reportar_repuesto(
+        db_session,
+        solicitud_id=solicitud.id,
+        detalle_id=detalle_id,
+        mecanico_id=mecanico_id,
+        dto=ReportarRepuestoDTO(
+            falta_repuesto=True,
+            comentario="Esperando repuesto de fuelle suspensión",
+        ),
+    )
+
+    # 3. Intentar marcar la falla como resuelta -> Debe fallar con BusinessRuleException
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await mantencion_service.check_detalle(
+            db_session,
+            solicitud_id=solicitud.id,
+            detalle_id=detalle_id,
+            mecanico_id=mecanico_id,
+            resuelto=True,
+        )
+    assert "espera de repuesto" in str(exc_info.value).lower()
+
+    # 4. Reportar que el repuesto llegó (falta_repuesto=False)
+    await mantencion_service.reportar_repuesto(
+        db_session,
+        solicitud_id=solicitud.id,
+        detalle_id=detalle_id,
+        mecanico_id=mecanico_id,
+        dto=ReportarRepuestoDTO(
+            falta_repuesto=False,
+            comentario="Llegó el repuesto a bodega",
+        ),
+    )
+
+    # 5. Ahora sí debe permitir marcarla como resuelta
+    sol_ok = await mantencion_service.check_detalle(
+        db_session,
+        solicitud_id=solicitud.id,
+        detalle_id=detalle_id,
+        mecanico_id=mecanico_id,
+        resuelto=True,
+    )
+    det_actual = next(d for d in sol_ok.detalles if d.id == detalle_id)
+    assert det_actual.resuelto is True
+    assert det_actual.falta_repuesto is False
+
+    # 6. Intentar reportar falta de repuesto en una falla que ya está resuelta -> Debe fallar con BusinessRuleException
+    with pytest.raises(BusinessRuleException) as exc_rep:
+        await mantencion_service.reportar_repuesto(
+            db_session,
+            solicitud_id=solicitud.id,
+            detalle_id=detalle_id,
+            mecanico_id=mecanico_id,
+            dto=ReportarRepuestoDTO(
+                falta_repuesto=True,
+                comentario="Intento contradictorio",
+            ),
+        )
+    assert "ya fue marcada como resuelta" in str(exc_rep.value).lower()
+
 
 

@@ -10,7 +10,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.router import api_router
 from app.core.config import AppEnvironment, settings
 from app.core.database import engine
-from app.core.db_patch import apply_db_patches
 from app.core.exceptions import (
     NarbusException,
     narbus_exception_handler,
@@ -38,8 +37,6 @@ async def lifespan(app: FastAPI):
     La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
     """
     try:
-        await apply_db_patches()
-
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
         if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
             logger.info(

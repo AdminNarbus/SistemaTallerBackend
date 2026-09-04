@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 16,
+  "id": "AV-0016",
+  "timestamp": "2026-09-03T18:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-3",
+    "name": "Soporte de Reporte Directo por Categorías para Choferes",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Habilitación del reporte directo por categorías (FRENOS, ELECTRICO, MOTOR, CARROCERIA, CLIMATIZACION, OTRO) en solicitudes de mantención, simplificando el flujo del conductor y desacoplando las subcategorías técnicas de taller.",
+  "scope": {
+    "planned": [
+      "Agregar campo categoria_id en SolicitudDetalleCreateDTO",
+      "Resolver automáticamente categoria_id a la falla canónica activa correspondiente en create_solicitud",
+      "Agregar fallback dinámico y siembra de falla genérica para categoría OTRO",
+      "Exponer categoria_id y categoria_nombre directamente en SolicitudDetalleDTO para consumo transparente en Frontend",
+      "Añadir prueba unitaria para validar creación de solicitud con categoria_id directa",
+      "Ejecutar y validar suite de tests automatizados (49 tests pasados)"
+    ],
+    "completed": [
+      "Agregar campo categoria_id en SolicitudDetalleCreateDTO",
+      "Resolver automáticamente categoria_id a la falla canónica activa correspondiente en create_solicitud",
+      "Agregar fallback dinámico y siembra de falla genérica para categoría OTRO",
+      "Exponer categoria_id y categoria_nombre directamente en SolicitudDetalleDTO para consumo transparente en Frontend",
+      "Añadir prueba unitaria para validar creación de solicitud con categoria_id directa",
+      "Ejecutar y validar suite de tests automatizados (49 tests pasados)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Componentes de UI de React en repositorio ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Se añadió categoria_id: Optional[int] en SolicitudDetalleCreateDTO y categoria_id / categoria_nombre en SolicitudDetalleDTO."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "En create_solicitud se resuelve falla_id a partir de categoria_id cuando el chofer no especifica falla técnica, garantizando compatibilidad relacional y analítica."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "En _to_solicitud_dto se extraen y pueblan categoria_id y categoria_nombre directamente en cada detalle."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Se agregó la falla de respaldo para la categoría OTRO y la importación de Bus para prevenir errores de mapper."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Se añadió test_create_solicitud_con_categoria_id_directa validando el flujo de creación directa por categorías."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-004",
+      "title": "Reporte de Conductor simplificado por Categoría de Falla",
+      "rationale": "El conductor no es mecánico y no debe enfrentarse a diagnósticos técnicos detallados ni subcategorías. El chofer solo debe elegir entre las 6 categorías macro (FRENOS, ELECTRICO, MOTOR, CARROCERIA, CLIMATIZACION, OTRO) más una observación libre opcional. En el backend, mapear la categoría a su falla representativa mantiene intacta la integridad 3NF, las foreign keys existentes y los gráficos de agregación de supervisión sin requerir migraciones destructivas.",
+      "consequences": "El frontend del chofer se vuelve trivial (6 botones de selección simple), mientras que los mecánicos y supervisores siguen disfrutando de toda la información categorizada y consistente en KPIs."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "result": "passed",
+      "evidence": "4 passed in 1.48s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "49 passed, 1 warning in 17.39s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir categoria_id desde la pantalla de reporte del Chofer en el Frontend ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-calidad-rendimiento-y-buenas-practicas",
+    "commit": "b1f6d360567afcc1707121c05a6e9596e57a945a",
+    "dirty": true
+  },
+  "notes": [
+    "Compatible hacia atrás: solicitudes que envíen falla_id continúan funcionando sin alteraciones."
+  ]
+}

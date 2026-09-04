@@ -27,6 +27,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     PautaBatchUpdateDTO,
     PautaEstadoResumenDTO,
     LiberarSolicitudDTO,
+    AgregarFallaDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,13 @@ class MantencionService:
         detalles_dtos = []
         for det in sol.detalles:
             falla_dto = None
+            cat_id = None
+            cat_nombre = None
             if det.falla:
                 cat_dto = None
                 if det.falla.categoria:
+                    cat_id = det.falla.categoria.id
+                    cat_nombre = det.falla.categoria.nombre
                     cat_dto = CategoriaFallaDTO(
                         id=det.falla.categoria.id,
                         nombre=det.falla.categoria.nombre,
@@ -60,20 +65,14 @@ class MantencionService:
                     categoria=cat_dto,
                 )
 
-            mec_resolvio_nombre = None
-            if det.mecanico_resolvio:
-                mec_resolvio_nombre = f"{det.mecanico_resolvio.nombre or ''} {det.mecanico_resolvio.apellido or ''}".strip() or det.mecanico_resolvio.username
+            mec_resolvio_nombre = det.mecanico_resolvio.nombre_completo if det.mecanico_resolvio else None
 
             mecanicos_asignados = []
             historial_asignaciones = []
             if hasattr(det, "asignaciones") and det.asignaciones:
                 for asig in det.asignaciones:
-                    mec_nom = None
-                    if asig.mecanico:
-                        mec_nom = f"{asig.mecanico.nombre or ''} {asig.mecanico.apellido or ''}".strip() or asig.mecanico.username
-                    asig_por_nom = None
-                    if asig.asignado_por:
-                        asig_por_nom = f"{asig.asignado_por.nombre or ''} {asig.asignado_por.apellido or ''}".strip() or asig.asignado_por.username
+                    mec_nom = asig.mecanico.nombre_completo if asig.mecanico else None
+                    asig_por_nom = asig.asignado_por.nombre_completo if asig.asignado_por else None
 
                     asig_dto = AsignacionFallaDTO(
                         id=asig.id,
@@ -108,6 +107,8 @@ class MantencionService:
                 SolicitudDetalleDTO(
                     id=det.id,
                     solicitud_id=det.solicitud_id,
+                    categoria_id=cat_id,
+                    categoria_nombre=cat_nombre,
                     falla_id=det.falla_id,
                     falla=falla_dto,
                     descripcion_personalizada=det.descripcion_personalizada,
@@ -125,9 +126,7 @@ class MantencionService:
 
         mecanicos_dtos = []
         for mec in sol.mecanicos:
-            mec_nombre = None
-            if mec.mecanico:
-                mec_nombre = f"{mec.mecanico.nombre or ''} {mec.mecanico.apellido or ''}".strip() or mec.mecanico.username
+            mec_nombre = mec.mecanico.nombre_completo if mec.mecanico else None
 
             mecanicos_dtos.append(
                 SolicitudMecanicoDTO(
@@ -146,9 +145,7 @@ class MantencionService:
 
         comentarios_dtos = []
         for com in sol.comentarios:
-            usr_nombre = None
-            if com.usuario:
-                usr_nombre = f"{com.usuario.nombre or ''} {com.usuario.apellido or ''}".strip() or com.usuario.username
+            usr_nombre = com.usuario.nombre_completo if com.usuario else None
 
             comentarios_dtos.append(
                 SolicitudComentarioDTO(
@@ -167,9 +164,7 @@ class MantencionService:
             for pr in sol.pauta_respuestas:
                 item_cat = pr.item.categoria if pr.item else None
                 item_nom = pr.item.item if pr.item else None
-                mec_nom = None
-                if pr.mecanico:
-                    mec_nom = f"{pr.mecanico.nombre or ''} {pr.mecanico.apellido or ''}".strip() or pr.mecanico.username
+                mec_nom = pr.mecanico.nombre_completo if pr.mecanico else None
                 pauta_dtos.append(
                     PautaRespuestaDTO(
                         id=pr.id,
@@ -185,13 +180,8 @@ class MantencionService:
                     )
                 )
 
-        creador_nombre = None
-        if sol.creador:
-            creador_nombre = f"{sol.creador.nombre or ''} {sol.creador.apellido or ''}".strip() or sol.creador.username
-
-        mecanico_cierre_nombre = None
-        if sol.mecanico_cierre:
-            mecanico_cierre_nombre = f"{sol.mecanico_cierre.nombre or ''} {sol.mecanico_cierre.apellido or ''}".strip() or sol.mecanico_cierre.username
+        creador_nombre = sol.creador.nombre_completo if sol.creador else None
+        mecanico_cierre_nombre = sol.mecanico_cierre.nombre_completo if sol.mecanico_cierre else None
 
         bus_patente = sol.bus.patente if sol.bus else None
 
@@ -215,7 +205,7 @@ class MantencionService:
             motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
-            pauta_completada=len(pauta_dtos) >= 19,
+            pauta_completada=len(pauta_dtos) >= 11,
             total_fallas=total_fallas,
             fallas_resueltas=fallas_resueltas,
             fallas_con_falta_repuesto=fallas_con_falta_repuesto,
@@ -308,10 +298,11 @@ class MantencionService:
         self, db: AsyncSession, solicitud_id: int, dto: AutoasignarFallasDTO, mecanico_id: int
     ) -> SolicitudDTO:
         logger.info(
-            "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s",
+            "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s, colaboradores=%s",
             solicitud_id,
             mecanico_id,
             dto.detalles_ids,
+            dto.colaboradores_ids,
         )
         sol = await mantencion_repository.autoasignar_fallas_mecanico(
             db,
@@ -319,6 +310,7 @@ class MantencionService:
             detalles_ids=dto.detalles_ids,
             mecanico_id=mecanico_id,
             comentario=dto.comentario,
+            colaboradores_ids=dto.colaboradores_ids,
         )
         return self._to_solicitud_dto(sol)
 
@@ -474,6 +466,27 @@ class MantencionService:
             db,
             solicitud_id=solicitud_id,
             mecanico_cierre_id=mecanico_id,
+            dto=dto,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def agregar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        dto: AgregarFallaDTO,
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Agregando nueva avería | solicitud_id=%s, mecanico_id=%s, autoasignar=%s",
+            solicitud_id,
+            mecanico_id,
+            dto.autoasignar,
+        )
+        sol = await mantencion_repository.agregar_falla_solicitud(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=mecanico_id,
             dto=dto,
         )
         return self._to_solicitud_dto(sol)

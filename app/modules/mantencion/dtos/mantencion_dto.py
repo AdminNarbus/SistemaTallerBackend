@@ -55,7 +55,15 @@ class AsignacionFallaDTO(BaseModel):
 # --- Detalle Falla DTOs ---
 class SolicitudDetalleCreateDTO(BaseModel):
     falla_id: Optional[int] = None
+    categoria_id: Optional[int] = None
     descripcion_personalizada: Optional[str] = None
+
+
+class AgregarFallaDTO(BaseModel):
+    categoria_id: Optional[int] = None
+    falla_id: Optional[int] = None
+    descripcion_personalizada: Optional[str] = None
+    autoasignar: bool = True
 
 
 class SolicitudDetalleDTO(BaseModel):
@@ -63,6 +71,8 @@ class SolicitudDetalleDTO(BaseModel):
 
     id: int
     solicitud_id: int
+    categoria_id: Optional[int] = None
+    categoria_nombre: Optional[str] = None
     falla_id: Optional[int] = None
     falla: Optional[FallaTallerDTO] = None
     descripcion_personalizada: Optional[str] = None
@@ -124,6 +134,8 @@ class SolicitudCreateDTO(BaseModel):
 class AutoasignarFallasDTO(BaseModel):
     detalles_ids: List[int]
     comentario: Optional[str] = None
+    colaboradores_ids: Optional[List[int]] = None
+
 
 
 class AsignarFallasSupervisoraDTO(BaseModel):

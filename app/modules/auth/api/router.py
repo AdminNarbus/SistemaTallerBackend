@@ -9,8 +9,7 @@ from app.api.deps import (
     require_current_user,
     require_supervisor_or_admin,
 )
-from app.core.exceptions import ConflictException, NotFoundException
-from app.core.security import create_access_token
+from app.core.exceptions import NotFoundException
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
@@ -18,7 +17,7 @@ from app.modules.auth.dtos import (
     UsuarioResponseDTO,
 )
 from app.modules.auth.models.usuario import Usuario
-from app.modules.auth.repository.user_repository import user_repository
+from app.modules.auth.services.auth_service import auth_service
 
 logger = logging.getLogger(__name__)
 
@@ -39,29 +38,7 @@ async def login(
     Endpoint para autenticación de usuario vía JSON payload.
     Retorna el Token JWT Bearer y los datos del perfil de usuario.
     """
-    logger.info("[AUTH] Intento de login JSON | username='%s'", login_data.username)
-    user = await user_repository.authenticate(
-        db, username=login_data.username, password=login_data.password
-    )
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contraseña incorrectos.",
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El usuario se encuentra inactivo.",
-        )
-
-    access_token = create_access_token(subject=user.id)
-    logger.info("[AUTH] Token JWT generado | id=%s | username='%s'", user.id, user.username)
-
-    return TokenDTO(
-        access_token=access_token,
-        token_type="bearer",
-        user=UsuarioResponseDTO.model_validate(user),
-    )
+    return await auth_service.login(db, login_data=login_data)
 
 
 @router.post(
@@ -77,29 +54,7 @@ async def login_access_token(
     """
     Endpoint compatible con OAuth2 Password Flow (Form Data).
     """
-    logger.info("[AUTH] Intento de login OAuth2 form | username='%s'", form_data.username)
-    user = await user_repository.authenticate(
-        db, username=form_data.username, password=form_data.password
-    )
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contraseña incorrectos.",
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El usuario se encuentra inactivo.",
-        )
-
-    access_token = create_access_token(subject=user.id)
-    logger.info("[AUTH] Token JWT generado (OAuth2) | id=%s | username='%s'", user.id, user.username)
-
-    return TokenDTO(
-        access_token=access_token,
-        token_type="bearer",
-        user=UsuarioResponseDTO.model_validate(user),
-    )
+    return await auth_service.login_access_token(db, form_data=form_data)
 
 
 @router.post(
@@ -115,22 +70,7 @@ async def register(
     """
     Registra un nuevo usuario en la base de datos y retorna su token de acceso.
     """
-    logger.info("[AUTH] Solicitud de registro | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
-    user_existente = await user_repository.get_by_username(
-        db, username=usuario_in.username
-    )
-    if user_existente:
-        raise ConflictException("El nombre de usuario ya está registrado en el sistema.")
-
-    nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
-    access_token = create_access_token(subject=nuevo_usuario.id)
-    logger.info("[AUTH] Registro exitoso | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
-
-    return TokenDTO(
-        access_token=access_token,
-        token_type="bearer",
-        user=UsuarioResponseDTO.model_validate(nuevo_usuario),
-    )
+    return await auth_service.register(db, usuario_in=usuario_in)
 
 
 @router.get(
@@ -165,12 +105,9 @@ async def buscar_mecanicos(
 ) -> Any:
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
-    Recibe un string de búsqueda 'q' (o vacío) y retorna la lista de mecánicos activos.
-    Si se pasa exclude_id, ese usuario queda fuera de los resultados.
     """
     logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | usuario_solicitante_id=%s", q, exclude_id, current_user.id)
-    mecanicos = await user_repository.buscar_mecanicos(db, q=q, exclude_id=exclude_id)
-    return mecanicos
+    return await auth_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id)
 
 
 # =====================================================================
@@ -193,8 +130,7 @@ async def listar_usuarios(
     Retorna la lista completa de usuarios del sistema.
     Exige rol de SUPERVISOR o ADMIN.
     """
-    usuarios = await user_repository.get_all(db, skip=skip, limit=limit)
-    return usuarios
+    return await auth_service.listar_usuarios(db, skip=skip, limit=limit)
 
 
 @router.post(
@@ -211,14 +147,7 @@ async def crear_usuario_supervisor(
     """
     Permite a un Supervisor o Admin registrar un usuario (Conductor, Mecánico, Supervisor, etc.).
     """
-    user_existente = await user_repository.get_by_username(
-        db, username=usuario_in.username
-    )
-    if user_existente:
-        raise ConflictException("El nombre de usuario ya existe.")
-
-    nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
-    return nuevo_usuario
+    return await auth_service.crear_usuario(db, usuario_in=usuario_in)
 
 
 @router.delete(
@@ -242,6 +171,7 @@ async def deshabilitar_usuario(
             detail="No puedes deshabilitar tu propia cuenta de usuario.",
         )
 
+    from app.modules.auth.repository.user_repository import user_repository
     user_desactivado = await user_repository.desactivar(db, user_id=usuario_id)
     if not user_desactivado:
         raise NotFoundException("El usuario especificado no fue encontrado.")

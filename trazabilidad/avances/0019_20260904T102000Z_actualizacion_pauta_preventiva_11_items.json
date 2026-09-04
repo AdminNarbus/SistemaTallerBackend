@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 19,
+  "id": "AV-0019",
+  "timestamp": "2026-09-04T10:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-6",
+    "name": "Actualización de Catálogo de Pauta Preventiva a 11 Ítems Oficiales",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Reemplazo integral del catálogo de pauta preventiva directamente en la migración 005_flujo_avanzado_taller_y_pauta.py por los 11 ítems oficiales de taller solicitados, eliminando código legado o migraciones intermedias innecesarias, depurando los registros obsoletos en base de datos local y actualizando el seeder y la suite de pruebas.",
+  "scope": {
+    "planned": [
+      "Actualizar directamente alembic/versions/005_flujo_avanzado_taller_y_pauta.py con los 11 ítems oficiales (sin código legado)",
+      "Depurar registros obsoletos en base de datos local (pauta_taller_items con id > 11)",
+      "Actualizar seed_initial_data en app/core/seed.py para sincronizar los 11 ítems y purgar cualquier ítem > 11",
+      "Actualizar cálculo de pauta_completada en mantencion_service.py para el catálogo de 11 ítems",
+      "Actualizar docstrings de endpoints en router.py",
+      "Actualizar pruebas de integración en test_fase4_checks_pauta_y_liberacion.py",
+      "Ejecutar y validar 100% de la suite de pruebas automatizadas (52 tests passed)"
+    ],
+    "completed": [
+      "Actualizar directamente alembic/versions/005_flujo_avanzado_taller_y_pauta.py con los 11 ítems oficiales (sin código legado)",
+      "Depurar registros obsoletos en base de datos local (pauta_taller_items con id > 11)",
+      "Actualizar seed_initial_data en app/core/seed.py para sincronizar los 11 ítems y purgar cualquier ítem > 11",
+      "Actualizar cálculo de pauta_completada en mantencion_service.py para el nuevo catálogo de 11 ítems",
+      "Actualizar docstrings de endpoints en router.py",
+      "Actualizar pruebas de integración en test_fase4_checks_pauta_y_liberacion.py",
+      "Ejecutar y validar 100% de la suite de pruebas automatizadas (52 tests passed)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de vistas o componentes en frontend ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/005_flujo_avanzado_taller_y_pauta.py",
+      "action": "modified",
+      "summary": "Se reemplazó la siembra inicial de 19 ítems genéricos por los 11 ítems oficiales de taller, manteniendo la migración limpia y sin código legado."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Se añadió la siembra y sincronización limpia del catálogo de 11 ítems y eliminación física de cualquier registro obsoleto con orden > 11."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Se actualizó el indicador booleano pauta_completada para verificar len(pauta_dtos) >= 11."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Se actualizó el docstring de GET /api/v1/mantencion/pauta/items para indicar 11 ítems."
+    },
+    {
+      "path": "tests/integration/test_fase4_checks_pauta_y_liberacion.py",
+      "action": "modified",
+      "summary": "Se adaptaron las aserciones y datos del test para operar con el catálogo de 11 ítems."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-007",
+      "title": "Estandarización limpia de los 11 ítems oficiales de pauta preventiva en migración 005",
+      "rationale": "Para evitar código muerto, migraciones temporales o deuda técnica acumulada en la base de datos de desarrollo, se consolidaron los 11 ítems directamente en la migración que origina la tabla pauta_taller_items (005_flujo_avanzado_taller_y_pauta.py) y se purgaron los registros obsoletos en la base de datos local.",
+      "consequences": "El repositorio queda completamente limpio, sin migraciones intermedias residuales y con 11 ítems estrictamente alineados con la operativa de taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\alembic current",
+      "result": "passed",
+      "evidence": "005_taller_avanzado_pauta (head)"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "52 passed, 1 warning in 19.91s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir los 11 ítems oficiales de pauta preventiva desde la interfaz de usuario en el frontend ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-calidad-rendimiento-y-buenas-practicas",
+    "commit": "b1f6d360567afcc1707121c05a6e9596e57a945a",
+    "dirty": true
+  },
+  "notes": [
+    "La tabla pauta_taller_items en base de datos local contiene exactamente 11 registros activos ordenados del 1 al 11."
+  ]
+}

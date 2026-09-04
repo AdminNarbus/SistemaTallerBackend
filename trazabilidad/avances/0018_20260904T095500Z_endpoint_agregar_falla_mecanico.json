@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 18,
+  "id": "AV-0018",
+  "timestamp": "2026-09-04T09:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-5",
+    "name": "Endpoint para Agregar Fallas en Solicitud por Mecánico",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del endpoint POST /api/v1/mantencion/{id}/detalles que permite a los mecánicos y supervisores agregar nuevas averías detectadas durante la inspección técnica o reparación, desacoplado de la bitácora de comentarios y con soporte de autoasignación automática.",
+  "scope": {
+    "planned": [
+      "Definir AgregarFallaDTO con soporte de categoria_id, falla_id, descripcion_personalizada y autoasignar",
+      "Implementar agregar_falla_solicitud en repositorio con validación de estado FINALIZADO y resolución automática de categoría",
+      "Implementar agregar_falla en MantencionService",
+      "Exponer POST /api/v1/mantencion/{id}/detalles con require_mecanico_or_admin",
+      "Añadir pruebas de integración para creación exitosa, autoasignación y rechazo 422 en solicitud finalizada",
+      "Validar ejecución exitosa de la suite completa de 52 pruebas automatizadas"
+    ],
+    "completed": [
+      "Definir AgregarFallaDTO con soporte de categoria_id, falla_id, descripcion_personalizada y autoasignar",
+      "Implementar agregar_falla_solicitud en repositorio con validación de estado FINALIZADO y resolución automática de categoría",
+      "Implementar agregar_falla en MantencionService",
+      "Exponer POST /api/v1/mantencion/{id}/detalles con require_mecanico_or_admin",
+      "Añadir pruebas de integración para creación exitosa, autoasignación y rechazo 422 en solicitud finalizada",
+      "Validar ejecución exitosa de la suite completa de 52 pruebas automatizadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Formularios o componentes en repositorio ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Se añadió la clase AgregarFallaDTO."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Se implementó el método agregar_falla_solicitud que crea el TallerSolicitudDetalle, autoasigna opcionalmente al mecánico, actualiza estado a EN_REPARACION y genera nota en la bitácora."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Se añadió el método agregar_falla en MantencionService."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Se expuso el endpoint POST /api/v1/mantencion/{id}/detalles con estado HTTP 201 Created."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Se agregaron los tests test_mecanico_agregar_falla_solicitud y test_agregar_falla_solicitud_finalizada_rechazo."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-006",
+      "title": "Adición desacoplada de averías operativas por mecánicos",
+      "rationale": "Durante el desmontaje e inspección preventiva en taller, con frecuencia se detectan fallas que el chofer no advirtió en ruta. Mezclar estas fallas en la bitácora de comentarios impedía su control de checks de resolución, asignación atómica o reporte de repuesto faltante. El nuevo endpoint agrega formalmente ítems a taller_solicitud_detalles, permitiendo que la avería disfrute de todo el ciclo de vida, trazabilidad y control de pauta del taller.",
+      "consequences": "Mecánicos y supervisores pueden registrar hallazgos técnicos en caliente sin alterar la solicitud original del chofer y manteniendo la integridad referencial."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/integration/test_mantencion_api.py",
+      "result": "passed",
+      "evidence": "5 passed in 2.66s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "52 passed, 1 warning in 19.96s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir el endpoint POST /mantencion/{id}/detalles desde el modal o formulario de taller en ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-calidad-rendimiento-y-buenas-practicas",
+    "commit": "b1f6d360567afcc1707121c05a6e9596e57a945a",
+    "dirty": true
+  },
+  "notes": [
+    "Soporta autoasignar=True (por defecto) o autoasignar=False si solo se desea dejar la avería registrada para otro técnico."
+  ]
+}

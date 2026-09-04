@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 21,
+  "id": "AV-0021",
+  "timestamp": "2026-09-04T15:58:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-REPUESTO-BLOQUEO",
+    "name": "Regla de Negocio: Bloqueo de Resolución para Fallas con Falta de Repuesto",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de validación estricta de negocio: una falla marcada como 'falta_repuesto' no puede darse por resuelta hasta que el repuesto esté disponible, y una falla resuelta no puede marcarse con falta de repuesto sin antes desmarcar su resolución.",
+  "scope": {
+    "planned": [
+      "Impedir que check_detalle marque resuelto=True cuando falta_repuesto sea True",
+      "Impedir que reportar_repuesto marque falta_repuesto=True cuando la falla ya esté marcada como resuelta",
+      "Sanear registros inconsistentes en la base de datos local",
+      "Añadir prueba unitaria automatizada para validar el ciclo completo"
+    ],
+    "completed": [
+      "Validación añadida en mantencion_repository.check_detalle lanzando BusinessRuleException (HTTP 422) si se intenta resolver una avería a la espera de repuesto",
+      "Validación añadida en mantencion_repository.reportar_repuesto impidiendo marcar falta de repuesto en fallas ya resueltas",
+      "Saneado el detalle ID 21 de la solicitud 10 en base de datos local (resuelto=False mientras falta_repuesto=True)",
+      "Añadido test test_bloqueo_resolver_falla_con_falta_repuesto en test_duracion_y_autoasignacion_colaborativa.py",
+      "Suite completa de 53 tests pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificación de componentes del frontend"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Incorporación de BusinessRuleException en check_detalle y reportar_repuesto para evitar inconsistencias de estado entre falta_repuesto y resuelto."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Nueva prueba test_bloqueo_resolver_falla_con_falta_repuesto que verifica el ciclo de bloqueo, disponibilidad de repuesto y resolución."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-021",
+      "title": "Exclusión mutua de estados resuelto y falta_repuesto a nivel de repositorio y servicio",
+      "rationale": "Permitir que una falla esté marcada simultáneamente como 'esperando repuesto' y 'resuelta' crea ambigüedad operativa tanto en la bitácora como en la supervisión de taller y en el cálculo de cierre parcial. Exigir que el repuesto se marque como disponible (falta_repuesto=False) antes de permitir resuelto=True garantiza integridad total en la máquina de estados.",
+      "consequences": "Si un mecánico o cliente API intenta marcar una falla bloqueada por repuestos como resuelta, el backend responde inmediatamente con HTTP 422 (BusinessRuleException) con un mensaje claro y prescriptivo."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_duracion_y_autoasignacion_colaborativa.py -v",
+      "result": "passed",
+      "evidence": "6 passed in 2.51s"
+    },
+    {
+      "command": "pytest -v",
+      "result": "passed",
+      "evidence": "53 passed in 20.57s"
+    },
+    {
+      "command": "python -c (inconsistent items query)",
+      "result": "passed",
+      "evidence": "Found 0 inconsistent items in DB."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar cambios en git y reportar al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/validacion-bloqueo-falla-falta-repuesto",
+    "commit": "b48223a",
+    "dirty": false
+  },
+  "notes": []
+}

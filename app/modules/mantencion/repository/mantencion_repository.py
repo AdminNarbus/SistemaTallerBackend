@@ -450,6 +450,12 @@ class MantencionRepository:
         if not detalle_target:
             raise NotFoundException("Detalle de falla no encontrado")
 
+        if resuelto and getattr(detalle_target, "falta_repuesto", False):
+            raise BusinessRuleException(
+                "No se puede marcar como resuelta una falla que se encuentra a la espera de repuesto. "
+                "Debe registrarse primero la recepción/disponibilidad del repuesto."
+            )
+
         detalle_target.resuelto = resuelto
         if resuelto:
             detalle_target.mecanico_resolvio_id = mecanico_id
@@ -985,6 +991,12 @@ class MantencionRepository:
         detalle = next((d for d in solicitud.detalles if d.id == detalle_id), None)
         if not detalle:
             raise NotFoundException(f"Detalle con ID {detalle_id} no encontrado en la solicitud")
+
+        if falta_repuesto and getattr(detalle, "resuelto", False):
+            raise BusinessRuleException(
+                "No se puede reportar falta de repuesto en una falla que ya fue marcada como resuelta. "
+                "Si la falla requiere nueva intervención, desmarque primero su resolución."
+            )
 
         detalle.falta_repuesto = falta_repuesto
         detalle.comentario_repuesto = comentario.strip() if comentario else None

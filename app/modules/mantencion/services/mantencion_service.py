@@ -359,9 +359,9 @@ class MantencionService:
         return self._to_solicitud_dto(sol)
 
     async def tomar_trabajo(
-        self, db: AsyncSession, solicitud_id: int, lider_id: int, dto: TomarTrabajoDTO
+        self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: TomarTrabajoDTO
     ) -> SolicitudDTO:
-        logger.info("[MANTENCION] Tomar trabajo | solicitud_id=%s | lider_id=%s | colaboradores=%s", solicitud_id, lider_id, dto.colaboradores_ids)
+        logger.info("[MANTENCION] Tomar trabajo | solicitud_id=%s | mecanico_id=%s | colaboradores=%s", solicitud_id, mecanico_id, dto.colaboradores_ids)
         solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
@@ -374,16 +374,16 @@ class MantencionService:
                 mec.is_activo = False
                 mec.fecha_desasignacion = now
 
-        # 2. Asignar líder
-        lider_entry = TallerSolicitudMecanico(
+        # 2. Asignar mecánico que toma el trabajo (co-responsabilidad horizontal)
+        mecanico_entry = TallerSolicitudMecanico(
             solicitud_id=solicitud.id,
-            mecanico_id=lider_id,
-            es_lider_responsable=True,
+            mecanico_id=mecanico_id,
+            es_lider_responsable=False,
             is_activo=True,
             fecha_asignacion=now,
         )
-        mantencion_repository.add_mecanico(db, lider_entry)
-        logger.info("[MANTENCION] Líder asignado | solicitud_id=%s | lider_id=%s", solicitud_id, lider_id)
+        mantencion_repository.add_mecanico(db, mecanico_entry)
+        logger.info("[MANTENCION] Mecánico asignado a solicitud | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
 
         # 3. Asignar colaboradores si fueron seleccionados (por IDs o por Nombres)
         target_colab_ids = set(dto.colaboradores_ids or [])
@@ -394,7 +394,7 @@ class MantencionService:
                 target_colab_ids.add(u.id)
 
         for colab_id in target_colab_ids:
-            if colab_id != lider_id:
+            if colab_id != mecanico_id:
                 colab_entry = TallerSolicitudMecanico(
                     solicitud_id=solicitud.id,
                     mecanico_id=colab_id,
@@ -403,7 +403,7 @@ class MantencionService:
                     fecha_asignacion=now,
                 )
                 mantencion_repository.add_mecanico(db, colab_entry)
-                logger.info("[MANTENCION] Colaborador asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
+                logger.info("[MANTENCION] Colaborador co-responsable asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
 
         # 4. Actualizar estado
         solicitud.estado = "EN_REPARACION"
@@ -412,7 +412,7 @@ class MantencionService:
         if dto.comentario_inicial and dto.comentario_inicial.strip():
             comentario_entry = TallerSolicitudComentario(
                 solicitud_id=solicitud.id,
-                usuario_id=lider_id,
+                usuario_id=mecanico_id,
                 tipo="ASIGNACION",
                 comentario=dto.comentario_inicial.strip(),
                 fecha_registro=now,
@@ -425,9 +425,9 @@ class MantencionService:
         return self._to_solicitud_dto(sol)
 
     async def agregar_colaborador(
-        self, db: AsyncSession, solicitud_id: int, lider_id: int, dto: AgregarColaboradorDTO
+        self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: AgregarColaboradorDTO
     ) -> SolicitudDTO:
-        logger.info("[MANTENCION] Agregando colaborador en caliente | solicitud_id=%s | lider_id=%s", solicitud_id, lider_id)
+        logger.info("[MANTENCION] Agregando colaborador en caliente | solicitud_id=%s | solicitado_por=%s", solicitud_id, mecanico_id)
         from app.modules.auth.repository.user_repository import user_repository
 
         solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
@@ -437,12 +437,12 @@ class MantencionService:
         if solicitud.estado != "EN_REPARACION":
             raise BusinessRuleException("Solo se pueden agregar colaboradores cuando la solicitud está EN_REPARACION")
 
-        es_lider = any(
-            m.mecanico_id == lider_id and m.is_activo and m.es_lider_responsable
+        mecanico_activo = any(
+            m.mecanico_id == mecanico_id and m.is_activo
             for m in solicitud.mecanicos
         )
-        if not es_lider:
-            raise BusinessRuleException("Solo el mecánico líder activo puede agregar colaboradores")
+        if not mecanico_activo:
+            raise BusinessRuleException("Solo un mecánico asignado activamente a la solicitud puede agregar colaboradores")
 
         colab_id = dto.colaborador_id
         if not colab_id and dto.colaborador_nombre:
@@ -456,8 +456,8 @@ class MantencionService:
         if not colab_id:
             raise BusinessRuleException("Debes indicar el ID o nombre del colaborador a agregar")
 
-        if colab_id == lider_id:
-            raise BusinessRuleException("El líder no puede agregarse a sí mismo como colaborador")
+        if colab_id == mecanico_id:
+            raise BusinessRuleException("Un mecánico no puede agregarse a sí mismo como colaborador")
 
         ya_activo = any(m.mecanico_id == colab_id and m.is_activo for m in solicitud.mecanicos)
         if ya_activo:
@@ -513,13 +513,6 @@ class MantencionService:
         if not activos:
             solicitud.estado = "PENDIENTE_REASIGNACION"
             logger.info("[MANTENCION] Sin mecánicos activos → PENDIENTE_REASIGNACION | solicitud_id=%s", solicitud_id)
-        elif mecanico_entry.es_lider_responsable:
-            nuevo_lider = min(activos, key=lambda m: m.fecha_asignacion)
-            nuevo_lider.es_lider_responsable = True
-            logger.info(
-                "[MANTENCION] Líder salió → colaborador promovido a líder | solicitud_id=%s | nuevo_lider_id=%s",
-                solicitud_id, nuevo_lider.mecanico_id
-            )
 
         await db.commit()
         sol = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)

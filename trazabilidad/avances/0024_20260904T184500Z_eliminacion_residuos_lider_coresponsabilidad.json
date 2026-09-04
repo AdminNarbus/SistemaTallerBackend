@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 24,
+  "id": "AV-0024",
+  "timestamp": "2026-09-04T18:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-8",
+    "name": "Eliminación de Residuos de Líder y Co-responsabilidad Horizontal",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación de todos los residuos de la antigua figura de líder en `MantencionService` y `router.py`. Se eliminó la asignación de `es_lider_responsable=True` en `tomar_trabajo`, la restricción exclusiva a líderes en `agregar_colaborador` (ahora cualquier mecánico asignado activamente puede incorporar colaboradores) y la lógica de 'promoción de nuevo líder' en `desasignar_mecanico`. Todos los mecánicos operan bajo co-responsabilidad atómica horizontal sin jerarquías ni roles piramidales.",
+  "scope": {
+    "planned": [
+      "Eliminar residuos de asignación de líder en tomar_trabajo y reemplazar lider_id por mecanico_id",
+      "Permitir que cualquier mecánico activo en la orden pueda agregar colaboradores en agregar_colaborador",
+      "Eliminar la lógica de sucesión/promoción de líder en desasignar_mecanico",
+      "Actualizar contratos en router.py cambiando lider_id por mecanico_id",
+      "Verificar con la suite completa de 54 tests automatizados"
+    ],
+    "completed": [
+      "Asignación de es_lider_responsable=False para todos los mecánicos en tomar_trabajo",
+      "Validación horizontal en agregar_colaborador para cualquier mecánico activo",
+      "Depuración de lógica de líder en desasignar_mecanico",
+      "Actualización de router.py con nombres de parámetros limpios (mecanico_id)",
+      "54/54 tests pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Alteración del schema DDL de la base de datos (la columna es_lider_responsable se mantiene con default false para compatibilidad)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Se eliminó es_lider_responsable=True en tomar_trabajo, se flexibilizó agregar_colaborador para cualquier mecánico activo y se removió la promoción de líder en desasignar_mecanico."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Se reemplazó el argumento lider_id por mecanico_id en los endpoints tomar_trabajo y agregar_colaborador."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-024",
+      "title": "Eliminación Definitiva de Jerarquías de Líder en Taller",
+      "rationale": "El modelo operativo del taller es de co-responsabilidad horizontal por avería: cada mecánico se encarga de sus tareas, y si varios trabajan en la misma avería ambos son co-responsables directos de ella. La figura del 'líder' era un residuo de los primeros flujos del proyecto que ya no tenía cabida y generaba confusión en el código.",
+      "consequences": "Código 100% coherente con la filosofía de co-responsabilidad del taller, sin privilegios artificiales ni dependencias jerárquicas entre mecánicos."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "54 passed, 1 warning in 21.32s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar cambios en git develop y continuar con el soporte y nuevas solicitudes.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/eliminar-residuos-lider-coresponsabilidad",
+    "commit": "",
+    "dirty": false
+  },
+  "notes": [
+    "Cero regresiones: Suite completa de 54 pruebas unitarias, de integración y e2e verde."
+  ]
+}

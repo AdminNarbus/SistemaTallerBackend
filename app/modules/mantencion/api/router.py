@@ -180,8 +180,8 @@ async def tomar_trabajo(
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Auto-asignación de bus como Líder + invitación a colaboradores + comentario inicial opcional."""
-    return await mantencion_service.tomar_trabajo(db, solicitud_id=id, lider_id=current_user.id, dto=dto)
+    """Auto-asignación de bus + invitación a colaboradores + comentario inicial opcional."""
+    return await mantencion_service.tomar_trabajo(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
 
 
 @router.post("/{id}/desasignarme", response_model=SolicitudDTO)
@@ -258,8 +258,8 @@ async def agregar_colaborador(
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Agrega un colaborador al equipo mientras la solicitud está EN_REPARACION. Solo el líder activo puede hacerlo."""
-    return await mantencion_service.agregar_colaborador(db, solicitud_id=id, lider_id=current_user.id, dto=dto)
+    """Agrega un colaborador al equipo mientras la solicitud está EN_REPARACION."""
+    return await mantencion_service.agregar_colaborador(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
 
 
 @router.post("/{id}/comentarios", response_model=SolicitudDTO)

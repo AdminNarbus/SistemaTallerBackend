@@ -1,6 +1,6 @@
-from app.modules.mantencion.repository.taller_solicitud_repository import (
-    TallerSolicitudRepository,
-    taller_solicitud_repository,
+from app.modules.mantencion.repository.mantencion_repository import (
+    MantencionRepository,
+    mantencion_repository,
 )
 
-__all__ = ["TallerSolicitudRepository", "taller_solicitud_repository"]
+__all__ = ["MantencionRepository", "mantencion_repository"]

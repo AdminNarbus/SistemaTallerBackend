@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 23,
+  "id": "AV-0023",
+  "timestamp": "2026-09-04T17:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-7",
+    "name": "Separación Estricta de Capas Service vs Repository en Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica completa del módulo `app/modules/mantencion`: extracción de toda la lógica de negocio, validaciones operacionales (BusinessRuleException, NotFoundException) y control transaccional (commit) hacia `MantencionService`. Conversión de `MantencionRepository` a persistencia pura en SQLAlchemy (sin commits ni lógica de negocio). Eliminación definitiva de código muerto y artefactos huérfanos (formulario_mantencion_service.py, taller_solicitud_repository.py, taller_solicitud_dto.py).",
+  "scope": {
+    "planned": [
+      "Reordenar las capas del módulo mantención según las directrices de BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md",
+      "Mover validaciones de negocio y orquestación a MantencionService",
+      "Eliminar llamadas a db.commit() en MantencionRepository dejando únicamente consultas SQL y métodos atómicos",
+      "Eliminar archivos huérfanos y actualizar __init__.py correspondientes",
+      "Asegurar 100% de tests pasando sin regresiones"
+    ],
+    "completed": [
+      "Extracción de los 13 casos de uso hacia MantencionService con control transaccional explícito (await db.commit()) y retorno de DTOs",
+      "Conversión de MantencionRepository a capa de persistencia pura con consultas SELECT y métodos atómicos add_solicitud, add_detalle, add_falla, add_mecanico, add_asignacion_falla, add_comentario, add_pauta_respuesta y flush",
+      "Eliminación de artefactos huérfanos (formulario_mantencion_service.py, taller_solicitud_repository.py, taller_solicitud_dto.py)",
+      "Actualización de exportaciones limpias en app/modules/mantencion/services/__init__.py, repository/__init__.py y dtos/__init__.py",
+      "Actualización de tests/unit/test_exceptions_and_dtos.py para validar SolicitudCreateDTO",
+      "Ejecución exitosa de los 54 tests automatizados de la suite (unitarios, integración y e2e)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en contratos de API o endpoints hacia el frontend (cero cambios de contrato)",
+      "Intervención en módulos de auth, buses o neumáticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Se eliminaron todas las reglas de negocio (BusinessRuleException) y llamadas a db.commit(); se convirtió en repositorio de persistencia pura SQL con métodos atómicos add_* y consultas optimizadas."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Se incorporó la lógica de negocio completa de todos los casos de uso de mantención, orquestación de pasos, cálculo de duraciones, validaciones de dominio y control transaccional."
+    },
+    {
+      "path": "app/modules/mantencion/services/formulario_mantencion_service.py",
+      "action": "deleted",
+      "summary": "Eliminación de servicio huérfano deprecado."
+    },
+    {
+      "path": "app/modules/mantencion/repository/taller_solicitud_repository.py",
+      "action": "deleted",
+      "summary": "Eliminación de repositorio huérfano deprecado."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/taller_solicitud_dto.py",
+      "action": "deleted",
+      "summary": "Eliminación de DTOs huérfanos obsoletos."
+    },
+    {
+      "path": "app/modules/mantencion/services/__init__.py",
+      "action": "modified",
+      "summary": "Exporta MantencionService y mantencion_service."
+    },
+    {
+      "path": "app/modules/mantencion/repository/__init__.py",
+      "action": "modified",
+      "summary": "Exporta MantencionRepository y mantencion_repository."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exporta la colección de DTOs activos de mantencion_dto.py."
+    },
+    {
+      "path": "tests/unit/test_exceptions_and_dtos.py",
+      "action": "modified",
+      "summary": "Actualizado para validar SolicitudCreateDTO en reemplazo del DTO eliminado."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualizada la sección de arquitectura y buenas prácticas con la separación estricta de capas."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-023",
+      "title": "Separación Estricta de Capas Service vs Repository (Anti-patrón Smart Repository eliminado)",
+      "rationale": "El repositorio acumulaba lógica de negocio compleja, validaciones de permisos/roles, excepciones de dominio y commits directos, dificultando el testeo unitario y violando el principio de responsabilidad única (SRP). Siguiendo las directrices de BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, el servicio actúa como cerebro orquestador y dueño de la transacción (commit), mientras que el repositorio se limita a operaciones atómicas de consulta y persistencia en la sesión SQLAlchemy.",
+      "consequences": "Mayor modularidad, facilidad de mantenimiento, desacoplamiento transaccional y apego riguroso a los estándares de arquitectura limpia del proyecto sin romper contratos de API existentes."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "54 passed, 1 warning in 20.12s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar cambios en git, realizar merge de la rama feature a develop y mantener el repositorio actualizado.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-mantencion-service-repository",
+    "commit": "",
+    "dirty": false
+  },
+  "notes": [
+    "Cero regresiones: Toda la suite de 54 pruebas unitarias, de integración y end-to-end pasa al 100%."
+  ]
+}

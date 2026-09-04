@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 20,
+  "id": "AV-0020",
+  "timestamp": "2026-09-04T15:21:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-AVANCE-FIX",
+    "name": "Corrección de Flujo Terminar Avance y Transición a PENDIENTE",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Resolución del bug en terminar_avance donde la orden requería dos clics para salir de 'Mis Trabajos' y quedaba huérfana en 'EN_REPARACION' con 0 mecánicos activos sin volver a 'PENDIENTES'.",
+  "scope": {
+    "planned": [
+      "Diagnosticar causa raíz de la persistencia de solicitudes en Mis Trabajos tras terminar avance",
+      "Corregir cálculo de presencias y asignaciones restantes en mantencion_repository.terminar_avance",
+      "Garantizar transición inmediata de estado a PENDIENTE cuando no quedan mecánicos activos",
+      "Recuperar solicitudes huérfanas en base de datos y añadir pruebas automatizadas"
+    ],
+    "completed": [
+      "Identificado que consultas SQL intermedias no veían modificaciones en memoria de SQLAlchemy por falta de flush, impidiendo desasignar presencia en el primer clic",
+      "Identificado que tras el segundo clic la solicitud quedaba en EN_REPARACION sin mecánicos activos, quedando excluida tanto de Mis Trabajos como de Pendientes",
+      "Refactorizada la lógica de terminar_avance con exclusión explícita de IDs cerrados (cerradas_asig_ids, presencias_cerradas_ids) y flush inmediato",
+      "Restauradas solicitudes 10 (Bus 385) y 11 (Bus 850) a estado PENDIENTE",
+      "Añadida aserción de verificación en test unitario y suite completa ejecutada con 52 pruebas exitosas"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificaciones de interfaz gráfica o componentes de frontend"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Corrección en terminar_avance: exclusión precisa de IDs recién cerrados en la verificación de restantes, cálculo exacto de quedan_presencias/quedan_asignaciones, cambio de estado a PENDIENTE y await db.flush() antes de registrar bitácora."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Aserciones añadidas para comprobar que el primer terminar_avance conmuta solicitud.estado a PENDIENTE, desactiva asignaciones/presencias y remueve la orden de mis_trabajos haciéndola visible en pendientes."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-020",
+      "title": "Evaluación en memoria y flush explícito para transiciones de estado de solicitud",
+      "rationale": "Las consultas select(...) ejecutadas contra la base de datos dentro de la misma sesión asíncrona no reflejan los cambios de atributos en instancias de SQLAlchemy a menos que se invoque db.flush() o se excluyan explícitamente los IDs ya modificados en los predicados WHERE. Excluir explícitamente los IDs modificados (cerradas_asig_ids, presencias_cerradas_ids) y forzar flush previo a comprobaciones asegura determinismo total tanto en PostgreSQL como en SQLite en memoria.",
+      "consequences": "La solicitud conmuta a PENDIENTE exactamente en el primer clic de Terminar Avance, reapareciendo de inmediato en la bandeja de pendientes y saliendo limpiamente de la bandeja de mis trabajos sin riesgo de órdenes huérfanas."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest -v",
+      "result": "passed",
+      "evidence": "52 passed in 20.09s"
+    },
+    {
+      "command": "python -c (AsyncSessionLocal list_pendientes & list_mis_trabajos)",
+      "result": "passed",
+      "evidence": "Solicitudes 10 y 11 aparecen correctamente en PENDIENTES y 0 en MIS TRABAJOS."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Monitorear la interacción en el frontend y reportar el detalle al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-calidad-rendimiento-y-buenas-practicas",
+    "commit": "de557b9",
+    "dirty": false
+  },
+  "notes": [
+    "Las solicitudes en limbo en la base de datos local fueron saneadas exitosamente."
+  ]
+}

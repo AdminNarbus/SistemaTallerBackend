@@ -29,6 +29,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     PautaEstadoResumenDTO,
     PautaBatchUpdateDTO,
     LiberarSolicitudDTO,
+    AgregarFallaDTO,
 )
 from app.core.exceptions import NotFoundException
 
@@ -40,7 +41,7 @@ async def get_pauta_items(
     current_user: Usuario = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
-    """Retorna el catálogo maestro de 19 ítems de inspección preventiva de taller."""
+    """Retorna el catálogo maestro de 11 ítems de inspección preventiva de taller."""
     return await mantencion_service.get_pauta_items(db)
 
 
@@ -203,6 +204,19 @@ async def liberar_turno(
 ):
     """Liberación / Entrega de turno para el equipo completo ('[🔄 Entregar / Pasar Turno]')."""
     return await mantencion_service.liberar_turno(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
+
+
+@router.post("/{id}/detalles", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
+async def agregar_falla(
+    id: int,
+    dto: AgregarFallaDTO,
+    current_user: Usuario = Depends(require_mecanico_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Permite a un mecánico o supervisor agregar una nueva avería detectada durante la atención."""
+    return await mantencion_service.agregar_falla(
+        db, solicitud_id=id, mecanico_id=current_user.id, dto=dto
+    )
 
 
 @router.patch("/{id}/detalles/{detalle_id}/check", response_model=SolicitudDTO)

@@ -99,36 +99,31 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
     asig_mec1_falla2 = next(m for m in det2_sup["mecanicos_asignados"] if m["id"] == 2)
     assert asig_mec1_falla2["origen"] == "SUPERVISOR"
 
-    # 6. Mecánico 1 termina su avance en Falla 1
+    # 6. Mecánico 1 termina avance en Falla 1 (donde ambos mecánicos trabajaban como equipo)
     res_fin_mec1_f1 = await client.post(
         f"/api/v1/mantencion/{sol_id}/terminar-avance",
-        json={"detalles_ids": [det1_id], "comentario": "Reemplazo de abrazadera completado"},
+        json={"detalles_ids": [det1_id], "comentario": "Reemplazo de abrazadera completado por el equipo"},
         headers=auth_headers_mecanico1,
     )
     assert res_fin_mec1_f1.status_code == 200
     data_fin_m1 = res_fin_mec1_f1.json()
     det1_post_fin = next(d for d in data_fin_m1["detalles"] if d["id"] == det1_id)
-    # Mecánico 1 ya no está activo en Falla 1, pero Mecánico 2 SIGUE ACTIVO
+    # Al ser un avance grupal compartido, se finaliza el avance para AMBOS mecánicos en Falla 1
     mec_ids_f1_post = [m["id"] for m in det1_post_fin["mecanicos_asignados"]]
     assert 2 not in mec_ids_f1_post
-    assert 3 in mec_ids_f1_post
-    # La orden sigue EN_REPARACION
+    assert 3 not in mec_ids_f1_post
+    # La orden sigue EN_REPARACION porque Falla 2 sigue activa para el equipo
     assert data_fin_m1["estado"] == "EN_REPARACION"
 
-    # 7. Mecánico 1 termina su avance en Falla 2 y Mecánico 2 termina avance en todas sus fallas
-    await client.post(
-        f"/api/v1/mantencion/{sol_id}/terminar-avance",
-        json={"detalles_ids": [det2_id]},
-        headers=auth_headers_mecanico1,
-    )
+    # 7. Cualquiera del equipo termina el avance restante del grupo
     res_fin_total = await client.post(
         f"/api/v1/mantencion/{sol_id}/terminar-avance",
-        json={"comentario": "Fin de turno noche sin cerrar todas las fallas"},
+        json={"comentario": "Fin de jornada del equipo sin cerrar todas las fallas"},
         headers=auth_headers_mecanico2,
     )
     assert res_fin_total.status_code == 200
     data_final = res_fin_total.json()
-    # Como no quedan mecánicos asignados activamente, la solicitud pasa a PENDIENTE
+    # Como no quedan mecánicos asignados activamente en ninguna falla, la solicitud pasa a PENDIENTE
     assert data_final["estado"] == "PENDIENTE"
 
     # 8. Verificación de permisos (RBAC)
@@ -147,3 +142,57 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
         headers=auth_headers_mecanico1,
     )
     assert res_mec_sup.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_autoasignar_fallas_con_colaboradores_api(
+    client,
+    db_session,
+    seed_test_data,
+    auth_headers_conductor,
+    auth_headers_mecanico1,
+):
+    """Verifica el endpoint /api/v1/mantencion/{id}/autoasignar enviando colaboradores_ids."""
+    bus = Bus(id=11, n_bus="302", patente="BC3002", marca="Scania", modelo="K400", is_active=True, en_taller=False)
+    db_session.add(bus)
+    await db_session.commit()
+
+    payload_solicitud = {
+        "n_bus": "302",
+        "descripcion_general": "Fallas múltiples para prueba colaborativa",
+        "detalles": [
+            {"falla_id": 1, "descripcion_personalizada": "Falla motor"},
+            {"falla_id": 2, "descripcion_personalizada": "Falla freno"},
+        ],
+    }
+    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
+    assert res_crear.status_code == 201
+    sol_id = res_crear.json()["id"]
+    detalles = res_crear.json()["detalles"]
+    det_ids = [d["id"] for d in detalles]
+
+    # Mecánico 1 se autoasigna las fallas e invita a Mecánico 2 (id=3)
+    res_auto = await client.post(
+        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        json={
+            "detalles_ids": det_ids,
+            "comentario": "Asignación colaborativa en equipo",
+            "colaboradores_ids": [3],
+        },
+        headers=auth_headers_mecanico1,
+    )
+    assert res_auto.status_code == 200
+    data = res_auto.json()
+    assert data["estado"] == "EN_REPARACION"
+
+    # Verificar presencia activa de ambos mecánicos
+    mec_activos = [m["mecanico_id"] for m in data["mecanicos"] if m["is_activo"]]
+    assert 2 in mec_activos
+    assert 3 in mec_activos
+
+    # Verificar que cada detalle tiene a ambos mecánicos asignados
+    for d in data["detalles"]:
+        asig_ids = [m["id"] for m in d["mecanicos_asignados"]]
+        assert 2 in asig_ids
+        assert 3 in asig_ids
+

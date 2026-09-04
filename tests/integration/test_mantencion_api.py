@@ -111,3 +111,90 @@ async def test_tomar_trabajo_con_colaboradores_nombres(client, auth_headers_cond
     mecs = data["mecanicos"]
     assert len(mecs) >= 2
     assert any(m["mecanico_id"] == seed_test_data["mecanico2"].id for m in mecs)
+
+
+@pytest.mark.asyncio
+async def test_mecanico_agregar_falla_solicitud(
+    client,
+    db_session,
+    seed_test_data,
+    auth_headers_conductor,
+    auth_headers_mecanico1,
+):
+    """Verifica que un mecánico pueda agregar una nueva avería a una solicitud existente."""
+    cat_frenos_id = seed_test_data["falla2"].categoria_id
+    mecanico1_id = seed_test_data["mecanico1"].id
+
+    # 1. Conductor crea solicitud básica
+    sol_payload = {
+        "n_bus": "BUS-AGREGAR-FALLA",
+        "descripcion_general": "Revisión general en taller",
+    }
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    assert create_res.status_code == 201
+    sol_id = create_res.json()["id"]
+
+    # 2. Conductor intenta agregar falla -> 403 Forbidden
+    res_cond_forbidden = await client.post(
+        f"/api/v1/mantencion/{sol_id}/detalles",
+        json={"categoria_id": cat_frenos_id, "descripcion_personalizada": "Intento de chofer"},
+        headers=auth_headers_conductor,
+    )
+    assert res_cond_forbidden.status_code == 403
+
+    # 3. Mecánico agrega una falla con autoasignar=True (por defecto)
+    res_mec_agrega = await client.post(
+        f"/api/v1/mantencion/{sol_id}/detalles",
+        json={
+            "categoria_id": cat_frenos_id,
+            "descripcion_personalizada": "Pastillas agrietadas detectadas durante la inspección",
+            "autoasignar": True,
+        },
+        headers=auth_headers_mecanico1,
+    )
+    assert res_mec_agrega.status_code == 201
+    data = res_mec_agrega.json()
+    assert data["estado"] == "EN_REPARACION"
+    assert len(data["detalles"]) == 1
+    nueva_falla = data["detalles"][0]
+    assert nueva_falla["categoria_id"] == cat_frenos_id
+    assert nueva_falla["resuelto"] is False
+    assert nueva_falla["descripcion_personalizada"] == "Pastillas agrietadas detectadas durante la inspección"
+    assert len(nueva_falla["mecanicos_asignados"]) == 1
+    assert nueva_falla["mecanicos_asignados"][0]["id"] == mecanico1_id
+
+    # Verificar que en comentarios de bitácora quedó registrada la detección
+    assert any("detectó y agregó una nueva avería" in c["comentario"] for c in data["comentarios"])
+
+
+@pytest.mark.asyncio
+async def test_agregar_falla_solicitud_finalizada_rechazo(
+    client,
+    db_session,
+    seed_test_data,
+    auth_headers_conductor,
+    auth_headers_mecanico1,
+):
+    """Verifica que no se pueda agregar fallas a una solicitud que ya está FINALIZADA."""
+    # 1. Crear solicitud
+    sol_payload = {"n_bus": "BUS-FIN-RECHAZO"}
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    sol_id = create_res.json()["id"]
+
+    # 2. Finalizar solicitud
+    fin_res = await client.post(
+        f"/api/v1/mantencion/{sol_id}/finalizar",
+        json={"motivo_incompleto_checklist": "No aplica pauta", "liberar_bus_taller": False},
+        headers=auth_headers_mecanico1,
+    )
+    assert fin_res.status_code == 200
+    assert fin_res.json()["estado"] == "FINALIZADO"
+
+    # 3. Intentar agregar falla a la solicitud finalizada -> 422 BusinessRuleException
+    add_res = await client.post(
+        f"/api/v1/mantencion/{sol_id}/detalles",
+        json={"categoria_id": 1, "descripcion_personalizada": "Falla tardía"},
+        headers=auth_headers_mecanico1,
+    )
+    assert add_res.status_code == 422
+    assert "no se pueden agregar fallas a una solicitud que ya ha sido finalizada" in add_res.json()["error"]["message"].lower()

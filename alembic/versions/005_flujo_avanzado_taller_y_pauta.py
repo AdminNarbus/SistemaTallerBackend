@@ -91,32 +91,19 @@ def upgrade() -> None:
         )
         op.create_index('ix_pauta_taller_items_categoria', 'pauta_taller_items', ['categoria'])
 
-        # Siembra inicial de catálogo de revisión preventiva básica
+        # Siembra inicial de catálogo de revisión preventiva básica (11 ítems oficiales)
         initial_items = [
-            # NIVELES Y FLUIDOS
-            {"categoria": "NIVELES Y FLUIDOS", "item": "Nivel de aceite de motor", "orden": 1, "is_active": True},
-            {"categoria": "NIVELES Y FLUIDOS", "item": "Nivel de refrigerante / radiador", "orden": 2, "is_active": True},
-            {"categoria": "NIVELES Y FLUIDOS", "item": "Líquido de dirección hidráulica", "orden": 3, "is_active": True},
-            {"categoria": "NIVELES Y FLUIDOS", "item": "Líquido limpiaparabrisas", "orden": 4, "is_active": True},
-            # LUCES Y SISTEMA ELÉCTRICO
-            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Luces altas y bajas", "orden": 5, "is_active": True},
-            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Luces de freno y retroceso", "orden": 6, "is_active": True},
-            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Intermitentes y luces de viraje", "orden": 7, "is_active": True},
-            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Batería y bornes", "orden": 8, "is_active": True},
-            # FRENOS Y AIRE
-            {"categoria": "FRENOS Y AIRE", "item": "Presión de tanques de aire y secador", "orden": 9, "is_active": True},
-            {"categoria": "FRENOS Y AIRE", "item": "Fugas de aire en circuito", "orden": 10, "is_active": True},
-            {"categoria": "FRENOS Y AIRE", "item": "Freno de estacionamiento / bloqueo", "orden": 11, "is_active": True},
-            {"categoria": "FRENOS Y AIRE", "item": "Espesor de pastillas / balatas", "orden": 12, "is_active": True},
-            # TREN RODADO Y NEUMÁTICOS
-            {"categoria": "TREN RODADO Y NEUMÁTICOS", "item": "Presión y estado visual de neumáticos", "orden": 13, "is_active": True},
-            {"categoria": "TREN RODADO Y NEUMÁTICOS", "item": "Ajuste de tuercas de rueda (torque)", "orden": 14, "is_active": True},
-            {"categoria": "TREN RODADO Y NEUMÁTICOS", "item": "Suspensión y fuelles de aire", "orden": 15, "is_active": True},
-            # CABINA Y SEGURIDAD
-            {"categoria": "CABINA Y SEGURIDAD", "item": "Extintor vigente y cargado", "orden": 16, "is_active": True},
-            {"categoria": "CABINA Y SEGURIDAD", "item": "Cinturón de seguridad de conductor", "orden": 17, "is_active": True},
-            {"categoria": "CABINA Y SEGURIDAD", "item": "Espejos retrovisores y parabrisas", "orden": 18, "is_active": True},
-            {"categoria": "CABINA Y SEGURIDAD", "item": "Puertas de servicio y salidas de emergencia", "orden": 19, "is_active": True},
+            {"categoria": "MOTOR Y FLUIDOS", "item": "Niveles y fugas de aceite motor", "orden": 1, "is_active": True},
+            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Control y operación de luces exteriores", "orden": 2, "is_active": True},
+            {"categoria": "CLIMATIZACIÓN", "item": "Ventilación - calefacción - A/C", "orden": 3, "is_active": True},
+            {"categoria": "CABINA E INSTRUMENTOS", "item": "Cuadro de instrumentos en general / Check", "orden": 4, "is_active": True},
+            {"categoria": "CHASIS Y ENGRASE", "item": "Engrase", "orden": 5, "is_active": True},
+            {"categoria": "MOTOR Y TRANSMISIÓN", "item": "Correas y rodillos", "orden": 6, "is_active": True},
+            {"categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Batería y terminales", "orden": 7, "is_active": True},
+            {"categoria": "ESTRUCTURA Y DESGASTE", "item": "Inspección visual en cuanto a desgaste y daños", "orden": 8, "is_active": True},
+            {"categoria": "MOTOR Y TRANSMISIÓN", "item": "Verificar estado de correas", "orden": 9, "is_active": True},
+            {"categoria": "CARROCERÍA Y SEGURIDAD", "item": "Cerraduras - pestillos - puertas - capó", "orden": 10, "is_active": True},
+            {"categoria": "CARROCERÍA Y VISIBILIDAD", "item": "Revisión de parabrisas y cristales", "orden": 11, "is_active": True},
         ]
         op.bulk_insert(pauta_items_table, initial_items)
 

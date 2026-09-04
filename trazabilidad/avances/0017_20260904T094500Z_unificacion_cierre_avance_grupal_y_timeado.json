@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 17,
+  "id": "AV-0017",
+  "timestamp": "2026-09-04T09:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-4",
+    "name": "Unificación de Cierre a 2 Formas Timeadas y Trazabilidad Grupal",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Consolidación de las formas de cierre del trabajo en taller a 2 modalidades únicas (Terminar Avance y Finalizar/Liberar), con sincronización automática del término de sesión para todos los mecánicos co-responsables de la cuadrilla y cálculo exacto de tiempos (inicio, fin y duración en minutos).",
+  "scope": {
+    "planned": [
+      "Modificar terminar_avance en repositorio para sincronizar el cierre de avance para todos los mecánicos activos en la orden o fallas",
+      "Calcular y registrar automáticamente fecha_desasignacion y duracion_minutos para cada mecánico del grupo al terminar avance",
+      "Añadir registro descriptivo en bitácora detallando ejecutor y cuadrilla participante",
+      "Actualizar pruebas de integración de fase 3 para validar la co-responsabilidad sincronizada",
+      "Crear prueba unitaria específica test_terminar_avance_grupal_cronometrado",
+      "Validar ejecución exitosa de la suite completa de 50 pruebas automatizadas"
+    ],
+    "completed": [
+      "Modificar terminar_avance en repositorio para sincronizar el cierre de avance para todos los mecánicos activos en la orden o fallas",
+      "Calcular y registrar automáticamente fecha_desasignacion y duracion_minutos para cada mecánico del grupo al terminar avance",
+      "Añadir registro descriptivo en bitácora detallando ejecutor y cuadrilla participante",
+      "Actualizar pruebas de integración de fase 3 para validar la co-responsabilidad sincronizada",
+      "Crear prueba unitaria específica test_terminar_avance_grupal_cronometrado",
+      "Validar ejecución exitosa de la suite completa de 50 pruebas automatizadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificación de vistas de React en el repositorio ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Se actualizó terminar_avance para que al ser ejecutado por cualquier miembro de la cuadrilla, se cierre la sesión de todos los mecánicos activos involucrados, cronometrando inicio, fin y duracion_minutos para cada uno."
+    },
+    {
+      "path": "tests/integration/test_fase3_asignacion_atomica.py",
+      "action": "modified",
+      "summary": "Se ajustaron las aserciones para validar que terminar_avance en una falla compartida finaliza el avance para ambos mecánicos co-responsables."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Se añadió la prueba test_terminar_avance_grupal_cronometrado validando estados, duraciones en minutos y bitácora grupal."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-005",
+      "title": "Cierre de avance sincronizado y trazabilidad de cuadrillas",
+      "rationale": "En la operativa de taller, cuando dos o más mecánicos abordan una avería o un bus juntos, actúan como un equipo. No tiene sentido operativo obligar a cada mecánico por separado a marcar el fin de su turno si el avance fue conjunto. Al hacer que 'Terminar Avance' cierre la sesión para todos los activos con el mismo timestamp, cada integrante obtiene idéntico inicio y fin cronometrado, garantizando que el análisis analítico de horas-hombre y cuadrillas sea 100% fidedigno e infalible.",
+      "consequences": "La interfaz de usuario se simplifica a solo 2 botones clave ('Terminar Avance' y 'Finalizar y Liberar'), eliminando la fricción de desasignaciones individuales redundantes y enriqueciendo los datos para reportería y KPIs futuros."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_duracion_y_autoasignacion_colaborativa.py -k test_terminar_avance_grupal_cronometrado",
+      "result": "passed",
+      "evidence": "1 passed in 0.74s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/integration/test_fase3_asignacion_atomica.py",
+      "result": "passed",
+      "evidence": "2 passed in 1.88s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "50 passed, 1 warning in 20.53s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar los dos botones únicos en la interfaz del mecánico en ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-calidad-rendimiento-y-buenas-practicas",
+    "commit": "b1f6d360567afcc1707121c05a6e9596e57a945a",
+    "dirty": true
+  },
+  "notes": [
+    "La trazabilidad de cuadrillas queda soportada directamente mediante la coincidencia exacta de inicio y fin temporal por solicitud en la base de datos."
+  ]
+}

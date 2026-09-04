@@ -8,8 +8,10 @@ from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
-from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.buses.models.bus import Bus
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
+from app.modules.mantencion.models.pauta_taller import PautaTallerItem
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,7 @@ async def seed_initial_data():
                 ("MOTOR", "Sobrecalentamiento de motor"),
                 ("CARROCERIA", "Empaquetadura o parabrisas agrietado"),
                 ("CLIMATIZACION", "Aire acondicionado no enfría"),
+                ("OTRO", "Avería general / Otro"),
             ]
             for cat_n, falla_n in fallas_sembrar:
                 if cat_n in cat_map:
@@ -154,6 +157,40 @@ async def seed_initial_data():
                 db.add(rep_obj)
                 await db.commit()
                 logger.info("[SEED] Reporte de neumáticos de prueba creado exitosamente.")
+
+            # 7. Sembrar Catálogo de Pauta Preventiva (11 ítems oficiales)
+            pauta_11_catalogo = [
+                {"orden": 1, "categoria": "MOTOR Y FLUIDOS", "item": "Niveles y fugas de aceite motor", "is_active": True},
+                {"orden": 2, "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Control y operación de luces exteriores", "is_active": True},
+                {"orden": 3, "categoria": "CLIMATIZACIÓN", "item": "Ventilación - calefacción - A/C", "is_active": True},
+                {"orden": 4, "categoria": "CABINA E INSTRUMENTOS", "item": "Cuadro de instrumentos en general / Check", "is_active": True},
+                {"orden": 5, "categoria": "CHASIS Y ENGRASE", "item": "Engrase", "is_active": True},
+                {"orden": 6, "categoria": "MOTOR Y TRANSMISIÓN", "item": "Correas y rodillos", "is_active": True},
+                {"orden": 7, "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Batería y terminales", "is_active": True},
+                {"orden": 8, "categoria": "ESTRUCTURA Y DESGASTE", "item": "Inspección visual en cuanto a desgaste y daños", "is_active": True},
+                {"orden": 9, "categoria": "MOTOR Y TRANSMISIÓN", "item": "Verificar estado de correas", "is_active": True},
+                {"orden": 10, "categoria": "CARROCERÍA Y SEGURIDAD", "item": "Cerraduras - pestillos - puertas - capó", "is_active": True},
+                {"orden": 11, "categoria": "CARROCERÍA Y VISIBILIDAD", "item": "Revisión de parabrisas y cristales", "is_active": True},
+            ]
+            for p_data in pauta_11_catalogo:
+                stmt_p = select(PautaTallerItem).where(PautaTallerItem.orden == p_data["orden"])
+                res_p = await db.execute(stmt_p)
+                p_obj = res_p.scalar_one_or_none()
+                if not p_obj:
+                    db.add(PautaTallerItem(**p_data))
+                else:
+                    p_obj.categoria = p_data["categoria"]
+                    p_obj.item = p_data["item"]
+                    p_obj.is_active = True
+
+            # Eliminar respuestas e ítems obsoletos con orden > 11 si existieran
+            from sqlalchemy import delete
+            from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
+            await db.execute(delete(TallerSolicitudPauta).where(TallerSolicitudPauta.item_id > 11))
+            await db.execute(delete(PautaTallerItem).where(PautaTallerItem.orden > 11))
+
+            await db.commit()
+            logger.info("[SEED] Catálogo de pauta preventiva de 11 ítems sincronizado exitosamente.")
 
         except Exception as e:
             logger.warning("[SEED] Error durante la siembra de datos de prueba: %s", e)

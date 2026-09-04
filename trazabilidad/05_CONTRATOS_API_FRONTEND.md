@@ -21,8 +21,8 @@ Este documento recopila todos los cambios contractuales (endpoints nuevos, modif
    - La flota operativa de buses de taller corresponde exclusivamente al rango `200 <= n_bus < 900`.
    - Buses de auxilio o vehículos de apoyo (`< 200` y `>= 900`) son excluidos por defecto en los endpoints de búsqueda y listado del taller mediante el parámetro `solo_flota_taller=true`.
    - Nuevo flag `en_taller: bool` en el modelo de Bus para control de acceso físico a patios de mantenimiento.
-3. **Pauta Preventiva de Taller (19 Ítems Obligatorios):**
-   - Catálogo estandarizado de 19 revisiones preventivas categorizadas (Motor, Frenos, Dirección, Luces, Cabina, Carrocería, etc.).
+3. **Pauta Preventiva de Taller (11 Ítems Obligatorios):**
+   - Catálogo estandarizado de 11 revisiones preventivas categorizadas (Motor y Fluidos, Luces y Sistema Eléctrico, Climatización, Cabina e Instrumentos, Chasis y Engrase, etc.).
    - Admite estados: `"OK"`, `"DEFECTO"`, `"NO_APLICA"`.
 4. **Cierre Condicional y Liberación del Bus:**
    - Para liberar el bus (`en_taller = False`) se exige que la pauta esté 100% respondida. Si falta algún ítem, se exige obligatoriamente un `motivo_incompleto_checklist`.
@@ -80,18 +80,39 @@ Todas las excepciones de dominio responden con la siguiente estructura JSON unif
 
 ---
 
-## 4. Módulo Mantención: Asignación Atómica y Avance
+## 4. Módulo Mantención: Reporte, Asignación Atómica y Avance
 
-### 4.1 `POST /api/v1/mantencion/{id}/autoasignar` (Nuevo)
+### 4.0 `POST /api/v1/mantencion/solicitudes` (Reporte de Chofer por Categorías)
+- **Roles permitidos:** `CONDUCTOR`, `ADMIN`.
+- **Descripción:** Permite al chofer reportar averías seleccionando únicamente una o varias de las 6 categorías macro (`categoria_id`), más una descripción/observación opcional. El backend resuelve de forma transparente la falla canónica activa.
+- **Payload:**
+```json
+{
+  "n_bus": "301",
+  "descripcion_general": "Fallas detectadas en recorrido",
+  "detalles": [
+    { "categoria_id": 1, "descripcion_personalizada": "Ruidos al frenar" },
+    { "categoria_id": 2, "descripcion_personalizada": "Luz baja izquierda no enciende" }
+  ]
+}
+```
+- **Respuesta (201 Created):** `SolicitudDTO` con estado `"REPORTADO"`. Cada detalle contiene `categoria_id` y `categoria_nombre`.
+
+### 4.1 `POST /api/v1/mantencion/{id}/autoasignar` (Modificado)
 - **Roles permitidos:** `MECANICO`, `ADMIN`.
-- **Descripción:** El mecánico selecciona qué fallas específicas desea reparar. Soporta co-responsabilidad si la falla ya tenía otro mecánico. Pasa el estado a `EN_REPARACION` si estaba `REPORTADO` o `PENDIENTE`.
+- **Descripción:** El mecánico selecciona qué fallas específicas desea reparar y puede opcionalmente invitar/asignar colaboradores (`colaboradores_ids`). Soporta co-responsabilidad si la falla ya tenía otro mecánico. Pasa el estado a `EN_REPARACION` si estaba `REPORTADO` o `PENDIENTE`.
 - **Payload:**
 ```json
 {
   "detalles_ids": [12, 14],
-  "comentario": "Iniciando diagnóstico en sistema de frenos"
+  "comentario": "Iniciando diagnóstico en sistema de frenos en equipo",
+  "colaboradores_ids": [3, 4]
 }
 ```
+- **Campos del Payload:**
+  - `detalles_ids` *(array de números, obligatorio)*: IDs de las fallas que se toman para reparar.
+  - `comentario` *(string, opcional)*: Nota de inicio registrada en la bitácora.
+  - `colaboradores_ids` *(array de números, opcional)*: IDs de mecánicos colaboradores a asignar atómicamente a las mismas fallas.
 - **Respuesta (200 OK):** `SolicitudDTO`.
 
 ### 4.2 `POST /api/v1/mantencion/{id}/asignar` (Nuevo)
@@ -137,7 +158,7 @@ Todas las excepciones de dominio responden con la siguiente estructura JSON unif
 
 ### 5.2 `GET /api/v1/mantencion/pauta/items` (Nuevo)
 - **Roles permitidos:** Todos los usuarios autenticados.
-- **Descripción:** Retorna el catálogo maestro de los 19 ítems de inspección preventiva ordenados por categoría y orden numérico.
+- **Descripción:** Retorna el catálogo maestro de los 11 ítems de inspección preventiva ordenados por categoría y orden numérico.
 - **Respuesta (200 OK):**
 ```json
 [
@@ -164,9 +185,9 @@ Todas las excepciones de dominio responden con la siguiente estructura JSON unif
 - **Respuesta (200 OK):**
 ```json
 {
-  "total_items": 19,
-  "respondidos": 10,
-  "pendientes": 9,
+  "total_items": 11,
+  "respondidos": 6,
+  "pendientes": 5,
   "completado": false,
   "items_con_defecto": 1,
   "respuestas": [
@@ -224,12 +245,12 @@ Todas las excepciones de dominio responden con la siguiente estructura JSON unif
 - **Roles permitidos:** `MECANICO`, `ADMIN`.
 - **Descripción:** Finaliza los trabajos de taller y libera el bus (`bus.en_taller = False`).
 - **Reglas de Negocio Validadas:**
-  - Si `respondidos < 19`: se **exige** `motivo_incompleto_checklist` obligatorio (HTTP 422 si falta).
+  - Si `respondidos < 11`: se **exige** `motivo_incompleto_checklist` obligatorio (HTTP 422 si falta).
   - Si hay fallas con `resuelto == false` o `falta_repuesto == true`: se **exige** `motivo_cierre_parcial` obligatorio (HTTP 422 si falta).
 - **Payload:**
 ```json
 {
-  "motivo_incompleto_checklist": "Pauta ítems 15-19 no realizada por urgencia de horario de salida",
+  "motivo_incompleto_checklist": "Pauta ítems 7-11 no realizada por urgencia de horario de salida",
   "motivo_cierre_parcial": "Falla #2 de aire postergada por repuesto importado en tránsito",
   "comentario_cierre": "Bus operativo para circuito local diurno",
   "liberar_bus_taller": true
@@ -307,7 +328,7 @@ interface SolicitudDTO {
   estado: "REPORTADO" | "PENDIENTE" | "EN_REPARACION" | "PENDIENTE_REASIGNACION" | "FINALIZADO";
   descripcion_general: string | null;
   foto_url: string | null;
-  motivo_incompleto_checklist: string | null; // Justificación si pauta < 19
+  motivo_incompleto_checklist: string | null; // Justificación si pauta < 11
   motivo_cierre_parcial: string | null;       // Justificación si fallas pendientes
   fecha_creacion: string;
   fecha_cierre: string | null;
@@ -328,6 +349,8 @@ interface SolicitudDTO {
 interface SolicitudDetalleDTO {
   id: number;
   solicitud_id: number;
+  categoria_id: number | null;        // ID de la categoría macro (1: FRENOS, etc.)
+  categoria_nombre: string | null;    // Nombre legible de la categoría macro
   falla_id: number | null;
   falla: FallaTallerDTO | null;
   descripcion_personalizada: string | null;
@@ -374,7 +397,7 @@ interface PautaRespuestaDTO {
    - Mostrar insignias (chips) con los avatares/nombres de los mecánicos co-responsables sobre cada falla.
    - Botón *"Entregar Mi Avance"* por cada falla o selección de fallas (`POST /{id}/terminar-avance`).
 2. **Pestaña de Pauta Preventiva:**
-   - Renderizar los 19 ítems agrupados por acordeón de categoría.
+   - Renderizar los 11 ítems agrupados por acordeón de categoría.
    - Proveer botones rápidos de selección (`OK` verde, `DEFECTO` ámbar/rojo, `N/A` gris) y campo de texto para observaciones.
    - Barra de progreso de completitud (`respondidos / total_items`).
 3. **Modal de Cierre / Liberación:**

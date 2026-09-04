@@ -27,6 +27,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     PautaBatchUpdateDTO,
     PautaEstadoResumenDTO,
     LiberarSolicitudDTO,
+    AgregarFallaDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,13 @@ class MantencionService:
         detalles_dtos = []
         for det in sol.detalles:
             falla_dto = None
+            cat_id = None
+            cat_nombre = None
             if det.falla:
                 cat_dto = None
                 if det.falla.categoria:
+                    cat_id = det.falla.categoria.id
+                    cat_nombre = det.falla.categoria.nombre
                     cat_dto = CategoriaFallaDTO(
                         id=det.falla.categoria.id,
                         nombre=det.falla.categoria.nombre,
@@ -102,6 +107,8 @@ class MantencionService:
                 SolicitudDetalleDTO(
                     id=det.id,
                     solicitud_id=det.solicitud_id,
+                    categoria_id=cat_id,
+                    categoria_nombre=cat_nombre,
                     falla_id=det.falla_id,
                     falla=falla_dto,
                     descripcion_personalizada=det.descripcion_personalizada,
@@ -198,7 +205,7 @@ class MantencionService:
             motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
-            pauta_completada=len(pauta_dtos) >= 19,
+            pauta_completada=len(pauta_dtos) >= 11,
             total_fallas=total_fallas,
             fallas_resueltas=fallas_resueltas,
             fallas_con_falta_repuesto=fallas_con_falta_repuesto,
@@ -291,10 +298,11 @@ class MantencionService:
         self, db: AsyncSession, solicitud_id: int, dto: AutoasignarFallasDTO, mecanico_id: int
     ) -> SolicitudDTO:
         logger.info(
-            "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s",
+            "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s, colaboradores=%s",
             solicitud_id,
             mecanico_id,
             dto.detalles_ids,
+            dto.colaboradores_ids,
         )
         sol = await mantencion_repository.autoasignar_fallas_mecanico(
             db,
@@ -302,6 +310,7 @@ class MantencionService:
             detalles_ids=dto.detalles_ids,
             mecanico_id=mecanico_id,
             comentario=dto.comentario,
+            colaboradores_ids=dto.colaboradores_ids,
         )
         return self._to_solicitud_dto(sol)
 
@@ -457,6 +466,27 @@ class MantencionService:
             db,
             solicitud_id=solicitud_id,
             mecanico_cierre_id=mecanico_id,
+            dto=dto,
+        )
+        return self._to_solicitud_dto(sol)
+
+    async def agregar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        dto: AgregarFallaDTO,
+    ) -> SolicitudDTO:
+        logger.info(
+            "[MANTENCION] Agregando nueva avería | solicitud_id=%s, mecanico_id=%s, autoasignar=%s",
+            solicitud_id,
+            mecanico_id,
+            dto.autoasignar,
+        )
+        sol = await mantencion_repository.agregar_falla_solicitud(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=mecanico_id,
             dto=dto,
         )
         return self._to_solicitud_dto(sol)

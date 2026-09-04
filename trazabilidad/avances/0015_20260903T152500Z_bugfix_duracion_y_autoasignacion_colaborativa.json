@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 15,
+  "id": "AV-0015",
+  "timestamp": "2026-09-03T15:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-2",
+    "name": "Corrección Bug 500 Duración y Autoasignación Colaborativa",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección del error HTTP 500 originado por la sustracción de datetimes naive vs aware en cálculo de duraciones, e implementación de autoasignación colaborativa de fallas con colaboradores_ids.",
+  "scope": {
+    "planned": [
+      "Implementar función auxiliar _calcular_duracion_minutos para normalizar y restar datetimes de forma segura",
+      "Aplicar _calcular_duracion_minutos en finalizar_solicitud y terminar_avance",
+      "Agregar campo opcional colaboradores_ids a AutoasignarFallasDTO",
+      "Habilitar autoasignar_fallas en servicio para enviar colaboradores_ids al repositorio",
+      "Actualizar autoasignar_fallas_mecanico en repositorio para asignar atómicamente a mecánicos y colaboradores, registrando presencia activa en TallerSolicitudMecanico",
+      "Agregar tests unitarios e integrados para verificar la corrección y la nueva funcionalidad"
+    ],
+    "completed": [
+      "Implementar función auxiliar _calcular_duracion_minutos para normalizar y restar datetimes de forma segura",
+      "Aplicar _calcular_duracion_minutos en finalizar_solicitud y terminar_avance",
+      "Agregar campo opcional colaboradores_ids a AutoasignarFallasDTO",
+      "Habilitar autoasignar_fallas en servicio para enviar colaboradores_ids al repositorio",
+      "Actualizar autoasignar_fallas_mecanico en repositorio para asignar atómicamente a mecánicos y colaboradores, registrando presencia activa en TallerSolicitudMecanico",
+      "Agregar tests unitarios e integrados para verificar la corrección y la nueva funcionalidad"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de lógica o endpoints de Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Se agregó el campo colaboradores_ids: Optional[List[int]] = None en AutoasignarFallasDTO."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Se actualizó autoasignar_fallas para pasar dto.colaboradores_ids al repositorio y loguearlo."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Se implementó _calcular_duracion_minutos para evitar TypeError (aware vs naive) en finalizar_solicitud y terminar_avance, y se actualizó autoasignar_fallas_mecanico para soportar colaboradores_ids."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "created",
+      "summary": "Suite de tests unitarios validando _calcular_duracion_minutos, autoasignación colaborativa y cierre sin error 500."
+    },
+    {
+      "path": "tests/integration/test_fase3_asignacion_atomica.py",
+      "action": "modified",
+      "summary": "Se agregó test de integración test_autoasignar_fallas_con_colaboradores_api verificando el contrato REST."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-002",
+      "title": "Normalización segura de datetimes en cálculo de duraciones",
+      "rationale": "PostgreSQL y func.now() generan datetimes aware con UTC, mientras que llamadas a datetime.now() en el backend generaban datetimes naive. Restarlos directamente provocaba TypeError: can't subtract offset-naive and offset-aware datetimes (HTTP 500).",
+      "consequences": "Cálculo robusto y a prueba de fallos sin importar si los datetimes en la BD son naive o aware, garantizando una duración mínima de 1 minuto."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Asignación atómica colaborativa y presencia activa compartida",
+      "rationale": "Permitir que el mecánico que toma un conjunto de fallas invite a colaboradores de forma directa sin requerir múltiples requests por separado.",
+      "consequences": "Se registran asignaciones atómicas individuales en TallerAsignacionFalla para cada mecánico y se asegura la presencia en TallerSolicitudMecanico sin duplicaciones."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "result": "passed",
+      "evidence": "3 passed in 1.11s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/integration/test_fase3_asignacion_atomica.py",
+      "result": "passed",
+      "evidence": "2 passed in 1.74s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "48 passed, 1 warning in 17.30s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Notificar al usuario y actualizar walkthrough.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "local_dev",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los endpoints y modelos DTO mantienen compatibilidad hacia atrás total."
+  ]
+}

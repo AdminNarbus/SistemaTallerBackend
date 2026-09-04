@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 22,
+  "id": "AV-0022",
+  "timestamp": "2026-09-04T17:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-MECANICOS-ACTIVOS",
+    "name": "Filtrado y Deduplicación de Mecánicos Asignados a la Orden",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección en la serialización de SolicitudDTO para que el campo 'mecanicos' liste exclusivamente a los mecánicos actualmente asignados y activos (is_activo == True) sin repetir nombres, trasladando el registro histórico completo a 'historial_mecanicos'.",
+  "scope": {
+    "planned": [
+      "Filtrar SolicitudDTO.mecanicos para incluir únicamente mecánicos activos (is_activo == True)",
+      "Eliminar duplicados de nombres cuando un mismo mecánico ha tomado la orden en múltiples turnos",
+      "Deduplicar 'mecanicos_asignados' en cada detalle de falla",
+      "Añadir campo 'historial_mecanicos' en SolicitudDTO para auditoría y trazabilidad histórica completa",
+      "Añadir prueba unitaria específica y validar toda la suite de pruebas"
+    ],
+    "completed": [
+      "Actualizado mantencion_service._to_solicitud_dto para registrar en 'mecanicos' solo presencias con is_activo=True y sin duplicar mecanico_id",
+      "Añadido 'historial_mecanicos' en SolicitudDTO preservando la trazabilidad de todos los turnos anteriores",
+      "Deduplicada la lista 'mecanicos_asignados' en cada SolicitudDetalleDTO",
+      "Añadida prueba unitaria test_mecanicos_asignados_solo_activos_sin_duplicados y actualizado test e2e de auditoría",
+      "Suite completa de 54 pruebas pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificación de componentes del repositorio frontend"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Incorporación del campo 'historial_mecanicos: List[SolicitudMecanicoDTO] = []' en SolicitudDTO para desacoplar el equipo activo actual del historial completo."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Lógica en _to_solicitud_dto para poblar 'mecanicos' únicamente con mecánicos activos únicos y poblar 'historial_mecanicos' con la totalidad de registros históricos."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Añadido test_mecanicos_asignados_solo_activos_sin_duplicados y ajustada aserción de sol_fin_avance sobre historial_mecanicos."
+    },
+    {
+      "path": "tests/e2e/test_flujo_completo_taller_e2e.py",
+      "action": "modified",
+      "summary": "Actualizada aserción de auditoría para verificar historial_mecanicos (historial inmutable) y mecanicos (equipo único participante)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-022",
+      "title": "Desacoplamiento entre equipo activo actual (mecanicos) e historial inmutable (historial_mecanicos)",
+      "rationale": "Cuando un mecánico o supervisor consulta una orden en taller, la lista 'mecanicos' debe responder a la pregunta operativa: '¿Quién está trabajando en este bus ahora mismo?'. Mostrar mecánicos inactivos o duplicar nombres genera confusión y datos redundantes en la UI. Al mantener 'mecanicos' estrictamente con los activos y crear 'historial_mecanicos' para auditoría, se satisfacen ambas necesidades sin conflicto.",
+      "consequences": "En el frontend, la lista de mecánicos asignados muestra exactamente al equipo activo sin nombres repetidos ni mecánicos de turnos pasados. Las vistas de auditoría conservan acceso a todo el historial cronológico mediante 'historial_mecanicos'."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_duracion_y_autoasignacion_colaborativa.py -v",
+      "result": "passed",
+      "evidence": "7 passed in 2.81s"
+    },
+    {
+      "command": "pytest -v",
+      "result": "passed",
+      "evidence": "54 passed in 20.93s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar cambios en git vía GitFlow y reportar al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/filtro-mecanicos-activos-sin-duplicados",
+    "commit": "92069d2",
+    "dirty": false
+  },
+  "notes": []
+}

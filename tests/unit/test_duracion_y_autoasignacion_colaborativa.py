@@ -223,9 +223,10 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
     # 4. Validar que la solicitud pasó a PENDIENTE
     assert sol_fin_avance.estado == "PENDIENTE"
 
-    # 5. Validar que AMBOS mecánicos quedaron inactivos y con duracion_minutos >= 1
-    assert len(sol_fin_avance.mecanicos) == 2
-    for mec in sol_fin_avance.mecanicos:
+    # 5. Validar que no quedan mecánicos activos en 'mecanicos' y que figuran en 'historial_mecanicos'
+    assert len(sol_fin_avance.mecanicos) == 0
+    assert len(sol_fin_avance.historial_mecanicos) == 2
+    for mec in sol_fin_avance.historial_mecanicos:
         assert mec.is_activo is False
         assert mec.fecha_desasignacion is not None
         assert mec.duracion_minutos is not None
@@ -332,6 +333,82 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
             ),
         )
     assert "ya fue marcada como resuelta" in str(exc_rep.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_mecanicos_asignados_solo_activos_sin_duplicados(db_session):
+    """
+    Verifica que en SolicitudDTO.mecanicos:
+    1. Solo aparezcan mecánicos actualmente asignados y activos (is_activo == True).
+    2. Los mecánicos previos (inactivos tras terminar avance) no aparezcan en 'mecanicos'.
+    3. Ningún nombre se repita aunque el mismo mecánico haya tomado la orden varias veces.
+    4. El historial completo permanezca disponible en 'historial_mecanicos'.
+    """
+    conductor_id = 3
+    mecanico1_id = 1
+    mecanico2_id = 2
+
+    # 1. Crear solicitud con 2 fallas
+    dto_crear = SolicitudCreateDTO(
+        n_bus="999",
+        descripcion_general="Revisión de luces y frenos",
+        detalles=[
+            SolicitudDetalleCreateDTO(descripcion_personalizada="Luz trasera rota"),
+            SolicitudDetalleCreateDTO(descripcion_personalizada="Pastillas gastadas"),
+        ],
+    )
+    solicitud = await mantencion_service.create_solicitud(
+        db_session, dto=dto_crear, creador_id=conductor_id
+    )
+    det1_id = solicitud.detalles[0].id
+    det2_id = solicitud.detalles[1].id
+
+    # 2. Mecánico 1 y Mecánico 2 se autoasignan juntos
+    dto_asig1 = AutoasignarFallasDTO(
+        detalles_ids=[det1_id, det2_id],
+        colaboradores_ids=[mecanico2_id],
+        comentario="Turno mañana",
+    )
+    sol_t1 = await mantencion_service.autoasignar_fallas(
+        db_session, solicitud_id=solicitud.id, dto=dto_asig1, mecanico_id=mecanico1_id
+    )
+    # Deben estar M1 y M2 activos exactamente una vez
+    assert len(sol_t1.mecanicos) == 2
+    ids_activos = [m.mecanico_id for m in sol_t1.mecanicos]
+    assert sorted(ids_activos) == [1, 2]
+    # No hay duplicados
+    assert len(set(ids_activos)) == len(ids_activos)
+
+    # 3. Terminar avance: el equipo pausa la orden
+    dto_terminar = TerminarAvanceDTO(comentario="Fin de turno mañana")
+    sol_fin = await mantencion_service.terminar_avance(
+        db_session, solicitud_id=solicitud.id, dto=dto_terminar, mecanico_id=mecanico1_id
+    )
+    # En estado PENDIENTE no hay mecánicos activos en 'mecanicos'
+    assert len(sol_fin.mecanicos) == 0
+    # Pero el historial sí conserva los 2 registros
+    assert len(sol_fin.historial_mecanicos) == 2
+
+    # 4. Turno tarde: Mecánico 1 retoma la orden SOLO (sin Mecánico 2)
+    dto_asig2 = AutoasignarFallasDTO(
+        detalles_ids=[det1_id],
+        colaboradores_ids=[],
+        comentario="Turno tarde solo Mecánico 1",
+    )
+    sol_t2 = await mantencion_service.autoasignar_fallas(
+        db_session, solicitud_id=solicitud.id, dto=dto_asig2, mecanico_id=mecanico1_id
+    )
+
+    # AHORA: 'mecanicos' debe contener ÚNICAMENTE a Mecánico 1
+    # NO debe aparecer Mecánico 2 (estuvo antes, pero ya no está activo)
+    # NO debe repetirse Mecánico 1 (aunque estuvo en el turno mañana y tarde)
+    assert len(sol_t2.mecanicos) == 1
+    assert sol_t2.mecanicos[0].mecanico_id == mecanico1_id
+    assert sol_t2.mecanicos[0].is_activo is True
+
+    # El historial_mecanicos debe tener los 3 registros (M1 turno 1, M2 turno 1, M1 turno 2)
+    assert len(sol_t2.historial_mecanicos) == 3
+
 
 
 

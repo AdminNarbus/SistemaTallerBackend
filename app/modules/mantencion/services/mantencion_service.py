@@ -69,6 +69,7 @@ class MantencionService:
 
             mecanicos_asignados = []
             historial_asignaciones = []
+            mecs_asig_vistos = set()
             if hasattr(det, "asignaciones") and det.asignaciones:
                 for asig in det.asignaciones:
                     mec_nom = asig.mecanico.nombre_completo if asig.mecanico else None
@@ -91,7 +92,8 @@ class MantencionService:
                         comentario=asig.comentario,
                     )
                     historial_asignaciones.append(asig_dto)
-                    if asig.is_activo:
+                    if asig.is_activo and asig.mecanico_id not in mecs_asig_vistos:
+                        mecs_asig_vistos.add(asig.mecanico_id)
                         mecanicos_asignados.append(
                             MecanicoAsignadoDTO(
                                 id=asig.mecanico_id,
@@ -125,11 +127,14 @@ class MantencionService:
             )
 
         mecanicos_dtos = []
-        for mec in sol.mecanicos:
-            mec_nombre = mec.mecanico.nombre_completo if mec.mecanico else None
+        historial_mecanicos_dtos = []
+        mecanicos_activos_ids = set()
 
-            mecanicos_dtos.append(
-                SolicitudMecanicoDTO(
+        if hasattr(sol, "mecanicos") and sol.mecanicos:
+            for mec in sol.mecanicos:
+                mec_nombre = mec.mecanico.nombre_completo if mec.mecanico else None
+
+                dto_mec = SolicitudMecanicoDTO(
                     id=mec.id,
                     solicitud_id=mec.solicitud_id,
                     mecanico_id=mec.mecanico_id,
@@ -141,7 +146,43 @@ class MantencionService:
                     fecha_asignacion=mec.fecha_asignacion,
                     fecha_desasignacion=mec.fecha_desasignacion,
                 )
-            )
+                historial_mecanicos_dtos.append(dto_mec)
+
+                if getattr(mec, "is_activo", False):
+                    if mec.mecanico_id not in mecanicos_activos_ids:
+                        mecanicos_activos_ids.add(mec.mecanico_id)
+                        mecanicos_dtos.append(dto_mec)
+
+        # Consolidar mecánicos con asignaciones de fallas activas si no estuviesen ya registrados
+        if hasattr(sol, "detalles") and sol.detalles:
+            for det in sol.detalles:
+                if hasattr(det, "asignaciones") and det.asignaciones:
+                    for asig in det.asignaciones:
+                        if getattr(asig, "is_activo", False) and asig.mecanico_id not in mecanicos_activos_ids:
+                            mecanicos_activos_ids.add(asig.mecanico_id)
+                            mec_nom = asig.mecanico.nombre_completo if asig.mecanico else None
+                            mecanicos_dtos.append(
+                                SolicitudMecanicoDTO(
+                                    id=asig.id,
+                                    solicitud_id=sol.id,
+                                    mecanico_id=asig.mecanico_id,
+                                    mecanico_nombre=mec_nom,
+                                    asignado_por_id=asig.asignado_por_id,
+                                    duracion_minutos=asig.duracion_minutos,
+                                    es_lider_responsable=False,
+                                    is_activo=True,
+                                    fecha_asignacion=asig.fecha_asignacion,
+                                    fecha_desasignacion=asig.fecha_desasignacion,
+                                )
+                            )
+
+        # En caso de solicitud FINALIZADA sin activos, incluir mecánicos únicos históricos
+        if sol.estado == "FINALIZADO" and not mecanicos_dtos and historial_mecanicos_dtos:
+            vistos_fin = set()
+            for h_mec in historial_mecanicos_dtos:
+                if h_mec.mecanico_id not in vistos_fin:
+                    vistos_fin.add(h_mec.mecanico_id)
+                    mecanicos_dtos.append(h_mec)
 
         comentarios_dtos = []
         for com in sol.comentarios:
@@ -211,6 +252,7 @@ class MantencionService:
             fallas_con_falta_repuesto=fallas_con_falta_repuesto,
             detalles=detalles_dtos,
             mecanicos=mecanicos_dtos,
+            historial_mecanicos=historial_mecanicos_dtos,
             comentarios=comentarios_dtos,
             pauta_respuestas=pauta_dtos,
         )

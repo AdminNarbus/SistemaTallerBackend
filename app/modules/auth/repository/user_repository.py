@@ -23,8 +23,7 @@ class UserRepository:
         if not rol:
             rol = Rol(nombre=rol_clean, descripcion=f"Rol de {rol_clean.capitalize()}")
             db.add(rol)
-            await db.commit()
-            await db.refresh(rol)
+            await db.flush()
         return rol
 
     async def get_by_username(
@@ -56,10 +55,16 @@ class UserRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def add(self, db: AsyncSession, usuario: Usuario) -> Usuario:
+        """Agrega un usuario a la sesión y realiza flush atómico sin commit."""
+        db.add(usuario)
+        await db.flush()
+        return usuario
+
     async def create(
         self, db: AsyncSession, usuario_in: UsuarioCreateDTO
     ) -> Usuario:
-        """Crea un nuevo usuario en la BD encriptando su contraseña y vinculando su rol_id."""
+        """Crea un nuevo usuario en la BD (flush atómico sin commit)."""
         logger.debug("[AUTH] Creando usuario | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
         rol_obj = await self.get_or_create_rol(db, usuario_in.rol or "CONDUCTOR")
         password_hash = get_password_hash(usuario_in.password)
@@ -71,25 +76,22 @@ class UserRepository:
             rol_id=rol_obj.id,
             is_active=usuario_in.is_active if usuario_in.is_active is not None else True,
         )
-        db.add(db_usuario)
-        await db.commit()
-        await db.refresh(db_usuario)
-        logger.info("[AUTH] Usuario creado exitosamente | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
+        await self.add(db, db_usuario)
+        logger.info("[AUTH] Usuario creado en sesión | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
         return db_usuario
 
     async def desactivar(
         self, db: AsyncSession, user_id: int
     ) -> Optional[Usuario]:
-        """Soft-delete: Deshabilita la cuenta estableciendo is_active = False."""
+        """Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico."""
         user = await self.get_by_id(db, user_id=user_id)
         if not user:
             logger.warning("[AUTH] Intento de desactivar usuario inexistente | id=%s", user_id)
             return None
 
         user.is_active = False
-        await db.commit()
-        await db.refresh(user)
-        logger.info("[AUTH] Usuario desactivado (soft-delete) | id=%s | username='%s'", user.id, user.username)
+        await db.flush()
+        logger.info("[AUTH] Usuario desactivado en sesión (soft-delete) | id=%s | username='%s'", user.id, user.username)
         return user
 
     async def authenticate(

@@ -111,13 +111,12 @@ class BusRepository:
     async def update_en_taller(
         self, db: AsyncSession, bus_id: int, en_taller: bool
     ) -> Optional[Bus]:
-        """Actualiza el estado en_taller del bus y persiste en base de datos."""
+        """Actualiza el estado en_taller del bus con flush atómico en sesión (sin commit)."""
         bus = await self.get_by_id(db, bus_id)
         if not bus:
             return None
         bus.en_taller = en_taller
-        await db.commit()
-        await db.refresh(bus)
+        await db.flush()
         return bus
 
 

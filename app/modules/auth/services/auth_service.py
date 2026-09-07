@@ -72,6 +72,8 @@ class AuthService:
             raise ConflictException("El nombre de usuario ya está registrado en el sistema.")
 
         nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
+        await db.commit()
+        await db.refresh(nuevo_usuario)
         access_token = create_access_token(subject=nuevo_usuario.id)
         logger.info("[AUTH] Registro exitoso | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
 
@@ -92,7 +94,32 @@ class AuthService:
             raise ConflictException("El nombre de usuario ya está registrado en el sistema.")
 
         nuevo_usuario = await user_repository.create(db, usuario_in=usuario_in)
+        await db.commit()
+        await db.refresh(nuevo_usuario)
         return UsuarioResponseDTO.model_validate(nuevo_usuario)
+
+    async def deshabilitar_usuario(
+        self, db: AsyncSession, usuario_id: int, current_user_id: int
+    ) -> UsuarioResponseDTO:
+        """
+        Caso de Uso: Deshabilita la cuenta de un usuario (soft-delete).
+        Valida que el supervisor no pueda deshabilitarse a sí mismo y que el usuario exista.
+        Gobierna la transacción (commit).
+        """
+        logger.info("[AUTH] Deshabilitando usuario | id=%s | solicitado_por=%s", usuario_id, current_user_id)
+        if current_user_id == usuario_id:
+            raise BusinessRuleException(
+                "No puedes deshabilitar tu propia cuenta de usuario.", status_code=400
+            )
+
+        user = await user_repository.get_by_id(db, user_id=usuario_id)
+        if not user:
+            raise NotFoundException("El usuario especificado no fue encontrado.")
+
+        await user_repository.desactivar(db, user_id=usuario_id)
+        await db.commit()
+        await db.refresh(user)
+        return UsuarioResponseDTO.model_validate(user)
 
     async def listar_usuarios(
         self, db: AsyncSession, skip: int = 0, limit: int = 100

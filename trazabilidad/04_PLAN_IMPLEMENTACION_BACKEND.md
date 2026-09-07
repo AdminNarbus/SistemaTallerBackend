@@ -20,10 +20,13 @@
 - [x] Implementación de logging estructurado (`logging.getLogger(__name__)`) en todos los servicios y repositorios.
 - [x] Creación y ejecución de suite de pruebas unitarias, integración y sistema E2E automatizadas con Pytest (30/30 tests aprobados).
 
-## Fase 5: Validación Local y Auditoría
+## Fase 5: Validación Local, Auditoría y Reordenamiento de Capas
 - [x] Pruebas locales de integración E2E en entorno `dev_local` (Endpoints Auth, Mantención, Neumáticos y Excepciones).
 - [x] Verificación de siembra de datos de prueba en memoria (`aiosqlite:///:memory:`).
 - [x] Validación de respuestas HTTP, DTOs y encabezados de error en cliente local.
+- [x] Separación estricta de las 3 capas (`Router` -> `Service` -> `Repository`) en todos los módulos (Auth, Buses, Mantención, Neumáticos, Supervisión), erradicando Smart Repositories con commits y bucles manuales de persistencia en servicios.
+- [x] Estandarización de comentarios predeterminados en bitácora de la OT (inicio, check de fallas, repuestos, avance, cierre) con nombres legibles y eliminación de IDs internos.
+- [x] Suite de 61 pruebas automatizadas aprobadas al 100% sin regresiones.
 
 ## Fase 6: Control de Versiones Git y Despliegue
 - [x] Consolidación de ramas de características mediante GitFlow (`feature/pruebas-sistema-backend`).

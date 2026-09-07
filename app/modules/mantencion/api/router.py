@@ -31,7 +31,6 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     LiberarSolicitudDTO,
     AgregarFallaDTO,
 )
-from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/mantencion", tags=["mantencion"])
 
@@ -95,10 +94,7 @@ async def get_solicitud(
     db: AsyncSession = SessionDep,
 ):
     """Obtiene el detalle completo de una solicitud por su ID."""
-    solicitud = await mantencion_service.get_solicitud(db, id)
-    if not solicitud:
-        raise NotFoundException("Solicitud de taller no encontrada")
-    return solicitud
+    return await mantencion_service.get_solicitud(db, id)
 
 
 @router.get("/{id}/pauta", response_model=PautaEstadoResumenDTO)

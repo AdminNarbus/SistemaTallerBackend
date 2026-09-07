@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modelo Relacional - Narbus Taller</title>
+  <!-- Mermaid.js -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <!-- SVG Pan Zoom -->
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --panel-bg: rgba(15, 23, 42, 0.85);
+      --card-border: rgba(56, 189, 248, 0.2);
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+    }
+
+    .title-group h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .title-group p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(30, 41, 59, 0.9);
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: #1e293b;
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    }
+
+    .badge-count {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    /* Diagram Viewport */
+    #viewport-container {
+      flex: 1;
+      width: 100vw;
+      height: calc(100vh - 65px);
+      position: relative;
+      background: radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.3) 0%, #090d16 100%);
+      overflow: hidden;
+      cursor: grab;
+    }
+
+    #viewport-container:active {
+      cursor: grabbing;
+    }
+
+    #mermaid-render {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #mermaid-render svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* Floating Tooltip / Instructions */
+    .hint-box {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+
+    .hint-box span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Error Toast */
+    #error-toast {
+      display: none;
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(239, 68, 68, 0.95);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>Modelo Relacional de Base de Datos - Narbus Taller</h1>
+      <p>Esquema PostgreSQL (3NF) &bull; Módulos: Auth, Flota Buses, Mantención Preventiva &amp; Correctiva, Neumáticos</p>
+    </div>
+    <div class="controls">
+      <span class="badge-count">13 Tablas Relacionadas</span>
+      <button class="btn" id="btn-zoom-in" title="Acercar">+</button>
+      <button class="btn" id="btn-zoom-out" title="Alejar">-</button>
+      <button class="btn" id="btn-reset" title="Restablecer vista">Reiniciar Zoom</button>
+    </div>
+  </header>
+
+  <div id="error-toast"></div>
+
+  <div id="viewport-container">
+    <div id="mermaid-render" class="mermaid">
+erDiagram
+    ROLES ||--o{ USUARIOS : asigna
+    BUSES ||--o{ TALLER_SOLICITUDES : tiene
+    BUSES ||--o{ REPORTES_NEUMATICOS : tiene
+    USUARIOS ||--o{ TALLER_SOLICITUDES : gestiona
+    USUARIOS ||--o{ TALLER_SOLICITUD_DETALLES : resuelve
+    USUARIOS ||--o{ TALLER_SOLICITUD_MECANICOS : participa
+    USUARIOS ||--o{ TALLER_SOLICITUD_COMENTARIOS : comenta
+    USUARIOS ||--o{ TALLER_ASIGNACION_FALLAS : atiende
+    USUARIOS ||--o{ TALLER_SOLICITUD_PAUTA : evalua
+    USUARIOS ||--o{ REPORTES_NEUMATICOS : registra
+    CATEGORIAS_FALLA ||--o{ FALLAS_TALLER : agrupa
+    FALLAS_TALLER ||--o{ TALLER_SOLICITUD_DETALLES : clasifica
+    TALLER_SOLICITUDES ||--|{ TALLER_SOLICITUD_DETALLES : contiene
+    TALLER_SOLICITUDES ||--o{ TALLER_SOLICITUD_MECANICOS : equipo
+    TALLER_SOLICITUDES ||--o{ TALLER_SOLICITUD_COMENTARIOS : bitacora
+    TALLER_SOLICITUDES ||--o{ TALLER_ASIGNACION_FALLAS : asignaciones
+    TALLER_SOLICITUDES ||--o{ TALLER_SOLICITUD_PAUTA : checklist
+    TALLER_SOLICITUD_DETALLES ||--o{ TALLER_ASIGNACION_FALLAS : asigna
+    PAUTA_TALLER_ITEMS ||--o{ TALLER_SOLICITUD_PAUTA : define
+
+    ROLES {
+        int id PK
+        string nombre
+        string descripcion
+    }
+
+    USUARIOS {
+        int id PK
+        string username
+        string password_hash
+        string nombre
+        string apellido
+        int rol_id FK
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    BUSES {
+        int id PK
+        string patente
+        string n_bus
+        string marca
+        string modelo
+        string tipo_bus
+        boolean en_taller
+        boolean is_active
+    }
+
+    CATEGORIAS_FALLA {
+        int id PK
+        string nombre
+        boolean is_active
+    }
+
+    FALLAS_TALLER {
+        int id PK
+        int categoria_id FK
+        string nombre
+        boolean is_active
+    }
+
+    TALLER_SOLICITUDES {
+        int id PK
+        string n_bus
+        int bus_id FK
+        int usuario_creador_id FK
+        int mecanico_cierre_id FK
+        string estado
+        text descripcion_general
+        text foto_url
+        datetime fecha_creacion
+        datetime fecha_cierre
+        text motivo_incompleto_checklist
+        text motivo_cierre_parcial
+    }
+
+    TALLER_SOLICITUD_DETALLES {
+        int id PK
+        int solicitud_id FK
+        int falla_id FK
+        text descripcion_personalizada
+        boolean resuelto
+        int mecanico_resolvio_id FK
+        boolean falta_repuesto
+        text comentario_repuesto
+        datetime fecha_creacion
+        datetime fecha_resolucion
+    }
+
+    TALLER_ASIGNACION_FALLAS {
+        int id PK
+        int solicitud_id FK
+        int detalle_id FK
+        int mecanico_id FK
+        int asignado_por_id FK
+        string origen
+        boolean is_activo
+        boolean resuelto_en_esta_asignacion
+        int duracion_minutos
+        datetime fecha_asignacion
+        datetime fecha_desasignacion
+    }
+
+    TALLER_SOLICITUD_MECANICOS {
+        int id PK
+        int solicitud_id FK
+        int mecanico_id FK
+        int asignado_por_id FK
+        boolean es_lider_responsable
+        boolean is_activo
+        int duracion_minutos
+        datetime fecha_asignacion
+        datetime fecha_desasignacion
+    }
+
+    TALLER_SOLICITUD_COMENTARIOS {
+        int id PK
+        int solicitud_id FK
+        int usuario_id FK
+        string tipo
+        text comentario
+        datetime fecha_registro
+    }
+
+    PAUTA_TALLER_ITEMS {
+        int id PK
+        string categoria
+        string item
+        int orden
+        boolean is_active
+    }
+
+    TALLER_SOLICITUD_PAUTA {
+        int id PK
+        int solicitud_id FK
+        int item_id FK
+        string estado
+        text observacion
+        int mecanico_id FK
+        datetime fecha_registro
+    }
+
+    REPORTES_NEUMATICOS {
+        int id PK
+        int usuario_id FK
+        int bus_id FK
+        string n_bus
+        string tipo_bus
+        json ruedas
+        text motivo
+        numeric precio
+        string marca_fuego
+        string evidencia_url
+        datetime fecha_subida
+    }
+    </div>
+    <div class="hint-box">
+      <span>Navegación interactiva:</span> Usa la rueda del mouse o los botones para Zoom &bull; Arrastra para desplazarte por el diagrama.
+    </div>
+  </div>
+
+  <script>
+    let panZoomInstance = null;
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#090d16',
+        primaryColor: '#1e293b',
+        primaryTextColor: '#f8fafc',
+        primaryBorderColor: '#38bdf8',
+        lineColor: '#38bdf8',
+        secondaryColor: '#0f172a',
+        tertiaryColor: '#1e293b'
+      },
+      er: {
+        useMaxWidth: false,
+        layoutDirection: 'TB'
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await mermaid.run({
+          nodes: document.querySelectorAll('.mermaid')
+        });
+
+        const svgElement = document.querySelector('#mermaid-render svg');
+        if (svgElement) {
+          svgElement.style.width = '100%';
+          svgElement.style.height = '100%';
+
+          panZoomInstance = svgPanZoom(svgElement, {
+            zoomEnabled: true,
+            controlIconsEnabled: false,
+            fit: true,
+            center: true,
+            minZoom: 0.2,
+            maxZoom: 10,
+            zoomScaleSensitivity: 0.25
+          });
+
+          // Enlazar controles
+          document.getElementById('btn-zoom-in').addEventListener('click', () => panZoomInstance.zoomIn());
+          document.getElementById('btn-zoom-out').addEventListener('click', () => panZoomInstance.zoomOut());
+          document.getElementById('btn-reset').addEventListener('click', () => {
+            panZoomInstance.resetZoom();
+            panZoomInstance.center();
+          });
+        }
+      } catch (err) {
+        console.error('Error renderizando Mermaid:', err);
+        const toast = document.getElementById('error-toast');
+        toast.textContent = 'Error al renderizar diagrama: ' + err.message;
+        toast.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

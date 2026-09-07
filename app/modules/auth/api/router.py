@@ -1,6 +1,6 @@
 import logging
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,6 @@ from app.api.deps import (
     require_current_user,
     require_supervisor_or_admin,
 )
-from app.core.exceptions import NotFoundException
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
@@ -84,7 +83,7 @@ async def get_me(
     """
     Devuelve la información del usuario autenticado que envió el Token Bearer.
     """
-    return current_user
+    return UsuarioResponseDTO.model_validate(current_user)
 
 
 @router.get(
@@ -165,15 +164,6 @@ async def deshabilitar_usuario(
     No borra la fila físicamente para garantizar la trazabilidad de reportes y mantenimientos.
     Exige rol de SUPERVISOR o ADMIN.
     """
-    if current_user.id == usuario_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No puedes deshabilitar tu propia cuenta de usuario.",
-        )
-
-    from app.modules.auth.repository.user_repository import user_repository
-    user_desactivado = await user_repository.desactivar(db, user_id=usuario_id)
-    if not user_desactivado:
-        raise NotFoundException("El usuario especificado no fue encontrado.")
-
-    return user_desactivado
+    return await auth_service.deshabilitar_usuario(
+        db, usuario_id=usuario_id, current_user_id=current_user.id
+    )

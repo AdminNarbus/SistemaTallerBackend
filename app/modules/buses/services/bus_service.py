@@ -73,6 +73,9 @@ class BusService:
             logger.warning("[BUSES] Bus no encontrado para actualizar en_taller | id=%s", bus_id)
             raise NotFoundException(f"Bus con ID {bus_id} no encontrado")
 
+        await db.commit()
+        await db.refresh(bus)
+
         logger.info(
             "[BUSES] Estado en_taller actualizado | bus_id=%s, en_taller=%s, motivo='%s'",
             bus_id,

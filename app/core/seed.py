@@ -3,7 +3,6 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
 from app.modules.auth.repository.user_repository import user_repository
-from app.modules.conductores.models.conductor import Conductor
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
@@ -41,23 +40,7 @@ async def seed_initial_data():
                     )
                     logger.info("[SEED] Usuario '%s' (%s) creado exitosamente.", username, rol)
 
-            # 2. Sembrar Conductores
-            conductores_sembrar = [
-                {"nombre": "Juan Pérez", "rut": "12.345.678-9"},
-                {"nombre": "Carlos Muñoz", "rut": "15.678.901-2"},
-                {"nombre": "Roberto Gómez", "rut": "10.123.456-7"},
-            ]
-            for cond_data in conductores_sembrar:
-                stmt = select(Conductor).where(Conductor.rut == cond_data["rut"])
-                res = await db.execute(stmt)
-                cond_exist = res.scalar_one_or_none()
-                if not cond_exist:
-                    cond_obj = Conductor(**cond_data)
-                    db.add(cond_obj)
-                    await db.commit()
-                    logger.info("[SEED] Conductor '%s' registrado exitosamente.", cond_data['nombre'])
-
-            # 3. Sembrar Categorías de Fallas
+            # 2. Sembrar Categorías de Fallas
             cats_sembrar = ["FRENOS", "ELECTRICO", "MOTOR", "CARROCERIA", "CLIMATIZACION", "OTRO"]
             cat_map = {}
             for cat_nombre in cats_sembrar:
@@ -71,7 +54,7 @@ async def seed_initial_data():
                     logger.info("[SEED] Categoría de Falla '%s' creada.", cat_nombre)
                 cat_map[cat_nombre] = cat_obj.id
 
-            # 4. Sembrar Fallas de Taller preconcebidas
+            # 3. Sembrar Fallas de Taller preconcebidas
             fallas_sembrar = [
                 ("FRENOS", "Desgaste de balatas / pastillas"),
                 ("FRENOS", "Fuga de aire en cañería de frenos"),
@@ -94,7 +77,7 @@ async def seed_initial_data():
                         await db.commit()
                         logger.info("[SEED] Falla de Taller '%s' (%s) creada.", falla_n, cat_n)
 
-            # 5. Sembrar Solicitudes de Mantención iniciales
+            # 4. Sembrar Solicitudes de Mantención iniciales
             user_chofer = await user_repository.get_by_username(db, "chofer1")
             stmt_count = select(TallerSolicitud)
             res_count = await db.execute(stmt_count)
@@ -138,7 +121,7 @@ async def seed_initial_data():
                 await db.commit()
                 logger.info("[SEED] Solicitudes de mantención iniciales creadas exitosamente.")
 
-            # 6. Sembrar Reporte Neumático de prueba
+            # 5. Sembrar Reporte Neumático de prueba
             stmt_neu = select(ReporteNeumatico)
             res_neu = await db.execute(stmt_neu)
             if not res_neu.scalars().all():
@@ -158,7 +141,7 @@ async def seed_initial_data():
                 await db.commit()
                 logger.info("[SEED] Reporte de neumáticos de prueba creado exitosamente.")
 
-            # 7. Sembrar Catálogo de Pauta Preventiva (11 ítems oficiales)
+            # 6. Sembrar Catálogo de Pauta Preventiva (11 ítems oficiales)
             pauta_11_catalogo = [
                 {"orden": 1, "categoria": "MOTOR Y FLUIDOS", "item": "Niveles y fugas de aceite motor", "is_active": True},
                 {"orden": 2, "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Control y operación de luces exteriores", "is_active": True},

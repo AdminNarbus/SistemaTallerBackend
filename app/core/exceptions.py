@@ -47,9 +47,14 @@ class ConflictException(NarbusException):
 
 
 class BusinessRuleException(NarbusException):
-    """Violación de una regla de negocio (ej: mecánico no asignado, solicitud ya finalizada). → HTTP 422"""
+    """Violación de una regla de negocio (ej: mecánico no asignado, solicitud ya finalizada). → HTTP 422 (o configurable)"""
     status_code = 422
     error_code = "BUSINESS_RULE_VIOLATION"
+
+    def __init__(self, message: str, detail=None, status_code: int = None):
+        super().__init__(message, detail)
+        if status_code is not None:
+            self.status_code = status_code
 
 
 class PermissionException(NarbusException):

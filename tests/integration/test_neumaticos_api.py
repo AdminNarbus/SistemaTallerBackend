@@ -1,5 +1,5 @@
-import pytest
 import io
+import pytest
 
 
 @pytest.mark.asyncio
@@ -9,6 +9,7 @@ async def test_get_formulario_neumatico(client):
     assert res.status_code == 200
     json_data = res.json()
     assert json_data["status"] == "success"
+    assert json_data["message"] == "Solicitud de formularioNeumatico recibida correctamente"
 
 
 @pytest.mark.asyncio
@@ -36,3 +37,32 @@ async def test_post_formulario_neumatico_with_file_upload(client, seed_test_data
     assert res_data["status"] == "success"
     assert res_data["reporte_id"] is not None
     assert "/uploads/evidencias/" in res_data["datos_recibidos"]["evidencia_url"]
+
+
+@pytest.mark.asyncio
+async def test_post_formulario_neumatico_con_jwt_autenticado(client, seed_test_data, auth_headers_conductor):
+    """Prueba POST /api/v1/formularioNeumatico extrayendo el usuario del token JWT."""
+    conductor = seed_test_data["conductor"]
+
+    data = {
+        "maquina": "BUS-999",
+        "tipo_bus": "Doble Piso",
+        "motivo": "Cambio de neumático vía JWT",
+        "precio": "250000",
+    }
+
+    res = await client.post("/api/v1/formularioNeumatico", data=data, headers=auth_headers_conductor)
+    assert res.status_code == 200
+    res_data = res.json()
+    assert res_data["status"] == "success"
+    assert res_data["reporte_id"] is not None
+    assert res_data["datos_recibidos"]["usuario_id"] == conductor.id
+
+    # Consultar el reporte por ID a través del router
+    reporte_id = res_data["reporte_id"]
+    res_get = await client.get(f"/api/v1/reportes/{reporte_id}", headers=auth_headers_conductor)
+    assert res_get.status_code == 200
+    data_get = res_get.json()
+    assert data_get["id"] == reporte_id
+    assert data_get["usuario_id"] == conductor.id
+    assert data_get["n_bus"] == "BUS-999"

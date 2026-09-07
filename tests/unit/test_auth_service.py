@@ -73,3 +73,34 @@ async def test_user_repository_desactivar_soft_delete(db_session):
     desactivated = await user_repository.desactivar(db_session, user.id)
     assert desactivated is not None
     assert desactivated.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_auth_service_deshabilitar_usuario(db_session):
+    """Prueba el caso de uso deshabilitar_usuario en AuthService."""
+    from app.modules.auth.services.auth_service import auth_service
+    from app.core.exceptions import BusinessRuleException, NotFoundException
+
+    user_in = UsuarioCreateDTO(
+        nombre="Servicio",
+        apellido="Test",
+        username="user_service_test",
+        password="password123",
+        rol="MECANICO",
+    )
+    user_dto = await auth_service.crear_usuario(db_session, user_in)
+    assert user_dto.is_active is True
+
+    # 1. Error al intentar deshabilitarse a sí mismo
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await auth_service.deshabilitar_usuario(db_session, usuario_id=user_dto.id, current_user_id=user_dto.id)
+    assert exc_info.value.status_code == 400
+
+    # 2. Deshabilitar por otro usuario (ej: admin con id=999)
+    res_dto = await auth_service.deshabilitar_usuario(db_session, usuario_id=user_dto.id, current_user_id=999)
+    assert res_dto.id == user_dto.id
+    assert res_dto.is_active is False
+
+    # 3. Error con usuario inexistente
+    with pytest.raises(NotFoundException):
+        await auth_service.deshabilitar_usuario(db_session, usuario_id=88888, current_user_id=999)

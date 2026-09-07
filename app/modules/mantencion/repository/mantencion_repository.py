@@ -333,6 +333,50 @@ class MantencionRepository:
     def add_pauta_respuesta(self, db: AsyncSession, pauta_entry: TallerSolicitudPauta) -> None:
         db.add(pauta_entry)
 
+    async def desactivar_mecanicos_activos(
+        self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime
+    ) -> List[TallerSolicitudMecanico]:
+        """
+        Método atómico de persistencia: Busca y desactiva todos los registros de presencia
+        activa de mecánicos para la solicitud indicada.
+        """
+        stmt = select(TallerSolicitudMecanico).where(
+            and_(
+                TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                TallerSolicitudMecanico.is_activo == True,
+            )
+        )
+        res = await db.execute(stmt)
+        mecs = list(res.scalars().all())
+        for mec in mecs:
+            mec.is_activo = False
+            mec.fecha_desasignacion = fecha_desasignacion
+        await db.flush()
+        return mecs
+
+    async def desactivar_mecanicos_por_ids(
+        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: Set[int], fecha_desasignacion: datetime
+    ) -> List[TallerSolicitudMecanico]:
+        """
+        Método atómico de persistencia: Desactiva mecánicos activos específicos por su mecanico_id.
+        """
+        if not mecanicos_ids:
+            return []
+        stmt = select(TallerSolicitudMecanico).where(
+            and_(
+                TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                TallerSolicitudMecanico.mecanico_id.in_(mecanicos_ids),
+                TallerSolicitudMecanico.is_activo == True,
+            )
+        )
+        res = await db.execute(stmt)
+        mecs = list(res.scalars().all())
+        for mec in mecs:
+            mec.is_activo = False
+            mec.fecha_desasignacion = fecha_desasignacion
+        await db.flush()
+        return mecs
+
     async def flush(self, db: AsyncSession) -> None:
         await db.flush()
 

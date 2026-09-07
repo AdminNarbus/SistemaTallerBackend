@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 28,
+  "id": "AV-0028",
+  "timestamp": "2026-09-07T13:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CLEAN-1",
+    "name": "Eliminación Definitiva de Tabla Conductores y Depuración de Código Huérfano",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Erradicación definitiva de la tabla residual 'conductores' tanto en la base de datos PostgreSQL local como en el código fuente del proyecto. Se modificó la migración base 001 para que jamás cree dicha tabla, se eliminó el modelo y paquete app/modules/conductores, se limpiaron las importaciones en app/models/__init__.py, la siembra en app/core/seed.py y el diagrama relacional en modelo_relacional.html.",
+  "scope": {
+    "planned": [
+      "Eliminar tabla 'conductores' de la base de datos PostgreSQL local (DROP TABLE IF EXISTS conductores CASCADE)",
+      "Modificar migración fundacional 001_create_usuarios_table.py para evitar creación y drop de 'conductores'",
+      "Eliminar modelo Conductor y paquete huérfano app/modules/conductores",
+      "Limpiar exportaciones en app/models/__init__.py",
+      "Remover siembra de conductores en app/core/seed.py",
+      "Actualizar modelo_relacional.html eliminando entidad CONDUCTORES y ajustando contador a 13 tablas",
+      "Verificar integridad con suite completa de pruebas pytest"
+    ],
+    "completed": [
+      "alembic/versions/001_create_usuarios_table.py: Removida definición de tabla conductores y su comando en downgrade.",
+      "Base de datos PostgreSQL local: Ejecutado DROP TABLE IF EXISTS conductores CASCADE exitosamente; comprobada ausencia en information_schema.",
+      "app/modules/conductores/: Directorio eliminado íntegramente (conductor.py, models/__init__.py, __init__.py).",
+      "app/models/__init__.py: Removida importación y exportación de Conductor en __all__.",
+      "app/core/seed.py: Removida importación de Conductor y bloque de siembra de conductores; renumeradas secciones.",
+      "modelo_relacional.html: Removida entidad aislada CONDUCTORES y actualizado badge a 13 Tablas Relacionadas.",
+      "Suite de pruebas: 61/61 pruebas unitarias, integración y e2e pasando satisfactoriamente."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Creación de migración 006 con DROP TABLE (el requerimiento explícito del usuario fue erradicar cualquier rastro sin crear migraciones de eliminación intermedias)."
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/001_create_usuarios_table.py",
+      "action": "modified",
+      "summary": "Removida creación de tabla conductores y su índice en upgrade() y op.drop_table en downgrade()."
+    },
+    {
+      "path": "app/models/__init__.py",
+      "action": "modified",
+      "summary": "Removida importación y exportación en __all__ de Conductor."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Removida importación y bloque de siembra de conductores de prueba."
+    },
+    {
+      "path": "app/modules/conductores/models/conductor.py",
+      "action": "deleted",
+      "summary": "Eliminado modelo ORM Conductor."
+    },
+    {
+      "path": "app/modules/conductores/models/__init__.py",
+      "action": "deleted",
+      "summary": "Eliminado archivo init de submódulo."
+    },
+    {
+      "path": "app/modules/conductores/__init__.py",
+      "action": "deleted",
+      "summary": "Eliminado paquete app/modules/conductores."
+    },
+    {
+      "path": "modelo_relacional.html",
+      "action": "modified",
+      "summary": "Removida entidad CONDUCTORES y actualizado contador a 13 Tablas Relacionadas."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Erradicación limpia sin migración intermedia de DROP TABLE",
+      "rationale": "La tabla conductores era un artefacto residual del prototipo base sin ninguna relación ni clave foránea activa en el sistema 3NF. Siguiendo la directriz del usuario, en lugar de generar una migración 006 que cree ruido histórico, se limpió la migración 001 directamente y se eliminó la tabla física en la base de datos de desarrollo local.",
+      "consequences": "La arquitectura del backend queda 100% limpia de entidades huérfanas; la totalidad de los actores del sistema (conductores, mecánicos, supervisores y administradores) operan coherentemente bajo la tabla unificada usuarios."
+    }
+  ],
+  "verification": [
+    {
+      "command": "SELECT table_name FROM information_schema.tables WHERE table_name='conductores'",
+      "result": "passed",
+      "evidence": "CONDUCTORES_TABLE_EXISTS=False verificado directamente en PostgreSQL local."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "61 passed in ~10s sin ninguna regresión."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con el desarrollo o requerimientos funcionales del backend de taller y neumáticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "17d50d9",
+    "dirty": true
+  },
+  "notes": [
+    "Los usuarios con rol CONDUCTOR siguen operando sin ninguna alteración mediante usuarios (rol_id=1)."
+  ]
+}

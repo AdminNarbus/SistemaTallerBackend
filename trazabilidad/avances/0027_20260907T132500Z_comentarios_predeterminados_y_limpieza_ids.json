@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 27,
+  "id": "AV-0027",
+  "timestamp": "2026-09-07T13:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-7",
+    "name": "Comentarios Predeterminados Legibles y Eliminación de IDs Técnicos en Bitácora",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de comentarios predeterminados legibles para humanos ante eventos del mecánico (inicio de OT, autoasignación, check de resolución/reapertura de fallas, término de avance, liberación de turno, reporte de repuesto y cierre). Se eliminaron completamente todos los identificadores técnicos de base de datos (IDs) del texto de la bitácora visible.",
+  "scope": {
+    "planned": [
+      "Estandarizar comentario predeterminado al tomar la OT (tomar_trabajo) incluyendo nombre del mecánico, fallas y equipo",
+      "Estandarizar comentario al autoasignarse fallas (autoasignar_fallas) sin IDs técnicos de detalles ni mecánicos",
+      "Agregar comentario automático de resolución o reapertura al marcar check_detalle",
+      "Estandarizar comentario de término de avance (terminar_avance) con nombres reales de las fallas atendidas",
+      "Estandarizar comentarios de salida de mecánico, entrega de turno, reporte de repuesto y cierre de OT",
+      "Eliminar patrones de IDs internos en todos los textos de comentarios de mantención",
+      "Crear suite de pruebas unitarias test_comentarios_predeterminados.py"
+    ],
+    "completed": [
+      "app/modules/mantencion/services/mantencion_service.py: Implementada función utilitaria _describir_detalle segura contra lazy loads para traducir detalles de fallas a nombres legibles por humanos.",
+      "tomar_trabajo: Ahora inserta comentario predeterminado '{mec_nom} inició los trabajos de esta OT atendiendo las fallas: ... junto al equipo: ...'",
+      "autoasignar_fallas: Reemplazada cadena con IDs numéricos por '{mec_nom} inició trabajo en las fallas: ... junto a ...'",
+      "asignar_fallas_supervisora: Reemplazada cadena con IDs numéricos por '{sup_nom} asignó las fallas [...] al mecánico {mec_nom}'",
+      "check_detalle: Registra automáticamente entrada en bitácora '{mec_nom} completó la reparación de la falla: ...' (tipo RESOLUCION) o '{mec_nom} reabrió la falla: ...' (tipo REAPERTURA)",
+      "terminar_avance: Reemplazada la frase técnica 'en X asignación(es) de falla' por los nombres de las fallas trabajadas",
+      "reportar_repuesto: Reemplazado 'falla #{detalle_id}' por '{mec_nom} reportó FALTA DE REPUESTO / REPUESTO DISPONIBLE para la falla: ...'",
+      "guardar_respuestas_pauta: Nombre real del mecánico registrado en lugar del término genérico 'Mecánico'",
+      "finalizar_solicitud: Incorporado nombre del mecánico responsable del cierre y estado de liberación del bus",
+      "desasignar_mecanico y liberar_turno: Comentarios automáticos claros con nombre de usuario y motivo",
+      "tests/unit/test_comentarios_predeterminados.py: Suite de pruebas unitarias cubriendo todo el ciclo y verificando la ausencia total de expresiones regulares de IDs técnicos."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de esquema DDL en base de datos (taller_solicitud_comentarios ya contenía columnas necesarias)",
+      "Alteraciones en repositorio o endpoints de Frontend fuera de API contracts"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Incorporación de _describir_detalle y estandarización de comentarios legibles sin IDs técnicos en 10 métodos del workflow de mantención."
+    },
+    {
+      "path": "tests/unit/test_comentarios_predeterminados.py",
+      "action": "created",
+      "summary": "Pruebas unitarias completas del flujo de comentarios automáticos verificando ausencia de IDs numéricos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-028",
+      "title": "Bitácora orientada al usuario operativo: nombres legibles y eliminación de IDs técnicos",
+      "rationale": "Los comentarios de bitácora en la OT son leídos directamente por mecánicos, supervisores y personal de operaciones. Mostrar identificadores numéricos de base de datos como (IDs: [1, 2]), falla #14 o mecánico #3 generaba confusión y ruido visual. Los eventos automáticos ahora articulan claramente la acción con nombres y apellidos y nombres de fallas.",
+      "consequences": "Mayor claridad y valor informativo en la interfaz de usuario. Los IDs continúan disponibles en los campos estructurales del DTO (id, detalle_id, mecanico_id) para fines de claves e interacción técnica, pero nunca en el texto expuesto."
+    },
+    {
+      "id": "DEC-029",
+      "title": "Registro automático en bitácora ante resolución y reapertura de averías",
+      "rationale": "Cuando un mecánico resuelve una avería individualmente o reabre una previamente resuelta en check_detalle, es un hito operativo crucial. Registrarlo automáticamente permite trazar cronológicamente cuándo y quién concluyó cada avería sin exigir redacciones manuales adicionales.",
+      "consequences": "Trazabilidad cronológica completa en taller_solicitud_comentarios de cada falla resuelta con tipos de evento RESOLUCION y REAPERTURA."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/unit/test_comentarios_predeterminados.py",
+      "result": "passed",
+      "evidence": "1 passed in 1.59s: Validó que todos los eventos de inicio, check, asignación, repuesto, pauta y cierre generen comentarios sin IDs."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "61 passed, 1 warning in 23.37s: Suite completa de pruebas pasando al 100%."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las integraciones de reportes y auditoría según el plan de mantención.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "17d50d9",
+    "dirty": true
+  },
+  "notes": [
+    "No se requirieron cambios en los modelos ORM ni migraciones Alembic.",
+    "Compatibilidad 100% mantenida con todos los endpoints REST existentes y los DTOs de respuesta."
+  ]
+}

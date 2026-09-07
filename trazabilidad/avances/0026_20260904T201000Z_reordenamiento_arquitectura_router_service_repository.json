@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 26,
+  "id": "AV-0026",
+  "timestamp": "2026-09-04T20:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "ARQ-1",
+    "name": "Reordenamiento Arquitectónico Transversal Router -> Service -> Repository",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Reordenamiento arquitectónico exhaustivo y estricto en todos los módulos del backend (Auth, Buses, Mantención, Supervisión): 1) Routers: HTTP, validación con DTOs, extracción de JWT y delegación exclusiva al servicio sin saltos de capa; 2) Services: validación de reglas de taller, orquestación de casos de uso y gobierno transaccional (commit/rollback) en lugar de delegarlo a repositorios; 3) Repositories: persistencia pura SQL (CRUD atómico) sin llamadas a commit() y provisión de métodos atómicos como desactivar_mecanicos_activos; 4) Eliminación definitiva de bytecode residual huérfano.",
+  "scope": {
+    "planned": [
+      "Revisar todo el proyecto y verificar responsabilidades por capa según directrices de .agents/AGENTS.md",
+      "Eliminar anti-patrón Smart Repository en user_repository y bus_repository suprimiendo commits internos",
+      "Gobernar transacciones exclusivamente en la capa de servicio (auth_service, bus_service, mantencion_service)",
+      "Eliminar salto de capa en auth router (DELETE /usuarios/{id}) delegándolo a auth_service.deshabilitar_usuario",
+      "Agregar métodos atómicos de persistencia desactivar_mecanicos_activos y desactivar_mecanicos_por_ids en mantencion_repository",
+      "Refactorizar tomar_trabajo y liberar_turno en mantencion_service para usar persistencia atómica en vez de bucles manuales",
+      "Delegar asignar_fallas_supervisora a través de supervision_service",
+      "Eliminar bytecode residual .pyc obsoleto en app/api/v1/endpoints/",
+      "Asegurar 100% de la suite de tests pasando sin regresiones contractuales"
+    ],
+    "completed": [
+      "Ampliación de BusinessRuleException en app/core/exceptions.py permitiendo status_code opcional",
+      "Adición de métodos atómicos desactivar_mecanicos_activos y desactivar_mecanicos_por_ids en mantencion_repository.py",
+      "Refactorización de mantencion_service.py (tomar_trabajo, liberar_turno, get_solicitud) usando métodos atómicos y levantando NotFoundException desde el servicio",
+      "Limpieza de mantencion/api/router.py delegando get_solicitud directamente sin chequeos manuales",
+      "Conversión de user_repository.py a persistencia pura con método add y eliminación de commits en get_or_create_rol, create y desactivar",
+      "Implementación de auth_service.deshabilitar_usuario con regla de negocio (auto-desactivación bloqueada) y gobierno transaccional",
+      "Refactorización de auth/api/router.py eliminando importación directa de repositorio y validación manual de excepciones HTTP",
+      "Eliminación de commit interno en bus_repository.py (update_en_taller) y control transaccional gobernado en bus_service.py",
+      "Encapsulación de caso de uso asignar_fallas_supervisora en supervision_service.py y delegación desde supervision/api/router.py",
+      "Limpieza de 4 archivos compilados .pyc obsoletos en app/api/v1/endpoints/__pycache__/",
+      "Ejecución exitosa de 60/60 tests automatizados en la suite completa de pruebas (100% pasando)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Alteración de esquemas DDL de base de datos o migraciones de Alembic",
+      "Modificación de contratos REST consumidos por el frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/exceptions.py",
+      "action": "modified",
+      "summary": "Permite configurar status_code personalizado en BusinessRuleException manteniendo 422 por defecto."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Incorporación de métodos atómicos desactivar_mecanicos_activos y desactivar_mecanicos_por_ids."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Uso de métodos atómicos de persistencia en tomar_trabajo y liberar_turno; get_solicitud garantiza NotFoundException."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "get_solicitud delega directamente al servicio sin validación manual de existencia en el router."
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "Eliminados commits en get_or_create_rol, create y desactivar; añadido método atómico add con flush."
+    },
+    {
+      "path": "app/modules/auth/services/auth_service.py",
+      "action": "modified",
+      "summary": "Control transaccional explícito en register y crear_usuario; implementación de caso de uso deshabilitar_usuario."
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "DELETE /usuarios/{id} delega a auth_service.deshabilitar_usuario; GET /me retorna DTO tipado validado."
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Eliminado db.commit() en update_en_taller reemplazándolo por flush atómico en sesión."
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "actualizar_en_taller gobierna la transacción con commit y refresh explícitos."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Incorporación de asignar_fallas_supervisora como caso de uso del servicio de supervisión."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "POST /solicitudes/{id}/asignar delega a supervision_service en lugar de saltarse a mantencion_service."
+    },
+    {
+      "path": "tests/unit/test_auth_service.py",
+      "action": "modified",
+      "summary": "Añadida prueba unitaria para test_auth_service_deshabilitar_usuario validando regla de negocio y soft delete."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-026",
+      "title": "Delimitación Estricta de las Tres Capas: Router -> Service -> Repository",
+      "rationale": "El análisis transversal del backend reveló inconsistencias donde repositorios realizaban commits de manera autónoma (Smart Repository) impidiendo transacciones compuestas, routers importaban repositorios saltándose la capa de negocio, y servicios contenían bucles manuales de persistencia en memoria. Al reordenar cada componente a su función estricta (Router: HTTP/DTOs/JWT, Service: reglas de taller/orquestación/commit, Repository: CRUD SQL atómico puro), se garantiza un desacoplamiento completo y testeable en todo el sistema.",
+      "consequences": "Mantenibilidad extrema, cero duplicación de lógica, estricta adhesión a BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, y 100% de compatibilidad con contratos de Frontend y suite de pruebas."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_auth_service.py tests/integration/test_auth_api.py -v",
+      "result": "passed",
+      "evidence": "9 passed in 4.32s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_bus_service.py tests/integration/test_buses_api.py -v",
+      "result": "passed",
+      "evidence": "5 passed in 1.38s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/integration/test_supervision_api.py -v",
+      "result": "passed",
+      "evidence": "3 passed in 1.22s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/ -q",
+      "result": "passed",
+      "evidence": "60 passed, 1 warning in 22.74s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Mantener la observabilidad y soporte a requerimientos futuros respetando la arquitectura delimitada.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "dirty": true
+  },
+  "notes": [
+    "La suite completa de tests aumentó de 59 a 60 pruebas pasando al 100%."
+  ]
+}

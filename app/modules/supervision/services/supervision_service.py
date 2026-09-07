@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.dtos.mantencion_dto import SolicitudDTO
+from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
 from app.modules.supervision.repository.supervision_repository import supervision_repository
 from app.modules.supervision.dtos.supervision_dto import (
     ResumenTallerDTO,
@@ -142,6 +142,27 @@ class SupervisionService:
         """Retorna exclusivamente las alertas operacionales activas de taller."""
         resumen = await self.get_resumen_taller(db)
         return resumen.alertas
+
+    async def asignar_fallas_supervisora(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: AsignarFallasSupervisoraDTO,
+        supervisor_id: int,
+    ) -> SolicitudDTO:
+        """
+        Caso de uso de supervisión: Asignación directa de fallas por parte de la supervisora
+        a un mecánico específico. Coordina con MantencionService para la ejecución de la regla de taller.
+        """
+        logger.info(
+            "[SUPERVISION_SERVICE] Asignando fallas a mecánico | supervisor_id=%s | mecanico_id=%s | solicitud_id=%s",
+            supervisor_id,
+            dto.mecanico_id,
+            solicitud_id,
+        )
+        return await mantencion_service.asignar_fallas_supervisora(
+            db, solicitud_id=solicitud_id, dto=dto, supervisor_id=supervisor_id
+        )
 
 
 supervision_service = SupervisionService()

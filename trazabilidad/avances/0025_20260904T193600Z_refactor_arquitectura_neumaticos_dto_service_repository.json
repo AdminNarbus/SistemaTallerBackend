@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 25,
+  "id": "AV-0025",
+  "timestamp": "2026-09-04T19:36:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEUM-1",
+    "name": "Reordenamiento Arquitectónico y Separación Estricta de Capas en Neumáticos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Reordenamiento y delimitación estricta de responsabilidades por capa en el módulo `app/modules/neumaticos`: 1) Router: HTTP, validación de entrada con DTOs, extracción de usuario desde token JWT (con fallback retrocompatible) y response_model tipado; 2) Service: orquestación completa del caso de uso, validaciones de negocio, almacenamiento asíncrono de evidencias, manejo de excepciones de dominio y gobierno transaccional (commit/rollback); 3) Repository: persistencia pura (SQL) con consultas CRUD atómicas y sin llamadas a db.commit(); 4) DTOs: tipado estricto con FormularioNeumaticoResponseDTO, FormularioNeumaticoStatusDTO y ReporteNeumaticoCreateDTO.",
+  "scope": {
+    "planned": [
+      "Revisar exclusivamente las carpetas y archivos de app/modules/neumaticos",
+      "Separar responsabilidades según el patrón Router -> Service -> Repository",
+      "Implementar extracción de user_id desde JWT en Router manteniendo retrocompatibilidad",
+      "Gobernar la transacción (commit / rollback) exclusivamente en Service",
+      "Convertir NeumaticoRepository a persistencia pura con métodos atómicos (add, get_by_id, get_bus_by_numero, list_reportes, count)",
+      "Crear y tipar DTOs formales de entrada y respuesta en dtos/",
+      "Asegurar 100% de tests pasando sin regresiones"
+    ],
+    "completed": [
+      "Refactorización de app/modules/neumaticos/dtos/reporte_neumatico_dto.py y dtos/__init__.py incorporando FormularioNeumaticoResponseDTO, FormularioNeumaticoStatusDTO con compatibilidad dual atributo/subíndice",
+      "Refactorización de app/modules/neumaticos/repository/neumatico_repository.py eliminando db.commit() interno e implementando add (con flush), get_by_id, get_bus_by_numero, list_reportes y count",
+      "Refactorización de app/modules/neumaticos/services/formulario_neumatico_service.py implementando orquestación pura, control transaccional explícito (commit/rollback) y excepciones de dominio (BusinessRuleException, NotFoundException)",
+      "Refactorización de app/modules/neumaticos/api/router.py con inyección de JWT (get_current_user), uso de DTOs y response_model tipado en GET /formularioNeumatico, POST /formularioNeumatico y GET /reportes/{id}",
+      "Ampliación de la suite de tests unitarios e integración (10/10 tests de neumáticos pasando y 59/59 globales)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de DDL o esquemas de base de datos",
+      "Intervención en módulos ajenos a neumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/neumaticos/dtos/reporte_neumatico_dto.py",
+      "action": "modified",
+      "summary": "Adición de FormularioNeumaticoResponseDTO, FormularioNeumaticoStatusDTO y soporte para acceso tipo diccionario y atributo."
+    },
+    {
+      "path": "app/modules/neumaticos/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de todos los nuevos DTOs del módulo neumáticos."
+    },
+    {
+      "path": "app/modules/neumaticos/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Conversión a persistencia pura con consultas CRUD atómicas y eliminación de commits internos."
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Orquestación limpia de negocio, control de transacciones (commit/rollback) y manejo de excepciones de dominio."
+    },
+    {
+      "path": "app/modules/neumaticos/api/router.py",
+      "action": "modified",
+      "summary": "Extracción de usuario desde JWT (get_current_user), encapsulación DTO y validación de response_model."
+    },
+    {
+      "path": "tests/unit/test_neumaticos_service.py",
+      "action": "modified",
+      "summary": "Ampliación de pruebas unitarias para DTOs, métodos del servicio y operaciones atómicas del repositorio."
+    },
+    {
+      "path": "tests/integration/test_neumaticos_api.py",
+      "action": "modified",
+      "summary": "Pruebas de integración con autenticación Bearer JWT y consulta por ID."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-025",
+      "title": "Delimitación Estricta de Responsabilidades por Capa en Neumáticos",
+      "rationale": "El módulo de neumáticos presentaba lógica dispersa: el repositorio realizaba commits de forma no controlada, el servicio capturaba errores de base de datos con simple warning sin rollback adecuado, y el router recibía 8 parámetros form-data sueltos sin usar DTOs ni verificar el token JWT. Al reordenar cada componente a su rol correspondiente (Router para HTTP/JWT, Service para orquestación y transacciones, Repository para SQL atómico puro y DTOs para contratos), se garantiza la mantenibilidad y estabilidad arquitectónica del backend.",
+      "consequences": "Arquitectura limpia, desacoplada y robusta, 100% compatible con el Frontend existente y con la suite de pruebas automatizadas."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_neumaticos_service.py tests/integration/test_neumaticos_api.py tests/e2e/test_flujo_neumaticos_e2e.py -v",
+      "result": "passed",
+      "evidence": "10 passed in 3.31s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/ -q",
+      "result": "passed",
+      "evidence": "59 passed, 1 warning in 23.12s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las tareas de mantenimiento y nuevas características del backend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "17d50d9",
+    "dirty": true
+  },
+  "notes": [
+    "Se mantuvo 100% de retrocompatibilidad con el cliente Frontend vía multipart/form-data y endpoints /formularioNeumatico."
+  ]
+}

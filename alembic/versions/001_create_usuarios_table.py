@@ -1,4 +1,4 @@
-"""Create base tables: roles, conductores, usuarios
+"""Create base tables: roles, usuarios
 
 Revision ID: 001_usuarios
 Revises: 
@@ -35,18 +35,7 @@ def upgrade() -> None:
         op.create_index(op.f('ix_roles_id'), 'roles', ['id'], unique=False)
         op.create_index(op.f('ix_roles_nombre'), 'roles', ['nombre'], unique=True)
 
-    # 2. Tabla conductores
-    if 'conductores' not in tables:
-        op.create_table(
-            'conductores',
-            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-            sa.Column('nombre', sa.String(length=255), nullable=False),
-            sa.Column('rut', sa.String(length=50), nullable=True),
-            sa.PrimaryKeyConstraint('id')
-        )
-        op.create_index(op.f('ix_conductores_id'), 'conductores', ['id'], unique=False)
-
-    # 3. Tabla usuarios
+    # 2. Tabla usuarios
     if 'usuarios' not in tables:
         op.create_table(
             'usuarios',
@@ -68,5 +57,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table('usuarios')
-    op.drop_table('conductores')
     op.drop_table('roles')

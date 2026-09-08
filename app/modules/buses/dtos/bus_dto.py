@@ -48,6 +48,15 @@ class BusAutocompleteDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BusSimpleDTO(BaseModel):
+    id: int
+    n_bus: str
+    patente: Optional[str] = None
+    en_taller: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BusSearchPayloadDTO(BaseModel):
     query: Optional[str] = None
 

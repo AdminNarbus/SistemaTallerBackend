@@ -3,6 +3,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.buses.dtos.bus_dto import BusSimpleDTO
 from app.modules.buses.models.bus import Bus
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def es_bus_operativo_taller(n_bus: Optional[str]) -> bool:
 
 
 class BusRepository:
-    """Repositorio para consultas y persistencia del catálogo de Buses."""
+    """Acceso a datos de la tabla 'buses' con SQLAlchemy asíncrono."""
 
     async def get_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
         stmt = select(Bus).where(Bus.id == bus_id)
@@ -32,8 +33,7 @@ class BusRepository:
         return result.scalar_one_or_none()
 
     async def get_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[Bus]:
-        clean_nb = str(n_bus).strip()
-        stmt = select(Bus).where(Bus.n_bus == clean_nb)
+        stmt = select(Bus).where(Bus.n_bus == n_bus)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -46,7 +46,7 @@ class BusRepository:
         stmt = select(Bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
-        stmt = stmt.order_by(Bus.id.asc())
+        stmt = stmt.order_by(Bus.n_bus.asc())
         result = await db.execute(stmt)
         buses = list(result.scalars().all())
 
@@ -61,14 +61,15 @@ class BusRepository:
         prefix: str = "",
         solo_activos: bool = True,
         solo_flota_taller: bool = True,
-    ) -> List[str]:
+    ) -> List[BusSimpleDTO]:
         """
-        Filtra n_bus de buses activos cuyo número inicie con el prefijo dado.
-        Ordena de manera numérica ascendente (o alfanumérica en caso de no ser número).
+        Filtra buses activos cuyo número inicie con el prefijo dado.
+        Retorna una lista de BusSimpleDTO (id, n_bus, patente, en_taller)
+        ordenada de manera numérica ascendente.
         Si solo_flota_taller es True, excluye vehículos fuera del rango 200 <= n_bus < 900.
         """
         clean_prefix = prefix.strip()
-        stmt = select(Bus.n_bus)
+        stmt = select(Bus.id, Bus.n_bus, Bus.patente, Bus.en_taller)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
         if clean_prefix:
@@ -76,10 +77,12 @@ class BusRepository:
         stmt = stmt.order_by(Bus.n_bus.asc())
 
         result = await db.execute(stmt)
-        n_buses_raw = result.scalars().all()
+        rows = result.all()
 
-        buses_filtrados: List[str] = []
-        for nb in n_buses_raw:
+        buses_filtrados: List[BusSimpleDTO] = []
+        vistos = set()
+        for row in rows:
+            b_id, nb, pat, en_t = row
             if not nb:
                 continue
             s_nb = str(nb).strip()
@@ -89,22 +92,31 @@ class BusRepository:
                 continue
             if clean_prefix and not s_nb.startswith(clean_prefix):
                 continue
-            buses_filtrados.append(s_nb)
+            if b_id in vistos:
+                continue
+            vistos.add(b_id)
+            buses_filtrados.append(
+                BusSimpleDTO(
+                    id=b_id,
+                    n_bus=s_nb,
+                    patente=pat,
+                    en_taller=bool(en_t),
+                )
+            )
 
         # Ordenar numéricamente si es posible, alfabéticamente si no
-        def sort_key(val: str):
+        def sort_key(dto: BusSimpleDTO):
             try:
-                return (0, int(val))
+                return (0, int(dto.n_bus))
             except ValueError:
-                return (1, val)
+                return (1, dto.n_bus)
 
-        buses_filtrados = list(dict.fromkeys(buses_filtrados))  # deduplicar
         buses_filtrados.sort(key=sort_key)
         return buses_filtrados
 
     async def buscar_buses(
         self, db: AsyncSession, term: str = ""
-    ) -> List[str]:
+    ) -> List[BusSimpleDTO]:
         """Método de compatibilidad."""
         return await self.buscar_n_buses_por_prefijo(db, prefix=term)
 

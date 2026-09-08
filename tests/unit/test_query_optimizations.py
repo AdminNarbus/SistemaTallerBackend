@@ -137,3 +137,100 @@ async def test_auth_user_cache_in_memory(db_session: AsyncSession):
 
     clear_user_cache()
     assert admin.id not in _USER_CACHE
+
+
+@pytest.mark.asyncio
+async def test_create_solicitud_con_falla_id_y_falla_nombre_zero_queries(db_session: AsyncSession):
+    """Verifica que al enviar falla_id y falla_nombre, la creación construye el DTO sin consultas adicionales."""
+    bus = Bus(patente="ZERO-01", n_bus="550", is_active=True)
+    db_session.add(bus)
+
+    rol = Rol(nombre="CONDUCTOR", descripcion="Conductor")
+    db_session.add(rol)
+    await db_session.flush()
+
+    chofer = Usuario(
+        username="chofer_zero",
+        password_hash="hash",
+        nombre="Pedro",
+        apellido="Pascal",
+        rol_id=rol.id,
+        is_active=True,
+    )
+    db_session.add(chofer)
+    await db_session.commit()
+
+    # Creación con bus_id, n_bus, falla_id y falla_nombre (flujo de máxima velocidad)
+    dto = SolicitudCreateDTO(
+        n_bus="550",
+        bus_id=bus.id,
+        descripcion_general="Prueba de máxima velocidad",
+        detalles=[
+            SolicitudDetalleCreateDTO(
+                falla_id=99,
+                falla_nombre="Falla Eléctrica",
+                categoria_id=3,
+                categoria_nombre="LUCES",
+                descripcion_personalizada="Ampolleta quemada",
+            )
+        ],
+    )
+
+    sol_dto = await mantencion_service.create_solicitud(
+        db_session, dto, creador_id=chofer.id, creador_nombre="Pedro Pascal"
+    )
+
+    assert sol_dto.id is not None
+    assert sol_dto.bus_id == bus.id
+    assert sol_dto.n_bus == "550"
+    assert len(sol_dto.detalles) == 1
+    d = sol_dto.detalles[0]
+    assert d.falla_id == 99
+    assert d.falla.nombre == "Falla Eléctrica"
+    assert d.categoria_id == 3
+    assert d.categoria_nombre == "LUCES"
+
+
+@pytest.mark.asyncio
+async def test_create_solicitud_con_falla_id_sin_falla_nombre_fallback(db_session: AsyncSession):
+    """Verifica que si no se envía falla_nombre, use la descripción personalizada como fallback en memoria sin error."""
+    bus = Bus(patente="FALL-01", n_bus="551", is_active=True)
+    db_session.add(bus)
+
+    rol = Rol(nombre="CONDUCTOR", descripcion="Conductor")
+    db_session.add(rol)
+    await db_session.flush()
+
+    chofer = Usuario(
+        username="chofer_fall",
+        password_hash="hash",
+        nombre="Lucia",
+        apellido="Hiriart",
+        rol_id=rol.id,
+        is_active=True,
+    )
+    db_session.add(chofer)
+    await db_session.commit()
+
+    dto = SolicitudCreateDTO(
+        n_bus="551",
+        bus_id=bus.id,
+        descripcion_general="Prueba fallback sin nombre",
+        detalles=[
+            SolicitudDetalleCreateDTO(
+                falla_id=88,
+                descripcion_personalizada="Ruido extraño en caja",
+            )
+        ],
+    )
+
+    sol_dto = await mantencion_service.create_solicitud(
+        db_session, dto, creador_id=chofer.id, creador_nombre="Lucia Hiriart"
+    )
+
+    assert sol_dto.id is not None
+    assert len(sol_dto.detalles) == 1
+    d = sol_dto.detalles[0]
+    assert d.falla_id == 88
+    assert d.falla.nombre == "Ruido extraño en caja"
+

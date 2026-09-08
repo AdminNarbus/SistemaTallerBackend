@@ -17,7 +17,7 @@ reusable_oauth2 = OAuth2PasswordBearer(
 )
 
 _USER_CACHE: Dict[int, Tuple[float, Usuario]] = {}
-_USER_CACHE_TTL_SECONDS: float = 60.0
+_USER_CACHE_TTL_SECONDS: float = 300.0  # 5 minutos de TTL para mantener sesiones activas sin reconsultar a la nube
 
 
 def clear_user_cache() -> None:

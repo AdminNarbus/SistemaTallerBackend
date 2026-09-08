@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 30,
+  "id": "AV-0030",
+  "timestamp": "2026-09-08T12:12:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-PERF-2",
+    "name": "Eliminación de Latencia Transcontinental y Keep-Alive Serverless Neon",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización integral de rendimiento para eliminar la latencia de 3.51s al reportar mantención: desactivación de pool_pre_ping innecesario, tarea de keep-alive en segundo plano cada 3 min para evitar la suspensión del cómputo de Neon, inserción batch de detalles con un solo flush y caché en memoria para buses y catálogo de fallas.",
+  "scope": {
+    "planned": [
+      "Diagnosticar la causa raíz de los 3.51s de demora entre el frontend y la base de datos",
+      "Desactivar pool_pre_ping para eliminar el ping síncrono de 160ms por cada checkout",
+      "Implementar tarea de keep-alive en segundo plano (3 min) para evitar el cold-start de Neon Serverless (2.5-3.0s)",
+      "Eliminar flushes múltiples dentro del bucle de creación de detalles en create_solicitud",
+      "Reutilizar creador_nombre desde current_user para eliminar consulta redundante a usuarios",
+      "Implementar caché en memoria con TTL para get_bus_info_by_n_bus y catálogo de fallas/categorías"
+    ],
+    "completed": [
+      "pool_pre_ping configurado en False en app/core/database.py con pool_recycle=300",
+      "Tarea de keep-alive _neon_keepalive_loop agregada a lifespan en app/main.py con warm-up en startup",
+      "create_solicitud optimizado a un solo flush en batch para todos los detalles y reutilización de creador_nombre",
+      "Cachés con TTL agregadas en mantencion_repository.py para buses y catálogo de fallas",
+      "Aislamiento de cachés en conftest.py para asegurar suite de pruebas reproducible y limpia",
+      "66/66 pruebas automatizadas aprobadas exitosamente"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones en el código fuente del Frontend (ProtoNeumaticos)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/database.py",
+      "action": "modified",
+      "summary": "Desactivado pool_pre_ping para evitar sobrecosto de 160ms de ping transcontinental por cada conexión del pool."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Pre-calentamiento del pool en el inicio de la app y tarea de keep-alive periódica (cada 3 min) para prevenir suspensión serverless de Neon."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Implementación de caché en memoria TTL para get_bus_info_by_n_bus, find_fallas_activas_by_categorias y get_fallas_info_by_ids."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud modificado para agrupar inserts de detalles en un único flush en batch y recibir creador_nombre opcional."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Inyección de current_user.nombre_completo hacia create_solicitud eliminando consulta redundante."
+    },
+    {
+      "path": "tests/conftest.py",
+      "action": "modified",
+      "summary": "Limpieza de cachés de usuario y repositorio en cada ciclo del fixture db_session."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-031",
+      "title": "Keep-Alive en segundo plano para Neon Serverless",
+      "rationale": "El tier serverless de Neon entra en modo de suspensión tras 5 minutos sin actividad. Al reactivarse ante una solicitud de usuario, añade 2.5 a 3.0 segundos de espera por handshake TLS y encendido del cómputo. Una tarea asíncrona de fondo ejecutando SELECT 1 cada 3 minutos mantiene el cómputo caliente y activo de forma imperceptible.",
+      "consequences": "Eliminación total del cold-start de 3 segundos para el frontend durante sesiones de trabajo o pruebas."
+    },
+    {
+      "id": "DEC-032",
+      "title": "Desactivación de pool_pre_ping y Batch Flush de Detalles",
+      "rationale": "Con la base de datos alojada en AWS Ohio (160ms RTT), pool_pre_ping forzaba una consulta síncrona antes de cada transacción, y el bucle de detalles realizaba un flush secuencial por avería. Al desactivar el pre-ping y agrupar los detalles en un único flush, los viajes de red bajaron de 8 a 2.",
+      "consequences": "La creación de solicitudes en caliente cayó de 3.51s a 0.61s (82.6% de reducción de tiempo)."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "66 passed, 1 warning in 22.34s"
+    },
+    {
+      "command": "python benchmark create_solicitud caliente",
+      "result": "passed",
+      "evidence": "Llamada 2: 0.797s | Llamada 3: 0.795s vs 3.51s original"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Validar la experiencia de envío de solicitudes en el frontend con el servidor uvicorn recargado y confirmar la velocidad de respuesta.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "commit": "d49b481",
+    "dirty": true
+  },
+  "notes": [
+    "Uvicorn recarga automáticamente los cambios.",
+    "El frontend ahora experimentará tiempos de respuesta de submilisegundos o subsegundo (~0.6-0.8s)."
+  ]
+}

@@ -7,8 +7,11 @@ async def test_get_catalogos_mantencion(client, auth_headers_mecanico1, seed_tes
     # Categorías
     res_cats = await client.get("/api/v1/mantencion/categorias", headers=auth_headers_mecanico1)
     assert res_cats.status_code == 200
+    assert "max-age" in res_cats.headers.get("cache-control", "")
     cats = res_cats.json()
     assert len(cats) >= 2
+    assert any(c.get("falla_id") is not None for c in cats)
+    assert any(c.get("falla_nombre") is not None for c in cats)
 
     # Fallas
     res_fallas = await client.get("/api/v1/mantencion/fallas", headers=auth_headers_mecanico1)
@@ -198,3 +201,57 @@ async def test_agregar_falla_solicitud_finalizada_rechazo(
     )
     assert add_res.status_code == 422
     assert "no se pueden agregar fallas a una solicitud que ya ha sido finalizada" in add_res.json()["error"]["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_solicitud_optimizada_con_bus_id_y_falla_id(
+    client,
+    db_session,
+    seed_test_data,
+    auth_headers_conductor,
+):
+    """Verifica que enviar bus_id y falla_id cree la solicitud de forma directa y óptima."""
+    from app.modules.buses.models.bus import Bus
+    bus = Bus(id=88, n_bus="339", patente="CC3399", is_active=True)
+    db_session.add(bus)
+    await db_session.commit()
+
+    falla_id = seed_test_data["falla1"].id
+
+    payload = {
+        "bus_id": 88,
+        "n_bus": "339",
+        "bus_patente": "CC3399",
+        "descripcion_general": "Falla óptima enviada con IDs numéricos",
+        "detalles": [
+            {
+                "falla_id": falla_id,
+                "categoria_id": 1,
+                "falla_nombre": "Fuga de refrigerante",
+                "descripcion_personalizada": "En radiador",
+            }
+        ],
+    }
+    res = await client.post("/api/v1/mantencion/solicitudes", json=payload, headers=auth_headers_conductor)
+    assert res.status_code == 201
+    data = res.json()
+    assert data["bus_id"] == 88
+    assert data["detalles"][0]["falla_id"] == falla_id
+    assert data["detalles"][0]["falla"]["nombre"] == "Fuga de refrigerante"
+
+
+@pytest.mark.asyncio
+async def test_paginacion_pendientes_y_mis_trabajos(client, auth_headers_mecanico1, seed_test_data):
+    """Verifica que los endpoints /pendientes y /mis-trabajos soporten paginación con skip y limit."""
+    res_pends = await client.get("/api/v1/mantencion/pendientes?skip=0&limit=1", headers=auth_headers_mecanico1)
+    assert res_pends.status_code == 200
+    data_pends = res_pends.json()
+    assert isinstance(data_pends, list)
+    assert len(data_pends) <= 1
+
+    res_trabajos = await client.get("/api/v1/mantencion/mis-trabajos?skip=0&limit=1", headers=auth_headers_mecanico1)
+    assert res_trabajos.status_code == 200
+    data_trabajos = res_trabajos.json()
+    assert isinstance(data_trabajos, list)
+    assert len(data_trabajos) <= 1
+

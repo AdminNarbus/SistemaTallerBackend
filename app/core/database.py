@@ -6,7 +6,7 @@ from app.core.config import settings
 engine_kwargs = {
     "echo": False,
     "future": True,
-    "pool_pre_ping": True,
+    "pool_pre_ping": False,  # Desactivado para eliminar latencia de 160ms por ping en cada checkout
 }
 if "sqlite" not in settings.async_database_url:
     engine_kwargs.update(

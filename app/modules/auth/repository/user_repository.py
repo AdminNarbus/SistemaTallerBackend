@@ -56,6 +56,27 @@ class UserRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_by_ids(
+        self, db: AsyncSession, user_ids: List[int]
+    ) -> List[Usuario]:
+        """Busca múltiples usuarios por sus IDs en una sola consulta SQL."""
+        if not user_ids:
+            return []
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.id.in_(user_ids))
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_by_ids_map(
+        self, db: AsyncSession, user_ids: List[int]
+    ) -> dict[int, Usuario]:
+        """Busca múltiples usuarios por sus IDs y retorna un diccionario {id: Usuario}."""
+        users = await self.get_by_ids(db, user_ids)
+        return {u.id: u for u in users}
+
     async def get_all(
         self, db: AsyncSession, skip: int = 0, limit: int = 100
     ) -> List[Usuario]:

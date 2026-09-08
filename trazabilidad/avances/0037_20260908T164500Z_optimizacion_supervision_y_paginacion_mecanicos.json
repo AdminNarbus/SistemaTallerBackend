@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 37,
+  "id": "AV-0037",
+  "timestamp": "2026-09-08T16:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-7",
+    "name": "Optimización Módulo Supervisión y Paginación Mecánicos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización integral del módulo de supervisión eliminando más de 18 consultas redundantes por petición, desacoplando alertas y agregando soporte de paginación uniforme (skip y limit) en auditoría y en las vistas operacionales de mecánicos (/pendientes y /mis-trabajos). Elaboración de guía técnica para Frontend.",
+  "scope": {
+    "planned": [
+      "Diagnosticar cuellos de botella en el módulo de supervisión",
+      "Desacoplar GET /supervision/alertas de get_resumen_taller para evitar over-fetching",
+      "Optimizar cálculo de alertas y métricas en SQL eliminando la carga ansiosa masiva en memoria",
+      "Eliminar producto cartesiano en get_auditoria mediante subconsultas correlacionadas EXISTS",
+      "Incorporar soporte de paginación (skip y limit) en GET /supervision/auditoria/buses-taller",
+      "Incorporar soporte de paginación (skip y limit) en GET /mantencion/pendientes y GET /mantencion/mis-trabajos",
+      "Generar guía técnica de integración para el Frontend",
+      "Validar suite completa de pruebas de integración y unitarias"
+    ],
+    "completed": [
+      "Diagnóstico completo y detallado presentado y aprobado",
+      "Método get_alertas_activas implementado en SupervisionRepository con 3 consultas directas dirigidas a anomalías activas",
+      "Método get_buses_activos_taller implementado mediante SELECT DISTINCT n_bus",
+      "SupervisionService optimizado para calcular resumen de taller sin carga masiva de entidades ORM en RAM",
+      "SupervisionRepository.get_auditoria optimizado con joinedload para escalares y subconsultas EXISTS para filtros de mecánicos",
+      "Paginación con skip y limit agregada en router de supervisión y router de mantención",
+      "Paginación soportada en SQL nativo PostgreSQL (OFFSET :skip) y fallback ORM SQLite (.offset(skip))",
+      "Pruebas de integración añadidas para verificar paginación en auditoría, pendientes y mis-trabajos",
+      "Guía técnica para Frontend creada en trazabilidad/GUIA_FRONTEND_PAGINACION_Y_SUPERVISION.md",
+      "Suite completa de 71 pruebas pasando exitosamente (100%)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones en el código fuente del repositorio Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Implementación de get_alertas_activas, get_buses_activos_taller y optimización de get_auditoria con paginación, joinedload y subconsultas EXISTS."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Desacoplamiento de get_alertas_taller y get_resumen_taller, propagación de skip/limit en auditoría."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Parámetros skip y limit añadidos al endpoint GET /auditoria/buses-taller."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Soporte de OFFSET :skip en CTE PostgreSQL y .offset(skip) en fallback ORM para list_pendientes y list_mis_trabajos."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Propagación de parámetro skip en list_pendientes y list_mis_trabajos."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Parámetro skip añadido a GET /mantencion/pendientes y GET /mantencion/mis-trabajos."
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Prueba test_auditoria_buses_taller_paginacion agregada."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Prueba test_paginacion_pendientes_y_mis_trabajos agregada."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_PAGINACION_Y_SUPERVISION.md",
+      "action": "created",
+      "summary": "Guía técnica para Frontend con contratos de paginación, alertas optimizadas y ejemplos con Axios y TanStack Query."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-037",
+      "title": "Desacoplamiento de Alertas y Consultas Analíticas Específicas en Supervisión",
+      "rationale": "El Centro de Alertas se consultaba frecuentemente y ejecutaba todas las agregaciones de KPIs y relaciones masivas innecesarias. Desacoplarlo y ejecutar 3 consultas SQL directas dirigidas a registros con problemas reduce el tiempo de respuesta y la carga sobre la base de datos.",
+      "consequences": "Respuesta en milisegundos para /supervision/alertas y eliminación del desperdicio de CPU/red en la base de datos."
+    },
+    {
+      "id": "DEC-038",
+      "title": "Subconsultas EXISTS en lugar de Outer Joins para Filtros de Mecánico",
+      "rationale": "En la auditoría de supervisión, realizar outer joins de mecanicos y detalles simultáneamente provocaba un producto cartesiano de filas que saturaba la red y la memoria. Las subconsultas EXISTS evalúan la coincidencia sin multiplicar las filas del conjunto de resultados principal.",
+      "consequences": "Consultas limpias, eliminación de filas duplicadas en la base de datos y mejor rendimiento en búsquedas por texto."
+    },
+    {
+      "id": "DEC-039",
+      "title": "Paginación No Disruptiva con skip/limit y Valores por Defecto",
+      "rationale": "Para garantizar compatibilidad total con pantallas de frontend existentes, skip tiene valor por defecto 0 y limit 50, devolviendo contratos List[...] sin envelopes forzados.",
+      "consequences": "El frontend puede adoptar la paginación progresivamente (botones o scroll infinito) sin romper pantallas en producción."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest tests/integration/test_supervision_api.py -v",
+      "result": "passed",
+      "evidence": "4 passed in test_supervision_api.py incluyendo test_auditoria_buses_taller_paginacion"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/integration/test_mantencion_api.py -v",
+      "result": "passed",
+      "evidence": "7 passed in test_mantencion_api.py incluyendo test_paginacion_pendientes_y_mis_trabajos"
+    },
+    {
+      "command": "venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "71 passed en 23.33s sin errores en toda la suite"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Compartir GUIA_FRONTEND_PAGINACION_Y_SUPERVISION.md con el equipo de frontend para coordinar la paginación de listas.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "local",
+    "dirty": false
+  },
+  "notes": [
+    "Endpoints optimizados: /supervision/alertas, /supervision/resumen-taller, /supervision/auditoria/buses-taller, /mantencion/pendientes, /mantencion/mis-trabajos.",
+    "Contratos de datos 100% compatibles hacia atrás."
+  ]
+}

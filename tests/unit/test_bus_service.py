@@ -24,15 +24,17 @@ async def test_bus_service_search_and_get(db_session):
 
     # Búsqueda por prefijo "3"
     resultados_3 = await bus_service.buscar_sugerencias_buses(db_session, query="3")
-    assert resultados_3 == ["301", "339", "342"]
+    assert [b.n_bus for b in resultados_3] == ["301", "339", "342"]
+    assert resultados_3[0].id == 2
+    assert resultados_3[0].patente == "BB3001"
 
     # Búsqueda de todos los activos en catálogo de taller (excluye 10 < 200 y 900 >= 900)
     todos_taller = await bus_service.buscar_sugerencias_buses(db_session, query=None)
-    assert todos_taller == ["301", "339", "342"]
+    assert [b.n_bus for b in todos_taller] == ["301", "339", "342"]
 
     # Búsqueda sin filtro de flota (todos los activos en BD)
     todos_completo = await bus_service.buscar_sugerencias_buses(db_session, query=None, solo_flota_taller=False)
-    assert todos_completo == ["10", "301", "339", "342", "900"]
+    assert [b.n_bus for b in todos_completo] == ["10", "301", "339", "342", "900"]
 
     # Obtener por ID
     bus_dto = await bus_service.get_bus_by_id(db_session, bus_id=3)

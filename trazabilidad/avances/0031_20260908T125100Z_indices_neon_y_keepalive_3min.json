@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 31,
+  "id": "AV-0031",
+  "timestamp": "2026-09-08T12:51:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-PERF-2",
+    "name": "Índices B-tree en Neon y Keepalive Antiapagado 3 Minutos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Creación y aplicación de 15 índices B-tree de alto rendimiento en Neon y PostgreSQL local vía migración Alembic 006, robustecimiento del bucle keep-alive a 3 minutos con telemetría RTT en FastAPI lifespan y provisión de script standalone.",
+  "scope": {
+    "planned": [
+      "Diseño y aplicación de migración Alembic 006_add_performance_indexes.py",
+      "Creación de índices en buses (n_bus, is_active, en_taller), solicitudes, detalles, fallas, categorías y usuarios",
+      "Ajuste del keep-alive en app/main.py a 3 minutos (180s) con logging de RTT",
+      "Creación de scripts/neon_keepalive.py para ejecución standalone opcional"
+    ],
+    "completed": [
+      "Migración 006_performance_indexes aplicada con éxito en Neon (total índices aumentó de 32 a 47)",
+      "Verificación de Index Scan con EXPLAIN en consultas clave (buses.n_bus y solicitudes estado/fecha)",
+      "Bucle de keep-alive en app/main.py registrando RTT cada 3 minutos",
+      "Script standalone scripts/neon_keepalive.py creado y verificado",
+      "Batería completa de 66 pruebas unitarias, de integración y E2E pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificaciones de frontend"]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/006_add_performance_indexes.py",
+      "action": "created",
+      "summary": "Migración Alembic idempotente que crea 15 índices B-tree en PostgreSQL"
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Configuración del bucle keepalive a 180s (3 min) con telemetría de latencia RTT"
+    },
+    {
+      "path": "scripts/neon_keepalive.py",
+      "action": "created",
+      "summary": "Script standalone para mantener despierta la base de datos sin servidor web"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-031-1",
+      "title": "Migración Alembic Idempotente para Índices B-tree",
+      "rationale": "Para garantizar compatibilidad total entre Neon y entornos locales sin arrojar errores de duplicidad, la migración inspecciona el catálogo antes de crear o borrar índices.",
+      "consequences": "Permite transicionar entre bases de datos de desarrollo y producción sin inconsistencias de esquema."
+    },
+    {
+      "id": "DEC-031-2",
+      "title": "Frecuencia de Keepalive fijada en 180 Segundos (3 Minutos)",
+      "rationale": "Neon Serverless suspende el cómputo tras 300 segundos (5 minutos) de inactividad. Un pulso 'SELECT 1' cada 180 segundos previene el scale-to-zero con margen de seguridad óptimo sin saturar la cuota.",
+      "consequences": "Cero retrasos de cold-start (3-4 segundos) para el usuario final."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head",
+      "result": "passed",
+      "evidence": "Running upgrade 005_taller_avanzado_pauta -> 006_performance_indexes. Exited 0."
+    },
+    {
+      "command": "inspect_neon_indexes.py",
+      "result": "passed",
+      "evidence": "Total indexes found: 47 (15 nuevos índices B-tree creados exitosamente)."
+    },
+    {
+      "command": "pytest",
+      "result": "passed",
+      "evidence": "66 passed in 22.03s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Notificar al usuario y validar rendimiento en vivo.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "dirty": true
+  },
+  "notes": ["Neon compute permanece activo 24/7."]
+}

@@ -1,10 +1,13 @@
+import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
@@ -30,12 +33,36 @@ UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
 
 
+async def _neon_keepalive_loop():
+    """
+    Tarea en background que realiza un ping liviano cada 3 minutos a la BD en la nube.
+    Evita que el cómputo serverless de Neon se suspenda por inactividad (timeout de 5 min)
+    y previene el retraso inicial (cold-start) de 3 segundos en las peticiones.
+    """
+    while True:
+        try:
+            await asyncio.sleep(180)
+            t0 = time.perf_counter()
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            rtt_ms = (time.perf_counter() - t0) * 1000
+            logger.info(
+                "[KEEPALIVE] Pulso a Neon exitoso (compute activo 24/7) | rtt=%.1fms",
+                rtt_ms,
+            )
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("[KEEPALIVE] Advertencia en ping de fondo: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Manejo del ciclo de vida de la aplicación.
     La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
     """
+    keepalive_task = None
     try:
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
         if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
@@ -49,6 +76,13 @@ async def lifespan(app: FastAPI):
                 "[STARTUP] Entorno '%s': Siembra de datos omitida (entorno productivo).",
                 settings.ENVIRONMENT.value,
             )
+
+        # Pre-calentar el pool de conexiones e iniciar keep-alive si se usa BD remota
+        if "sqlite" not in settings.async_database_url:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            logger.info("[STARTUP] Pool de base de datos pre-calentado e iniciado.")
+            keepalive_task = asyncio.create_task(_neon_keepalive_loop())
     except Exception as e:
         logger.critical(
             "[STARTUP] Error crítico durante el inicio de la aplicación: %s",
@@ -57,6 +91,12 @@ async def lifespan(app: FastAPI):
         )
     
     yield
+    if keepalive_task:
+        keepalive_task.cancel()
+        try:
+            await keepalive_task
+        except asyncio.CancelledError:
+            pass
     await engine.dispose()
 
 
@@ -77,6 +117,22 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests_timing_middleware(request, call_next):
+    """Mide y registra con precisión de milisegundos el tiempo de respuesta de cada endpoint."""
+    t_start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - t_start) * 1000.0
+    logger.info(
+        "[HTTP] %s %s | status=%s | duracion=%.1fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 # ─── Exception Handlers Globales ────────────────────────────────────────────
 # El orden de registro importa: del más específico al más genérico.

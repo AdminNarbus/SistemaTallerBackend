@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 33,
+  "id": "AV-0033",
+  "timestamp": "2026-09-08T13:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-CACHE-CLEANUP",
+    "name": "Eliminación de Cachés en Memoria de Catálogos y Preservación de Sesión de Usuario",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación completa de las estructuras de caché en memoria para catálogos (buses, categorías y fallas) en mantencion_repository.py y bus_repository.py, delegando todas las consultas directamente a la base de datos PostgreSQL/Neon. Se preservó exclusivamente la caché de usuario (_USER_CACHE en app/api/deps.py) para optimizar la validación recurrente de tokens JWT en cada petición HTTP sin sobrecargar la base de datos.",
+  "scope": {
+    "planned": [
+      "Eliminar estructuras de caché en memoria _BUS_INFO_CACHE, _FALLAS_CAT_CACHE y _FALLAS_INFO_CACHE",
+      "Reemplazar lógica en find_fallas_activas_by_categorias, get_fallas_info_by_ids y get_bus_info_by_n_bus por consultas SQL directas a la BD",
+      "Preservar _USER_CACHE en app/api/deps.py para la verificación de JWTs",
+      "Asegurar que toda la suite de pruebas unitarias, de integración y E2E pase al 100%"
+    ],
+    "completed": [
+      "Cachés de catálogos eliminadas de app/modules/mantencion/repository/mantencion_repository.py",
+      "Consultas directas a la BD implementadas en MantencionRepository sin estado en memoria",
+      "_USER_CACHE conservada en app/api/deps.py con su TTL correspondiente",
+      "Suite completa de 67 pruebas ejecutada con 100% de éxito (67/67 passed)"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificación de esquemas de autenticación JWT o tokens"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Remoción de variables y lógica de _BUS_INFO_CACHE, _FALLAS_CAT_CACHE y _FALLAS_INFO_CACHE. Consultas SELECT directas a la base de datos"
+    },
+    {
+      "path": "app/api/deps.py",
+      "action": "modified",
+      "summary": "Mantenimiento exclusivo de _USER_CACHE para autenticación JWT de usuarios activos"
+    },
+    {
+      "path": "tests/unit/test_query_optimizations.py",
+      "action": "modified",
+      "summary": "Validación de comportamiento con consultas directas a la base de datos"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-033-1",
+      "title": "Eliminación de caché en memoria para catálogos en favor de consultas SQL directas",
+      "rationale": "El usuario solicitó no mantener datos de catálogo en memoria en el backend para evitar inconsistencias de estado y mantener el backend stateless. La base de datos Neon con los nuevos índices maneja las consultas SELECT por id o n_bus de forma eficiente.",
+      "consequences": "Backend completamente stateless para los datos de negocio; garantiza que cualquier modificación en base de datos se refleje inmediatamente sin esperar expiración de TTL."
+    },
+    {
+      "id": "DEC-033-2",
+      "title": "Conservación exclusiva de _USER_CACHE en deps.py para validación JWT",
+      "rationale": "Cada endpoint autenticado requiere verificar el usuario asociado al JWT. Eliminar esta caché causaría un SELECT adicional por cada request entrante a Neon, lo que aumentaría la latencia innecesariamente.",
+      "consequences": "Se mantiene una alta velocidad de respuesta en endpoints protegidos, amortiguando la latencia de red con Neon para la validación de tokens."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/",
+      "result": "passed",
+      "evidence": "67 passed, 1 warning in 24.43s (100% de la suite verde)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Notificar al usuario la culminación del requerimiento y la disponibilidad de los contratos optimizados.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "dirty": true
+  },
+  "notes": ["Backend limpio de cachés de catálogo; solo preservada la sesión de usuario para JWT."]
+}

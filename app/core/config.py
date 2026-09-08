@@ -92,18 +92,27 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql+asyncpg://"):
-            return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
         if self.DATABASE_URL:
-            return self.DATABASE_URL
+            url = self.DATABASE_URL
+            if url.startswith("postgresql+asyncpg://"):
+                url = url.replace("postgresql+asyncpg://", "postgresql://")
+            if "ssl=require" in url and "sslmode=require" not in url:
+                url = url.replace("ssl=require", "sslmode=require")
+            return url
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def async_database_url(self) -> str:
         if self.DATABASE_URL:
-            if self.DATABASE_URL.startswith("postgresql://"):
-                return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-            return self.DATABASE_URL
+            url = self.DATABASE_URL
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://")
+            # Normalizar para asyncpg: asyncpg utiliza ssl=require y no soporta sslmode ni channel_binding en el query string
+            if "sslmode=require" in url:
+                url = url.replace("sslmode=require", "ssl=require")
+            for cb in ["&channel_binding=require", "?channel_binding=require&", "?channel_binding=require"]:
+                url = url.replace(cb, "?" if cb.startswith("?") and cb.endswith("&") else "")
+            return url
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     model_config = SettingsConfigDict(

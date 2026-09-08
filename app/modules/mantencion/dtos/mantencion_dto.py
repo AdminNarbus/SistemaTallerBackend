@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 # --- Categoria Falla DTOs ---
@@ -10,6 +10,8 @@ class CategoriaFallaDTO(BaseModel):
     id: int
     nombre: str
     is_active: bool
+    falla_id: Optional[int] = None
+    falla_nombre: Optional[str] = None
 
 
 # --- Falla Taller DTOs ---
@@ -56,6 +58,8 @@ class AsignacionFallaDTO(BaseModel):
 class SolicitudDetalleCreateDTO(BaseModel):
     falla_id: Optional[int] = None
     categoria_id: Optional[int] = None
+    falla_nombre: Optional[str] = None
+    categoria_nombre: Optional[str] = None
     descripcion_personalizada: Optional[str] = None
 
 
@@ -124,11 +128,18 @@ class SolicitudComentarioDTO(BaseModel):
 
 # --- Solicitud Principales DTOs ---
 class SolicitudCreateDTO(BaseModel):
-    n_bus: str
+    n_bus: Optional[str] = None
     bus_id: Optional[int] = None
+    bus_patente: Optional[str] = None
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
+
+    @model_validator(mode="after")
+    def check_bus_identifier(self):
+        if not self.n_bus and not self.bus_id:
+            raise ValueError("Debe proporcionar al menos 'bus_id' o 'n_bus'")
+        return self
 
 
 class AutoasignarFallasDTO(BaseModel):
@@ -255,6 +266,16 @@ class SolicitudDTO(BaseModel):
     historial_mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
     pauta_respuestas: List[PautaRespuestaDTO] = []
+
+
+class SolicitudResumenDTO(SolicitudDTO):
+    """
+    DTO optimizado para listados de alta velocidad (Bandeja de Pendientes y Mis Trabajos).
+    Consolidado en una única consulta SQL de una sola ida y vuelta de red (Single-Roundtrip Query).
+    Hereda de SolicitudDTO para garantizar 100% de compatibilidad retrospectiva con el Frontend.
+    """
+    pass
+
 
 
 

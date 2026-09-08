@@ -18,16 +18,20 @@ async def seed_initial_data():
     """Sembrado de datos iniciales de prueba para el entorno de desarrollo."""
     async with AsyncSessionLocal() as db:
         try:
-            # 1. Sembrar Usuarios
+            # 1. Sembrar Usuarios (Exactamente uno de cada rol)
             usuarios_sembrar = [
                 ("admin", "admin123", "Administrador", "Sistema", "ADMIN"),
-                ("supervisor1", "super123", "María", "González", "SUPERVISOR"),
-                ("chofer1", "chofer123", "Juan", "Pérez", "CONDUCTOR"),
-                ("mecanico1", "meca123", "Pedro", "Rodríguez", "MECANICO"),
-                ("mecanico2", "meca123", "Luis", "Morales", "MECANICO"),
+                ("supervisor", "super123", "María", "González", "SUPERVISOR"),
+                ("chofer", "chofer123", "Juan", "Pérez", "CONDUCTOR"),
+                ("mecanico", "meca123", "Pedro", "Rodríguez", "MECANICO"),
             ]
             for username, password, nombre, apellido, rol in usuarios_sembrar:
-                if not await user_repository.get_by_username(db, username):
+                # Si ya existe con este username o con alias '1', no duplicar
+                user_exists = await user_repository.get_by_username(db, username)
+                if not user_exists and username in ["supervisor", "chofer", "mecanico"]:
+                    user_exists = await user_repository.get_by_username(db, f"{username}1")
+
+                if not user_exists:
                     await user_repository.create(
                         db,
                         UsuarioCreateDTO(
@@ -77,8 +81,40 @@ async def seed_initial_data():
                         await db.commit()
                         logger.info("[SEED] Falla de Taller '%s' (%s) creada.", falla_n, cat_n)
 
+            # 3.5. Sembrar catálogo de buses si la tabla está vacía
+            stmt_buses_count = select(Bus)
+            res_buses_count = await db.execute(stmt_buses_count)
+            if not res_buses_count.scalars().first():
+                from app.core.seeds.buses_dataset import BUSES_DATASET
+                for b_dict in BUSES_DATASET:
+                    b_obj = Bus(
+                        id=b_dict["id"],
+                        patente=b_dict["patente"],
+                        n_motor=b_dict.get("n_motor"),
+                        n_chasis=b_dict.get("n_chasis"),
+                        n_carroceria=b_dict.get("n_carroceria"),
+                        marca=b_dict.get("marca"),
+                        modelo=b_dict.get("modelo"),
+                        astos=b_dict.get("astos"),
+                        anio=b_dict.get("anio"),
+                        servicio=b_dict.get("servicio"),
+                        tipo_bus=b_dict.get("tipo_bus"),
+                        empresa_id=b_dict.get("empresa_id"),
+                        n_bus=b_dict.get("n_bus"),
+                        clasificacion=b_dict.get("clasificacion"),
+                        min=b_dict.get("min"),
+                        max=b_dict.get("max"),
+                        tipo=b_dict.get("tipo"),
+                        max_litros=b_dict.get("max_litros"),
+                        is_active=b_dict.get("is_active", True),
+                        en_taller=False,
+                    )
+                    db.add(b_obj)
+                await db.commit()
+                logger.info("[SEED] Catálogo de 93 buses de pasajeros (200-800) sincronizado exitosamente.")
+
             # 4. Sembrar Solicitudes de Mantención iniciales
-            user_chofer = await user_repository.get_by_username(db, "chofer1")
+            user_chofer = await user_repository.get_by_username(db, "chofer") or await user_repository.get_by_username(db, "chofer1")
             stmt_count = select(TallerSolicitud)
             res_count = await db.execute(stmt_count)
             if not res_count.scalars().all():

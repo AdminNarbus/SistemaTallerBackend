@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash, verify_password
@@ -29,9 +30,13 @@ class UserRepository:
     async def get_by_username(
         self, db: AsyncSession, username: str
     ) -> Optional[Usuario]:
-        """Busca un usuario por su username (case-insensitive)."""
+        """Busca un usuario por su username (case-insensitive) con su rol en un solo JOIN."""
         logger.debug("[AUTH] Buscando usuario por username='%s'", username.strip())
-        stmt = select(Usuario).where(Usuario.username.ilike(username.strip()))
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.username.ilike(username.strip()))
+        )
         res = await db.execute(stmt)
         user = res.scalar_one_or_none()
         if not user:
@@ -41,11 +46,36 @@ class UserRepository:
     async def get_by_id(
         self, db: AsyncSession, user_id: int
     ) -> Optional[Usuario]:
-        """Busca un usuario por su ID de clave primaria."""
+        """Busca un usuario por su ID de clave primaria con su rol en un solo JOIN."""
         logger.debug("[AUTH] Buscando usuario por id=%s", user_id)
-        stmt = select(Usuario).where(Usuario.id == user_id)
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.id == user_id)
+        )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def get_by_ids(
+        self, db: AsyncSession, user_ids: List[int]
+    ) -> List[Usuario]:
+        """Busca múltiples usuarios por sus IDs en una sola consulta SQL."""
+        if not user_ids:
+            return []
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.id.in_(user_ids))
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_by_ids_map(
+        self, db: AsyncSession, user_ids: List[int]
+    ) -> dict[int, Usuario]:
+        """Busca múltiples usuarios por sus IDs y retorna un diccionario {id: Usuario}."""
+        users = await self.get_by_ids(db, user_ids)
+        return {u.id: u for u in users}
 
     async def get_all(
         self, db: AsyncSession, skip: int = 0, limit: int = 100

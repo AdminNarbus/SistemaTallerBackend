@@ -31,6 +31,12 @@ def event_loop():
 @pytest.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Crea una base de datos en memoria limpia para cada prueba."""
+    from app.api.deps import clear_user_cache
+    from app.modules.mantencion.repository.mantencion_repository import clear_mantencion_repository_caches
+
+    clear_user_cache()
+    clear_mantencion_repository_caches()
+
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -45,6 +51,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         app.dependency_overrides[get_db] = _override_get_db
         yield session
         app.dependency_overrides.clear()
+
+    clear_user_cache()
+    clear_mantencion_repository_caches()
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

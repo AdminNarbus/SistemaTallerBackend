@@ -1,9 +1,11 @@
 import logging
+import time
 from datetime import datetime
-from typing import List, Optional, Set
-from sqlalchemy import select, and_, or_
+from typing import Dict, List, Optional, Set, Tuple
+from sqlalchemy import select, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+
+from sqlalchemy.orm import selectinload, joinedload, noload
 
 from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.models.bus import Bus
@@ -17,6 +19,11 @@ from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignaci
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 
 logger = logging.getLogger(__name__)
+
+
+def clear_mantencion_repository_caches() -> None:
+    """Función de compatibilidad (no-op: los catálogos se consultan directamente desde la BD)."""
+    pass
 
 
 def _calcular_duracion_minutos(inicio: Optional[datetime], fin: Optional[datetime]) -> int:
@@ -60,18 +67,49 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def get_categorias_con_fallas(self, db: AsyncSession) -> List[dict]:
+        """
+        Retorna las categorías activas con su falla activa asociada (id, nombre, is_active, falla_id, falla_nombre).
+        """
+        stmt = select(CategoriaFalla).where(CategoriaFalla.is_active == True).order_by(CategoriaFalla.id)
+        res = await db.execute(stmt)
+        categorias = list(res.scalars().all())
+
+        cat_ids = [c.id for c in categorias]
+        fallas_map = await self.find_fallas_activas_by_categorias(db, cat_ids) if cat_ids else {}
+
+        resultado = []
+        for cat in categorias:
+            falla_info = fallas_map.get(cat.id)
+            f_id = falla_info[0] if falla_info else None
+            f_nom = falla_info[1] if falla_info else None
+            resultado.append({
+                "id": cat.id,
+                "nombre": cat.nombre,
+                "is_active": cat.is_active,
+                "falla_id": f_id,
+                "falla_nombre": f_nom,
+            })
+        return resultado
+
     async def get_categoria_by_id(self, db: AsyncSession, categoria_id: int) -> Optional[CategoriaFalla]:
         return await db.get(CategoriaFalla, categoria_id)
 
     async def get_fallas(self, db: AsyncSession, categoria_id: Optional[int] = None) -> List[FallaTaller]:
-        stmt = select(FallaTaller).where(FallaTaller.is_active == True)
+        stmt = (
+            select(FallaTaller)
+            .where(FallaTaller.is_active == True)
+            .options(joinedload(FallaTaller.categoria))
+        )
         if categoria_id:
             stmt = stmt.where(FallaTaller.categoria_id == categoria_id)
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
     async def get_falla_by_id(self, db: AsyncSession, falla_id: int) -> Optional[FallaTaller]:
-        return await db.get(FallaTaller, falla_id)
+        stmt = select(FallaTaller).options(joinedload(FallaTaller.categoria)).where(FallaTaller.id == falla_id)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
 
     async def find_falla_activa_by_categoria(self, db: AsyncSession, categoria_id: int) -> Optional[int]:
         stmt = (
@@ -82,6 +120,60 @@ class MantencionRepository:
         )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def find_fallas_activas_by_categorias(
+        self, db: AsyncSession, categoria_ids: List[int]
+    ) -> dict[int, tuple[int, str, str]]:
+        """
+        Retorna un mapa {categoria_id: (falla_id, falla_nombre, categoria_nombre)} consultando directamente la BD.
+        """
+        if not categoria_ids:
+            return {}
+
+        stmt = (
+            select(FallaTaller.categoria_id, FallaTaller.id, FallaTaller.nombre, CategoriaFalla.nombre)
+            .join(CategoriaFalla, CategoriaFalla.id == FallaTaller.categoria_id)
+            .where(
+                and_(
+                    FallaTaller.categoria_id.in_(categoria_ids),
+                    FallaTaller.is_active == True,
+                )
+            )
+            .order_by(FallaTaller.id.asc())
+        )
+        res = await db.execute(stmt)
+        result: dict[int, tuple[int, str, str]] = {}
+        for cat_id, f_id, f_nom, c_nom in res.all():
+            if cat_id not in result:
+                result[cat_id] = (f_id, f_nom, c_nom)
+        return result
+
+    async def get_fallas_info_by_ids(
+        self, db: AsyncSession, falla_ids: List[int]
+    ) -> Dict[int, dict]:
+        """
+        Retorna diccionario con metadata y categoría de fallas por sus IDs consultando directamente la BD.
+        """
+        if not falla_ids:
+            return {}
+
+        stmt = (
+            select(FallaTaller)
+            .options(joinedload(FallaTaller.categoria))
+            .where(FallaTaller.id.in_(falla_ids))
+        )
+        res = await db.execute(stmt)
+        result: Dict[int, dict] = {}
+        for f in res.scalars().all():
+            result[f.id] = {
+                "id": f.id,
+                "nombre": f.nombre,
+                "categoria_id": f.categoria_id,
+                "cat_id": f.categoria.id if f.categoria else f.categoria_id,
+                "cat_nombre": f.categoria.nombre if f.categoria else None,
+                "cat_active": f.categoria.is_active if f.categoria else True,
+            }
+        return result
 
     async def find_falla_otro(self, db: AsyncSession) -> Optional[int]:
         stmt_cat_otro = select(CategoriaFalla.id).where(CategoriaFalla.nombre == "OTRO").limit(1)
@@ -100,6 +192,16 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_bus_info_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[tuple[int, Optional[str]]]:
+        """Recupera id y patente del bus consultando directamente la base de datos."""
+        clean_nb = str(n_bus).strip()
+        stmt = select(Bus.id, Bus.patente).where(Bus.n_bus == clean_nb)
+        res = await db.execute(stmt)
+        row = res.first()
+        if row:
+            return (row[0], row[1])
+        return None
+
     async def get_bus_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
         return await db.get(Bus, bus_id)
 
@@ -107,49 +209,299 @@ class MantencionRepository:
         return await db.get(Usuario, usuario_id)
 
     async def get_solicitud_by_id(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
+        """
+        Recupera la solicitud completa optimizando relaciones escalares con joinedload
+        y colecciones con selectinload, reduciendo drásticamente viajes de red innecesarios.
+        """
         logger.debug("[MANTENCION-REPO] Query get_solicitud_by_id | id=%s", solicitud_id)
-        db.expire_all()
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)
+            .execution_options(populate_existing=True)
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.mecanico_cierre),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.asignado_por),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.asignado_por),
-                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.item),
-                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                joinedload(TallerSolicitud.mecanico_cierre),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.asignado_por),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.asignado_por),
+                selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.item),
+                selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.mecanico),
             )
         )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
-    async def list_pendientes(self, db: AsyncSession) -> List[TallerSolicitud]:
+    async def list_pendientes(
+        self, db: AsyncSession, limit: Optional[int] = 50, skip: int = 0
+    ) -> List[dict] | List[TallerSolicitud]:
+        if db.bind and db.bind.dialect.name == "postgresql":
+            # 1 sola consulta SQL nativa de alta velocidad consolidada con CTEs y agregación JSON
+            sql = text("""
+                WITH filtered_solicitudes AS (
+                    SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
+                           s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
+                    FROM taller_solicitudes s
+                    WHERE s.estado IN ('REPORTADO', 'PENDIENTE', 'PENDIENTE_REASIGNACION')
+                    ORDER BY s.fecha_creacion ASC
+                    LIMIT :limit OFFSET :skip
+                ),
+                detalles_agg AS (
+                    SELECT 
+                        d.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', d.id,
+                                'solicitud_id', d.solicitud_id,
+                                'categoria_id', f.categoria_id,
+                                'categoria_nombre', cf.nombre,
+                                'falla_id', d.falla_id,
+                                'falla', CASE WHEN f.id IS NOT NULL THEN json_build_object(
+                                    'id', f.id,
+                                    'categoria_id', f.categoria_id,
+                                    'nombre', f.nombre,
+                                    'is_active', f.is_active
+                                ) ELSE NULL END,
+                                'descripcion_personalizada', d.descripcion_personalizada,
+                                'resuelto', d.resuelto,
+                                'mecanico_resolvio_id', d.mecanico_resolvio_id,
+                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'falta_repuesto', d.falta_repuesto,
+                                'comentario_repuesto', d.comentario_repuesto,
+                                'fecha_creacion', d.fecha_creacion,
+                                'fecha_resolucion', d.fecha_resolucion,
+                                'mecanicos_asignados', COALESCE((
+                                    SELECT json_agg(
+                                        json_build_object(
+                                            'id', um.id,
+                                            'nombre', CONCAT(um.nombre, ' ', um.apellido),
+                                            'origen', a.origen,
+                                            'fecha_asignacion', a.fecha_asignacion
+                                        )
+                                    )
+                                    FROM taller_asignacion_fallas a
+                                    JOIN usuarios um ON um.id = a.mecanico_id
+                                    WHERE a.detalle_id = d.id AND a.is_activo = true
+                                ), '[]'::json)
+                            ) ORDER BY d.id
+                        ) as detalles_json
+                    FROM taller_solicitud_detalles d
+                    JOIN filtered_solicitudes fs ON fs.id = d.solicitud_id
+                    LEFT JOIN fallas_taller f ON f.id = d.falla_id
+                    LEFT JOIN categorias_falla cf ON cf.id = f.categoria_id
+                    LEFT JOIN usuarios ur ON ur.id = d.mecanico_resolvio_id
+                    GROUP BY d.solicitud_id
+                ),
+                mecanicos_agg AS (
+                    SELECT 
+                        sub.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', sub.id,
+                                'solicitud_id', sub.solicitud_id,
+                                'mecanico_id', sub.mecanico_id,
+                                'mecanico_nombre', CONCAT(um.nombre, ' ', um.apellido),
+                                'es_lider_responsable', sub.es_lider_responsable,
+                                'is_activo', true,
+                                'fecha_asignacion', sub.fecha_asignacion
+                            ) ORDER BY sub.id
+                        ) as mecanicos_json
+                    FROM (
+                        SELECT sm.id, sm.solicitud_id, sm.mecanico_id, sm.es_lider_responsable, sm.fecha_asignacion
+                        FROM taller_solicitud_mecanicos sm
+                        JOIN filtered_solicitudes fs ON fs.id = sm.solicitud_id
+                        WHERE sm.is_activo = true
+                        UNION
+                        SELECT af.id, af.solicitud_id, af.mecanico_id, false as es_lider_responsable, af.fecha_asignacion
+                        FROM taller_asignacion_fallas af
+                        JOIN filtered_solicitudes fs ON fs.id = af.solicitud_id
+                        WHERE af.is_activo = true
+                    ) sub
+                    JOIN usuarios um ON um.id = sub.mecanico_id
+                    GROUP BY sub.solicitud_id
+                )
+                SELECT 
+                    fs.id,
+                    fs.n_bus,
+                    fs.bus_id,
+                    b.patente as bus_patente,
+                    fs.usuario_creador_id,
+                    CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
+                    fs.mecanico_cierre_id,
+                    CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
+                    fs.estado,
+                    fs.descripcion_general,
+                    fs.foto_url,
+                    fs.motivo_incompleto_checklist,
+                    fs.motivo_cierre_parcial,
+                    fs.fecha_creacion,
+                    fs.fecha_cierre,
+                    COALESCE(da.detalles_json, '[]'::json) as detalles_json,
+                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json
+                FROM filtered_solicitudes fs
+                LEFT JOIN buses b ON b.id = fs.bus_id
+                LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
+                LEFT JOIN usuarios mc ON mc.id = fs.mecanico_cierre_id
+                LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
+                LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
+                ORDER BY fs.fecha_creacion ASC
+            """)
+            res = await db.execute(sql, {"limit": limit or 50, "skip": skip or 0})
+            return [dict(r) for r in res.mappings().all()]
+
+        # Fallback ORM para entornos SQLite (testing)
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]))
             .order_by(TallerSolicitud.fecha_creacion.asc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                noload(TallerSolicitud.comentarios),
+                noload(TallerSolicitud.pauta_respuestas),
             )
         )
+        if skip:
+            stmt = stmt.offset(skip)
+        if limit:
+            stmt = stmt.limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
-    async def list_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> List[TallerSolicitud]:
+    async def list_mis_trabajos(
+        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = 50, skip: int = 0
+    ) -> List[dict] | List[TallerSolicitud]:
+        if db.bind and db.bind.dialect.name == "postgresql":
+            # 1 sola consulta SQL nativa de alta velocidad para Mis Trabajos
+            sql = text("""
+                WITH filtered_solicitudes AS (
+                    SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
+                           s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
+                    FROM taller_solicitudes s
+                    WHERE s.estado = 'EN_REPARACION'
+                      AND (
+                          EXISTS (SELECT 1 FROM taller_solicitud_mecanicos sm WHERE sm.solicitud_id = s.id AND sm.mecanico_id = :mecanico_id AND sm.is_activo = true)
+                          OR
+                          EXISTS (SELECT 1 FROM taller_asignacion_fallas af WHERE af.solicitud_id = s.id AND af.mecanico_id = :mecanico_id AND af.is_activo = true)
+                      )
+                    ORDER BY s.fecha_creacion DESC
+                    LIMIT :limit OFFSET :skip
+                ),
+                detalles_agg AS (
+                    SELECT 
+                        d.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', d.id,
+                                'solicitud_id', d.solicitud_id,
+                                'categoria_id', f.categoria_id,
+                                'categoria_nombre', cf.nombre,
+                                'falla_id', d.falla_id,
+                                'falla', CASE WHEN f.id IS NOT NULL THEN json_build_object(
+                                    'id', f.id,
+                                    'categoria_id', f.categoria_id,
+                                    'nombre', f.nombre,
+                                    'is_active', f.is_active
+                                ) ELSE NULL END,
+                                'descripcion_personalizada', d.descripcion_personalizada,
+                                'resuelto', d.resuelto,
+                                'mecanico_resolvio_id', d.mecanico_resolvio_id,
+                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'falta_repuesto', d.falta_repuesto,
+                                'comentario_repuesto', d.comentario_repuesto,
+                                'fecha_creacion', d.fecha_creacion,
+                                'fecha_resolucion', d.fecha_resolucion,
+                                'mecanicos_asignados', COALESCE((
+                                    SELECT json_agg(
+                                        json_build_object(
+                                            'id', um.id,
+                                            'nombre', CONCAT(um.nombre, ' ', um.apellido),
+                                            'origen', a.origen,
+                                            'fecha_asignacion', a.fecha_asignacion
+                                        )
+                                    )
+                                    FROM taller_asignacion_fallas a
+                                    JOIN usuarios um ON um.id = a.mecanico_id
+                                    WHERE a.detalle_id = d.id AND a.is_activo = true
+                                ), '[]'::json)
+                            ) ORDER BY d.id
+                        ) as detalles_json
+                    FROM taller_solicitud_detalles d
+                    JOIN filtered_solicitudes fs ON fs.id = d.solicitud_id
+                    LEFT JOIN fallas_taller f ON f.id = d.falla_id
+                    LEFT JOIN categorias_falla cf ON cf.id = f.categoria_id
+                    LEFT JOIN usuarios ur ON ur.id = d.mecanico_resolvio_id
+                    GROUP BY d.solicitud_id
+                ),
+                mecanicos_agg AS (
+                    SELECT 
+                        sub.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', sub.id,
+                                'solicitud_id', sub.solicitud_id,
+                                'mecanico_id', sub.mecanico_id,
+                                'mecanico_nombre', CONCAT(um.nombre, ' ', um.apellido),
+                                'es_lider_responsable', sub.es_lider_responsable,
+                                'is_activo', true,
+                                'fecha_asignacion', sub.fecha_asignacion
+                            ) ORDER BY sub.id
+                        ) as mecanicos_json
+                    FROM (
+                        SELECT sm.id, sm.solicitud_id, sm.mecanico_id, sm.es_lider_responsable, sm.fecha_asignacion
+                        FROM taller_solicitud_mecanicos sm
+                        JOIN filtered_solicitudes fs ON fs.id = sm.solicitud_id
+                        WHERE sm.is_activo = true
+                        UNION
+                        SELECT af.id, af.solicitud_id, af.mecanico_id, false as es_lider_responsable, af.fecha_asignacion
+                        FROM taller_asignacion_fallas af
+                        JOIN filtered_solicitudes fs ON fs.id = af.solicitud_id
+                        WHERE af.is_activo = true
+                    ) sub
+                    JOIN usuarios um ON um.id = sub.mecanico_id
+                    GROUP BY sub.solicitud_id
+                )
+                SELECT 
+                    fs.id,
+                    fs.n_bus,
+                    fs.bus_id,
+                    b.patente as bus_patente,
+                    fs.usuario_creador_id,
+                    CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
+                    fs.mecanico_cierre_id,
+                    CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
+                    fs.estado,
+                    fs.descripcion_general,
+                    fs.foto_url,
+                    fs.motivo_incompleto_checklist,
+                    fs.motivo_cierre_parcial,
+                    fs.fecha_creacion,
+                    fs.fecha_cierre,
+                    COALESCE(da.detalles_json, '[]'::json) as detalles_json,
+                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json
+                FROM filtered_solicitudes fs
+                LEFT JOIN buses b ON b.id = fs.bus_id
+                LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
+                LEFT JOIN usuarios mc ON mc.id = fs.mecanico_cierre_id
+                LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
+                LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
+                ORDER BY fs.fecha_creacion DESC
+            """)
+            res = await db.execute(sql, {"mecanico_id": mecanico_id, "limit": limit or 50, "skip": skip or 0})
+            return [dict(r) for r in res.mappings().all()]
+
+        # Fallback ORM para entornos SQLite (testing)
         stmt = (
             select(TallerSolicitud)
             .distinct()
@@ -177,32 +529,38 @@ class MantencionRepository:
             )
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                noload(TallerSolicitud.comentarios),
+                noload(TallerSolicitud.pauta_respuestas),
             )
         )
+        if skip:
+            stmt = stmt.offset(skip)
+        if limit:
+            stmt = stmt.limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
+
 
     async def list_auditoria(self, db: AsyncSession) -> List[TallerSolicitud]:
         stmt = (
             select(TallerSolicitud)
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.mecanico_cierre),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                joinedload(TallerSolicitud.mecanico_cierre),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)

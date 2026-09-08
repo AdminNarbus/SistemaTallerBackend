@@ -77,6 +77,12 @@ def upgrade() -> None:
         op.create_index('ix_taller_asignacion_fallas_detalle_id', 'taller_asignacion_fallas', ['detalle_id'])
         op.create_index('ix_taller_asignacion_fallas_mecanico_id', 'taller_asignacion_fallas', ['mecanico_id'])
         op.create_index('ix_taller_asignacion_fallas_is_activo', 'taller_asignacion_fallas', ['is_activo'])
+    else:
+        columns_asig = [c['name'] for c in inspector.get_columns('taller_asignacion_fallas')]
+        if 'comentario' not in columns_asig:
+            op.add_column('taller_asignacion_fallas', sa.Column('comentario', sa.Text(), nullable=True))
+        if 'duracion_minutos' not in columns_asig:
+            op.add_column('taller_asignacion_fallas', sa.Column('duracion_minutos', sa.Integer(), nullable=True))
 
     # 6. Nueva tabla pauta_taller_items
     if 'pauta_taller_items' not in tables:
@@ -106,6 +112,29 @@ def upgrade() -> None:
             {"categoria": "CARROCERÍA Y VISIBILIDAD", "item": "Revisión de parabrisas y cristales", "orden": 11, "is_active": True},
         ]
         op.bulk_insert(pauta_items_table, initial_items)
+        conn.execute(sa.text("SELECT setval('pauta_taller_items_id_seq', coalesce((SELECT max(id) FROM pauta_taller_items), 1));"))
+    else:
+        conn.execute(sa.text("""
+            INSERT INTO pauta_taller_items (orden, categoria, item, is_active)
+            SELECT v.orden, v.categoria, v.item, true
+            FROM (VALUES
+                (1, 'MOTOR Y FLUIDOS', 'Niveles y fugas de aceite motor'),
+                (2, 'LUCES Y SISTEMA ELÉCTRICO', 'Control y operación de luces exteriores'),
+                (3, 'CLIMATIZACIÓN', 'Ventilación - calefacción - A/C'),
+                (4, 'CABINA E INSTRUMENTOS', 'Cuadro de instrumentos en general / Check'),
+                (5, 'CHASIS Y ENGRASE', 'Engrase'),
+                (6, 'MOTOR Y TRANSMISIÓN', 'Correas y rodillos'),
+                (7, 'LUCES Y SISTEMA ELÉCTRICO', 'Batería y terminales'),
+                (8, 'ESTRUCTURA Y DESGASTE', 'Inspección visual en cuanto a desgaste y daños'),
+                (9, 'MOTOR Y TRANSMISIÓN', 'Verificar estado de correas'),
+                (10, 'CARROCERÍA Y SEGURIDAD', 'Cerraduras - pestillos - puertas - capó'),
+                (11, 'CARROCERÍA Y VISIBILIDAD', 'Revisión de parabrisas y cristales')
+            ) AS v(orden, categoria, item)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pauta_taller_items pti WHERE pti.orden = v.orden
+            );
+        """))
+        conn.execute(sa.text("SELECT setval('pauta_taller_items_id_seq', coalesce((SELECT max(id) FROM pauta_taller_items), 1));"))
 
     # 7. Nueva tabla taller_solicitud_pauta
     if 'taller_solicitud_pauta' not in tables:

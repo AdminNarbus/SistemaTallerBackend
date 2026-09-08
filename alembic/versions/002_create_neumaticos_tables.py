@@ -44,6 +44,12 @@ def upgrade() -> None:
         op.create_index(op.f('ix_reportes_neumaticos_id'), 'reportes_neumaticos', ['id'], unique=False)
         op.create_index(op.f('ix_reportes_neumaticos_usuario_id'), 'reportes_neumaticos', ['usuario_id'], unique=False)
         op.create_index(op.f('ix_reportes_neumaticos_n_bus'), 'reportes_neumaticos', ['n_bus'], unique=False)
+    else:
+        columns_neu = [c['name'] for c in inspector.get_columns('reportes_neumaticos')]
+        if 'created_at' not in columns_neu:
+            op.add_column('reportes_neumaticos', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True))
+        if 'updated_at' not in columns_neu:
+            op.add_column('reportes_neumaticos', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True))
 
 
 def downgrade() -> None:

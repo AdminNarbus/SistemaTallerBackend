@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -15,6 +15,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     CategoriaFallaDTO,
     FallaTallerDTO,
     SolicitudDTO,
+    SolicitudResumenDTO,
     SolicitudCreateDTO,
     TomarTrabajoDTO,
     LiberarTurnoDTO,
@@ -37,16 +38,22 @@ router = APIRouter(prefix="/mantencion", tags=["mantencion"])
 
 @router.get("/pauta/items", response_model=List[PautaTallerItemDTO])
 async def get_pauta_items(
+    response: Response,
     current_user: Usuario = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
     """Retorna el catálogo maestro de 11 ítems de inspección preventiva de taller."""
+    response.headers["Cache-Control"] = "private, max-age=300, stale-while-revalidate=60"
     return await mantencion_service.get_pauta_items(db)
 
 
 @router.get("/categorias", response_model=List[CategoriaFallaDTO])
-async def get_categorias(db: AsyncSession = SessionDep):
+async def get_categorias(
+    response: Response,
+    db: AsyncSession = SessionDep,
+):
     """Retorna las categorías de fallas activas."""
+    response.headers["Cache-Control"] = "private, max-age=300, stale-while-revalidate=60"
     return await mantencion_service.get_categorias(db)
 
 
@@ -65,26 +72,35 @@ async def create_solicitud(
     current_user: Usuario = Depends(require_conductor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Creación de reporte/solicitud de taller por chofer (CONDUCTOR o ADMIN)."""
-    return await mantencion_service.create_solicitud(db, dto, creador_id=current_user.id)
+    return await mantencion_service.create_solicitud(
+        db, dto, creador_id=current_user.id, creador_nombre=current_user.nombre_completo
+    )
 
 
-@router.get("/pendientes", response_model=List[SolicitudDTO])
+@router.get("/pendientes", response_model=List[SolicitudResumenDTO])
 async def list_pendientes(
+    response: Response,
+    skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
+    limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE / PENDIENTE_REASIGNACION)."""
-    return await mantencion_service.list_pendientes(db)
+    response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
+    return await mantencion_service.list_pendientes(db, limit=limit, skip=skip)
 
 
-@router.get("/mis-trabajos", response_model=List[SolicitudDTO])
+@router.get("/mis-trabajos", response_model=List[SolicitudResumenDTO])
 async def list_mis_trabajos(
+    response: Response,
+    skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
+    limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
     current_user: Usuario = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta."""
-    return await mantencion_service.list_mis_trabajos(db, mecanico_id=current_user.id)
+    response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
+    return await mantencion_service.list_mis_trabajos(db, mecanico_id=current_user.id, limit=limit, skip=skip)
 
 
 @router.get("/{id}", response_model=SolicitudDTO)

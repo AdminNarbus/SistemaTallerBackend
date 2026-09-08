@@ -25,6 +25,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     LiberarSolicitudDTO,
     AgregarColaboradorDTO,
     SolicitudDTO,
+    SolicitudResumenDTO,
 )
 
 __all__ = [
@@ -54,4 +55,6 @@ __all__ = [
     "LiberarSolicitudDTO",
     "AgregarColaboradorDTO",
     "SolicitudDTO",
+    "SolicitudResumenDTO",
 ]
+

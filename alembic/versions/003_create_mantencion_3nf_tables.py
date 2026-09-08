@@ -125,6 +125,46 @@ def upgrade() -> None:
         op.create_index(op.f('ix_taller_solicitud_comentarios_id'), 'taller_solicitud_comentarios', ['id'], unique=False)
         op.create_index(op.f('ix_taller_solicitud_comentarios_solicitud_id'), 'taller_solicitud_comentarios', ['solicitud_id'], unique=False)
 
+    # 7. Siembra inicial de Categorías de Falla y Fallas de Taller
+    conn.execute(sa.text("""
+        INSERT INTO categorias_falla (id, nombre, is_active)
+        SELECT v.id, v.nombre, true
+        FROM (VALUES
+            (1, 'FRENOS'),
+            (2, 'ELECTRICO'),
+            (3, 'MOTOR'),
+            (4, 'CARROCERIA'),
+            (5, 'CLIMATIZACION'),
+            (6, 'OTRO')
+        ) AS v(id, nombre)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM categorias_falla cf WHERE cf.nombre = v.nombre OR cf.id = v.id
+        );
+    """))
+    conn.execute(sa.text("SELECT setval('categorias_falla_id_seq', coalesce((SELECT max(id) FROM categorias_falla), 1));"))
+
+    conn.execute(sa.text("""
+        INSERT INTO fallas_taller (categoria_id, nombre, is_active)
+        SELECT c.id, f.nombre, true
+        FROM (VALUES
+            ('FRENOS', 'Desgaste de balatas / pastillas'),
+            ('FRENOS', 'Fuga de aire en cañería de frenos'),
+            ('FRENOS', 'Líquido de frenos bajo'),
+            ('ELECTRICO', 'Luces principales o de freno quemadas'),
+            ('ELECTRICO', 'Batería descargada o alternador defectuoso'),
+            ('MOTOR', 'Fuga de aceite en carter'),
+            ('MOTOR', 'Sobrecalentamiento de motor'),
+            ('CARROCERIA', 'Empaquetadura o parabrisas agrietado'),
+            ('CLIMATIZACION', 'Aire acondicionado no enfría'),
+            ('OTRO', 'Avería general / Otro')
+        ) AS f(categoria_nombre, nombre)
+        JOIN categorias_falla c ON c.nombre = f.categoria_nombre
+        WHERE NOT EXISTS (
+            SELECT 1 FROM fallas_taller ft WHERE ft.categoria_id = c.id AND ft.nombre = f.nombre
+        );
+    """))
+    conn.execute(sa.text("SELECT setval('fallas_taller_id_seq', coalesce((SELECT max(id) FROM fallas_taller), 1));"))
+
 
 def downgrade() -> None:
     op.drop_table('taller_solicitud_comentarios')

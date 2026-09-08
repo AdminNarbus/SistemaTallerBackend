@@ -19,23 +19,27 @@ async def test_buses_buscar_endpoint(client, db_session):
     # Buscar prefijo "3"
     response = await client.get("/api/v1/buses/buscar?query=3")
     assert response.status_code == 200
+    assert "max-age" in response.headers.get("cache-control", "")
     data = response.json()
-    assert data == ["301", "339", "342"]
+    assert [item["n_bus"] for item in data] == ["301", "339", "342"]
+    assert data[0]["id"] == 2
+    assert data[0]["patente"] == "BB3001"
+    assert data[0]["en_taller"] is False
 
     # Buscar prefijo "33"
     response_33 = await client.get("/api/v1/buses/buscar?query=33")
     assert response_33.status_code == 200
-    assert response_33.json() == ["339"]
+    assert [item["n_bus"] for item in response_33.json()] == ["339"]
 
     # Buscar sin query (por defecto solo flota taller: excluye '10' que es < 200)
     response_default = await client.get("/api/v1/buses/buscar")
     assert response_default.status_code == 200
-    assert response_default.json() == ["301", "339", "342", "405"]
+    assert [item["n_bus"] for item in response_default.json()] == ["301", "339", "342", "405"]
 
     # Buscar sin query con solo_flota_taller=false (incluye todos)
     response_all = await client.get("/api/v1/buses/buscar?solo_flota_taller=false")
     assert response_all.status_code == 200
-    assert response_all.json() == ["10", "301", "339", "342", "405"]
+    assert [item["n_bus"] for item in response_all.json()] == ["10", "301", "339", "342", "405"]
 
 
 @pytest.mark.asyncio

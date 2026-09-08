@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
@@ -7,6 +7,7 @@ from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.dtos.bus_dto import (
     BusAutocompleteDTO,
     BusResponseDTO,
+    BusSimpleDTO,
     BusUpdateEnTallerDTO,
 )
 from app.modules.buses.services.bus_service import bus_service
@@ -16,15 +17,17 @@ router = APIRouter()
 
 @router.get(
     "/buscar",
-    response_model=List[str],
-    summary="Buscar sugerencias de números de bus por prefijo",
-    description="Devuelve una lista ordenada de n_bus que inicien con el prefijo especificado en 'query'. Por defecto filtra vehículos fuera del rango 200 <= n_bus < 900.",
+    response_model=List[BusSimpleDTO],
+    summary="Buscar sugerencias de buses por prefijo",
+    description="Devuelve una lista ordenada de BusSimpleDTO (id, n_bus, patente, en_taller) que inicien con el prefijo especificado en 'query'. Por defecto filtra vehículos fuera del rango 200 <= n_bus < 900.",
 )
 async def buscar_buses(
+    response: Response,
     query: Optional[str] = Query(None, description="Prefijo o término de búsqueda para n_bus"),
     solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
     db: AsyncSession = SessionDep,
-) -> List[str]:
+) -> List[BusSimpleDTO]:
+    response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
     return await bus_service.buscar_sugerencias_buses(
         db, query=query, solo_flota_taller=solo_flota_taller
     )
@@ -37,10 +40,12 @@ async def buscar_buses(
     description="Devuelve el catálogo de buses activos con información básica de autocompletado y selección.",
 )
 async def listar_buses(
+    response: Response,
     solo_activos: bool = Query(True, description="Filtrar solo buses activos"),
     solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
     db: AsyncSession = SessionDep,
 ) -> List[BusAutocompleteDTO]:
+    response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
     return await bus_service.listar_buses(
         db, solo_activos=solo_activos, solo_flota_taller=solo_flota_taller
     )

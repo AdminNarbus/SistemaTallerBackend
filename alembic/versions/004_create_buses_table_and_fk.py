@@ -6,10 +6,9 @@ Create Date: 2026-08-31 17:00:00.000000
 
 """
 from typing import Sequence, Union
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from alembic import op
 import sqlalchemy as sa
+from app.core.seeds.buses_dataset import BUSES_DATASET
 
 
 # revision identifiers, used by Alembic.
@@ -53,73 +52,50 @@ def upgrade() -> None:
         op.create_index(op.f('ix_buses_id'), 'buses', ['id'], unique=False)
         op.create_index(op.f('ix_buses_n_bus'), 'buses', ['n_bus'], unique=False)
         op.create_index(op.f('ix_buses_patente'), 'buses', ['patente'], unique=False)
+    else:
+        columns_buses = [c['name'] for c in inspector.get_columns('buses')]
+        campos = [
+            ('n_motor', sa.Text()),
+            ('n_chasis', sa.Text()),
+            ('n_carroceria', sa.Text()),
+            ('astos', sa.String(length=50)),
+            ('anio', sa.String(length=50)),
+            ('servicio', sa.String(length=100)),
+            ('empresa_id', sa.Integer()),
+            ('clasificacion', sa.String(length=50)),
+            ('min', sa.Numeric(precision=5, scale=2)),
+            ('max', sa.Numeric(precision=5, scale=2)),
+            ('tipo', sa.String(length=100)),
+            ('max_litros', sa.SmallInteger()),
+        ]
+        for col_name, col_type in campos:
+            if col_name not in columns_buses:
+                op.add_column('buses', sa.Column(col_name, col_type, nullable=True))
 
-    # 2. Migrar datos desde narbus_local si están disponibles
-    try:
-        source_conn = psycopg2.connect(
-            dbname="narbus_local",
-            user="postgres",
-            password="Faber5241.",
-            host="127.0.0.1",
-            port=5432,
-        )
-        with source_conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, patente, n_motor, n_chasis, n_carroceria, marca, modelo, astos,
-                       coalesce("año", null) as anio, servicio, tipo_bus, empresa_id,
-                       n_bus, clasificacion, min, max, tipo, max_litros, is_active
-                FROM buses
-                ORDER BY id
-            """)
-            rows = cur.fetchall()
-        source_conn.close()
-
-        if rows:
-            for r in rows:
-                conn.execute(
-                    sa.text("""
-                        INSERT INTO buses (
-                            id, patente, n_motor, n_chasis, n_carroceria, marca, modelo,
-                            astos, anio, servicio, tipo_bus, empresa_id, n_bus,
-                            clasificacion, min, max, tipo, max_litros, is_active
-                        ) VALUES (
-                            :id, :patente, :n_motor, :n_chasis, :n_carroceria, :marca, :modelo,
-                            :astos, :anio, :servicio, :tipo_bus, :empresa_id, :n_bus,
-                            :clasificacion, :min, :max, :tipo, :max_litros, :is_active
-                        )
-                        ON CONFLICT (id) DO UPDATE SET
-                            patente = EXCLUDED.patente,
-                            n_bus = EXCLUDED.n_bus,
-                            marca = EXCLUDED.marca,
-                            modelo = EXCLUDED.modelo,
-                            is_active = EXCLUDED.is_active;
-                    """),
-                    {
-                        "id": r["id"],
-                        "patente": r["patente"] or f"SIN-PATENTE-{r['id']}",
-                        "n_motor": r["n_motor"],
-                        "n_chasis": r["n_chasis"],
-                        "n_carroceria": r["n_carroceria"],
-                        "marca": r["marca"],
-                        "modelo": r["modelo"],
-                        "astos": r["astos"],
-                        "anio": r["anio"],
-                        "servicio": r["servicio"],
-                        "tipo_bus": r["tipo_bus"],
-                        "empresa_id": r["empresa_id"],
-                        "n_bus": str(r["n_bus"]).strip() if r["n_bus"] else None,
-                        "clasificacion": r["clasificacion"],
-                        "min": r["min"],
-                        "max": r["max"],
-                        "tipo": r["tipo"],
-                        "max_litros": r["max_litros"],
-                        "is_active": True if r["is_active"] is None else r["is_active"],
-                    }
+    # 2. Siembra estática de los 93 buses reales (rango 200 a 800) sin consultar BD externa
+    for b in BUSES_DATASET:
+        conn.execute(
+            sa.text("""
+                INSERT INTO buses (
+                    id, patente, n_motor, n_chasis, n_carroceria, marca, modelo,
+                    astos, anio, servicio, tipo_bus, empresa_id, n_bus,
+                    clasificacion, min, max, tipo, max_litros, is_active
+                ) VALUES (
+                    :id, :patente, :n_motor, :n_chasis, :n_carroceria, :marca, :modelo,
+                    :astos, :anio, :servicio, :tipo_bus, :empresa_id, :n_bus,
+                    :clasificacion, :min, :max, :tipo, :max_litros, :is_active
                 )
-            # Sincronizar secuencia de id
-            conn.execute(sa.text("SELECT setval('buses_id_seq', coalesce((SELECT max(id) FROM buses), 1));"))
-    except Exception as e:
-        print(f"[ALEMBIC 004] Advertencia al sincronizar datos desde narbus_local: {e}")
+                ON CONFLICT (id) DO UPDATE SET
+                    patente = EXCLUDED.patente,
+                    n_bus = EXCLUDED.n_bus,
+                    marca = EXCLUDED.marca,
+                    modelo = EXCLUDED.modelo,
+                    is_active = EXCLUDED.is_active;
+            """),
+            b
+        )
+    # Sincronizar secuencia de id
+    conn.execute(sa.text("SELECT setval('buses_id_seq', coalesce((SELECT max(id) FROM buses), 1));"))
 
     # 3. Agregar bus_id a taller_solicitudes
     taller_sol_cols = [c['name'] for c in inspector.get_columns('taller_solicitudes')]

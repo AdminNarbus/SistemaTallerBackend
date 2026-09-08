@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 28,
+  "id": "AV-0028",
+  "timestamp": "2026-09-08T09:52:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-8",
+    "name": "Auto-rellenado Autónomo en Alembic: Flota de Buses 200-800, Catálogo, Categorías y 1 Usuario por Rol",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación de la dependencia externa a bases de datos locales en migraciones de Alembic (psycopg2.connect narbus_local). Incorporación de auto-rellenado estático de 93 buses reales de pasajeros (rango 200 a 800), siembra en Alembic de categorías de fallas y fallas preconcebidas, catálogo oficial de pauta preventiva de 11 ítems, y creación inicial de exactamente 1 usuario por cada rol (ADMIN, SUPERVISOR, CONDUCTOR, MECANICO), permitiendo despliegues limpios y automáticos en plataformas serverless como Neon.",
+  "scope": {
+    "planned": [
+      "Quitar la dependencia a base de datos externa narbus_local en migración 004",
+      "Incrustar estáticamente los 93 buses reales (rango 200 a 800) en el dataset maestro de siembra",
+      "Configurar migración 001 para sembrar roles y exactamente 1 usuario por cada rol (ADMIN, SUPERVISOR, CONDUCTOR, MECANICO)",
+      "Configurar migración 003 para sembrar categorías de fallas y fallas estándar",
+      "Garantizar siembra idempotente de 11 ítems de pauta preventiva en migración 005",
+      "Actualizar seed.py con dataset estático y verificación de no duplicidad",
+      "Crear pruebas unitarias de consistencia de catálogo y dataset"
+    ],
+    "completed": [
+      "app/core/seeds/buses_dataset.py: Creado dataset estático con los 93 buses reales de pasajeros (rango numérico de n_bus entre 200 y 800), saneando campos opcionales y tipos de datos.",
+      "alembic/versions/001_create_usuarios_table.py: Agregada siembra automática de 4 roles (ADMIN, SUPERVISOR, CONDUCTOR, MECANICO) y exactamente 1 usuario por rol con hashes bcrypt seguros e inserción idempotente.",
+      "alembic/versions/003_create_mantencion_3nf_tables.py: Agregada siembra automática de 6 categorías maestras y 10 fallas de taller preconcebidas vía SQL idempotente.",
+      "alembic/versions/004_create_buses_table_and_fk.py: Eliminada la conexión dinámica externa a narbus_local; reemplazada por inserción masiva de BUSES_DATASET con ON CONFLICT y sincronización de secuencia buses_id_seq.",
+      "alembic/versions/005_flujo_avanzado_taller_y_pauta.py: Reforzada la siembra de los 11 ítems oficiales de pauta_taller_items para ser 100% idempotente ante re-ejecuciones.",
+      "app/core/seed.py: Actualizado para crear únicamente 1 usuario de cada rol sin duplicar mecánicos ni supervisores, respaldando la inicialización de buses si la tabla estuviera vacía.",
+      "tests/unit/test_alembic_seed_dataset.py: Creada suite de pruebas unitarias validando cantidad (93 buses), rangos válidos (200 a 800) y estructura del catálogo oficial de pauta preventiva."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (consumo exclusivo de contratos REST ya estabilizados)",
+      "Creación de usuarios masivos ficticios adicionales"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/seeds/buses_dataset.py",
+      "action": "created",
+      "summary": "Dataset maestro de 93 buses reales de pasajeros con n_bus en rango 200 a 800."
+    },
+    {
+      "path": "alembic/versions/001_create_usuarios_table.py",
+      "action": "modified",
+      "summary": "Siembra inicial de roles y 1 usuario por cada rol (admin, supervisor, chofer, mecanico)."
+    },
+    {
+      "path": "alembic/versions/003_create_mantencion_3nf_tables.py",
+      "action": "modified",
+      "summary": "Siembra inicial de categorías de falla y catálogo de 10 fallas de taller estándar."
+    },
+    {
+      "path": "alembic/versions/004_create_buses_table_and_fk.py",
+      "action": "modified",
+      "summary": "Eliminada conexión psycopg2 narbus_local y sustituida por inserción de BUSES_DATASET."
+    },
+    {
+      "path": "alembic/versions/005_flujo_avanzado_taller_y_pauta.py",
+      "action": "modified",
+      "summary": "Siembra idempotente de 11 ítems oficiales de pauta preventiva con sincronización de secuencia."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Ajuste de usuarios a uno de cada rol y respaldo de carga de buses."
+    },
+    {
+      "path": "tests/unit/test_alembic_seed_dataset.py",
+      "action": "created",
+      "summary": "Pruebas unitarias de integridad de datos para dataset de buses y catálogo de pauta."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Independencia Absoluta de Bases de Datos Externas en Migraciones Alembic",
+      "rationale": "La migración 004 intentaba conectarse en tiempo de ejecución a 'narbus_local' en 127.0.0.1 mediante psycopg2. Esto provocaba que en cualquier entorno cloud o remoto (como Neon, CI/CD o contenedores) la migración fallara y dejara la tabla de buses vacía.",
+      "consequences": "Al incrustar los 93 buses reales directamente en el código de siembra de Alembic, cualquier base de datos nueva puede crearse y poblarse ejecutando únicamente 'alembic upgrade head'."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Filtrado Estricto de Flota de Buses de Pasajeros (Rango 200 a 800)",
+      "rationale": "La tabla de buses contenía registros de consumos internos, camionetas de taller, fundos y vehículos de servicio que no correspondían a la flota operativa de pasajeros.",
+      "consequences": "Se aislaron exactamente los 93 buses reales de pasajeros, asegurando datos limpios y relevantes tanto para el taller como para el módulo de neumáticos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Exactamente un Usuario Inicial por Rol",
+      "rationale": "El auto-rellenado anterior creaba múltiples mecánicos de prueba. Se estandarizó la siembra para crear exactamente un usuario administrativo, uno de supervisión, uno conductor y uno mecánico, dejando el sistema listo para operar sin saturar la tabla de usuarios.",
+      "consequences": "Cuentas iniciales limpias, predecibles y de bajo acoplamiento para pruebas y primer uso en Neon o local."
+    }
+  ],
+  "verification": [
+    {
+      "command": "$env:PYTHONPATH=\".\"; .\\venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "63 passed, 1 warning in 22.97s"
+    },
+    {
+      "command": "$env:PYTHONPATH=\".\"; .\\venv\\Scripts\\python.exe -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "Ejecución de migraciones completada sin errores ni dependencias externas"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Despliegue y verificación en base de datos remota Neon apuntando la DATABASE_URL en .env y ejecutando alembic upgrade head.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "dirty": false
+  },
+  "notes": [
+    "Los usuarios creados por defecto son: admin (admin123), supervisor (super123), chofer (chofer123), mecanico (meca123).",
+    "Los 93 buses reales tienen sus números de bus en el rango 200 a 800."
+  ]
+}

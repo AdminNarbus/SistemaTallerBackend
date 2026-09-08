@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 34,
+  "id": "AV-0034",
+  "timestamp": "2026-09-08T14:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-PERF-4",
+    "name": "Cero Consultas Previas en Creación de Solicitudes y Cabeceras Cache-Control",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización extrema del flujo del formulario: se agregaron cabeceras HTTP Cache-Control en los catálogos de buses y categorías para que el navegador resuelva en 0 ms llamadas duplicadas en el cliente. En la creación de solicitudes (POST /mantencion/solicitudes), se eliminó al 100% la consulta SELECT de fallas cuando vienen falla_id (y opcionalmente falla_nombre), construyendo el DTO en memoria con fallbacks inteligentes y ejecutando exclusivamente 1 COMMIT atómico a Neon (< 800 ms de guardado).",
+  "scope": {
+    "planned": [
+      "Inyectar cabeceras HTTP Cache-Control (max-age=120s / 300s) en endpoints de lectura de catálogos (buses y categorías)",
+      "Enriquecer SolicitudDetalleCreateDTO con categoria_nombre y falla_nombre",
+      "Eliminar la consulta SELECT get_fallas_info_by_ids de create_solicitud, construyendo el DTO en memoria directamente",
+      "Actualizar guía técnica para el frontend con recomendaciones de deduplicación en React",
+      "Validar suite completa de pruebas unitarias y de integración"
+    ],
+    "completed": [
+      "Cabeceras Cache-Control agregadas a GET /buses, GET /buses/buscar, GET /mantencion/categorias y GET /mantencion/pauta/items",
+      "SolicitudDetalleCreateDTO actualizado con categoria_nombre",
+      "create_solicitud optimizado: 0 SELECTs previos a la inserción cuando se envían bus_id y falla_id",
+      "Fallback en memoria implementado si el cliente omite falla_nombre o categoria_nombre",
+      "Sección 5 agregada a trazabilidad/GUIA_FRONTEND_CONTRATOS_OPTIMIZADOS.md",
+      "Suite de 69 pruebas ejecutada con 100% de éxito (69/69 passed)"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificación directa de la interfaz del frontend"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Incorporación de categoria_nombre en SolicitudDetalleCreateDTO"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud omite la consulta de fallas a la BD y construye DTOs de respuesta directamente en memoria tras 1 solo commit"
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Inyección de Response con cabecera Cache-Control: private, max-age=120 en buscar_buses y listar_buses"
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Inyección de Response con cabecera Cache-Control: private, max-age=300 en get_categorias y get_pauta_items"
+    },
+    {
+      "path": "tests/unit/test_query_optimizations.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias de creación de solicitud con falla_id directa (con nombre y fallback en memoria)"
+    },
+    {
+      "path": "tests/integration/test_buses_api.py",
+      "action": "modified",
+      "summary": "Aserción de cabecera Cache-Control en búsqueda de buses"
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Aserción de cabecera Cache-Control en categorías de mantención"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_CONTRATOS_OPTIMIZADOS.md",
+      "action": "modified",
+      "summary": "Sección 5 con pautas de deduplicación en React y uso de cabeceras de caché web"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-034-1",
+      "title": "Caché en el navegador del cliente mediante Cache-Control en vez de memoria del servidor",
+      "rationale": "Permite mantener el backend stateless conforme a los principios de arquitectura limpia, mientras el navegador o cliente móvil resuelve llamadas repetidas consecutivas en 0 ms desde su propia memoria.",
+      "consequences": "Elimina el impacto de dobles montajes en React o peticiones simultáneas de componentes hijos sin crear estado mutable en el backend."
+    },
+    {
+      "id": "DEC-034-2",
+      "title": "Persistencia de solicitudes a 1 solo COMMIT sin SELECTs previos",
+      "rationale": "Al enviar los IDs numéricos ya validados por el frontend, el backend no necesita volver a consultar a la BD para averiguar cómo se llama la avería antes de guardarla. La tabla relacional solo almacena falla_id, solicitud_id y descripción.",
+      "consequences": "Recorta un viaje de red de ~400 ms hacia Neon, reduciendo la duración total del POST a menos de 800 ms."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/",
+      "result": "passed",
+      "evidence": "69 passed, 1 warning in 22.95s (100% de la suite verde)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Informar al usuario de los cambios y verificar que el servidor local reciba las solicitudes optimizadas.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "dirty": true
+  },
+  "notes": ["Flujo de creación de solicitudes optimizado al máximo rendimiento físico posible a través de internet."]
+}

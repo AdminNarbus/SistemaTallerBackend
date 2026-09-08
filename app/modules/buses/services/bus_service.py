@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
-from app.modules.buses.dtos.bus_dto import BusAutocompleteDTO, BusResponseDTO
+from app.modules.buses.dtos.bus_dto import BusAutocompleteDTO, BusResponseDTO, BusSimpleDTO
 from app.modules.buses.repository.bus_repository import bus_repository
 
 logger = logging.getLogger(__name__)
@@ -17,10 +17,10 @@ class BusService:
         db: AsyncSession,
         query: Optional[str] = None,
         solo_flota_taller: bool = True,
-    ) -> List[str]:
+    ) -> List[BusSimpleDTO]:
         """
-        Devuelve la lista de números de bus (n_bus) que coinciden con el prefijo ingresado.
-        Si query es None o vacío, retorna todos los n_bus activos ordenados.
+        Devuelve la lista de buses sugeridos (id, n_bus, patente, en_taller) que coinciden con el prefijo ingresado.
+        Si query es None o vacío, retorna todos los buses activos ordenados numéricamente.
         Por defecto filtra vehículos que no pertenecen a la flota operativa de taller (200 <= n_bus < 900).
         """
         prefix = (query or "").strip()

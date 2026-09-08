@@ -33,6 +33,8 @@ async def get_auditoria_buses_taller(
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),
     estado: Optional[str] = Query(None, description="Filtrar por estado (REPORTADO, EN_REPARACION, PENDIENTE_REASIGNACION, FINALIZADO)"),
     mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
+    skip: int = Query(0, ge=0, description="Número de registros a omitir para paginación"),
+    limit: int = Query(50, ge=1, le=100, description="Límite máximo de solicitudes a retornar"),
     current_user: Usuario = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
@@ -40,10 +42,20 @@ async def get_auditoria_buses_taller(
     Dashboard Auditor para Supervisores/Administradores:
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
-    y la bitácora de comentarios cronológica. Permite filtros por bus, estado y nombre/username del mecánico.
+    y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico y paginación.
     """
-    logger.info("[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s", current_user.id, n_bus, estado, mecanico_nombre)
-    result = await supervision_service.get_auditoria_solicitudes(db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre)
+    logger.info(
+        "[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
+        current_user.id,
+        n_bus,
+        estado,
+        mecanico_nombre,
+        skip,
+        limit,
+    )
+    result = await supervision_service.get_auditoria_solicitudes(
+        db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre, skip=skip, limit=limit
+    )
     logger.debug("[SUPERVISION] Auditoría retornada | total_solicitudes=%s", len(result))
     return result
 

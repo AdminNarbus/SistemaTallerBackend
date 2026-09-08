@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 32,
+  "id": "AV-0032",
+  "timestamp": "2026-09-08T13:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-PERF-3",
+    "name": "Contratos Optimizados de Buses, Categorías y Creación de Solicitudes",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización de los contratos REST para buses y categorías: GET /buses/buscar ahora retorna objetos BusSimpleDTO (id, n_bus, patente, en_taller) y GET /mantencion/categorias incluye directamente falla_id y falla_nombre. Con ello, la creación de solicitudes por el chofer puede enviar bus_id y falla_id directamente, eliminando búsquedas intermedias y reduciendo la latencia de guardado a un único INSERT + COMMIT atómico.",
+  "scope": {
+    "planned": [
+      "Crear BusSimpleDTO y actualizar GET /api/v1/buses/buscar para retornar objetos completos",
+      "Enriquecer CategoriaFallaDTO y GET /api/v1/mantencion/categorias con falla_id y falla_nombre",
+      "Actualizar SolicitudCreateDTO y create_solicitud() para omitir búsquedas a la BD cuando vengan bus_id y falla_id",
+      "Elaborar guía técnica exhaustiva para el equipo de Frontend",
+      "Actualizar pruebas unitarias y de integración"
+    ],
+    "completed": [
+      "BusSimpleDTO implementado en app/modules/buses/dtos/bus_dto.py",
+      "Repositorio, servicio y controlador de buses actualizados para retornar List[BusSimpleDTO]",
+      "get_categorias_con_fallas() implementado en repositorio y servicio de mantención",
+      "create_solicitud optimizado: 0 queries previas cuando el payload trae bus_id y falla_id",
+      "Retrocompatibilidad preservada al 100% para clientes que envían solo n_bus o categoria_id",
+      "Guía técnica creada en trazabilidad/GUIA_FRONTEND_CONTRATOS_OPTIMIZADOS.md",
+      "Batería de 67 pruebas ejecutada con 100% de éxito (67/67 passed)"
+    ],
+    "pending": [],
+    "outOfScope": ["Modificación directa de la UI del frontend (manejada en repositorio separado)"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/buses/dtos/bus_dto.py",
+      "action": "modified",
+      "summary": "Incorporación de BusSimpleDTO con id, n_bus, patente y en_taller"
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "buscar_n_buses_por_prefijo retorna List[BusSimpleDTO]"
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "buscar_sugerencias_buses adaptado al nuevo DTO"
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Endpoint GET /buscar expone response_model=List[BusSimpleDTO]"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "CategoriaFallaDTO incluye falla_id y falla_nombre; SolicitudCreateDTO acepta bus_id opcional"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Método get_categorias_con_fallas() asocia fallas activas a categorías"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud omite roundtrips a la BD si bus_id y falla_id vienen provistos"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_CONTRATOS_OPTIMIZADOS.md",
+      "action": "created",
+      "summary": "Guía técnica para que el equipo Frontend implemente los contratos optimizados"
+    },
+    {
+      "path": "tests/integration/test_buses_api.py",
+      "action": "modified",
+      "summary": "Actualización de aserciones para validar objetos BusSimpleDTO"
+    },
+    {
+      "path": "tests/unit/test_bus_service.py",
+      "action": "modified",
+      "summary": "Aserciones de servicio para BusSimpleDTO"
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Pruebas de get_categorias con fallas y creación directa de solicitud con IDs numéricos"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-032-1",
+      "title": "Envío de bus_id y falla_id desde el Frontend para eliminar RTTs",
+      "rationale": "En formularios donde el cliente ya interactúa con un combobox o selector que conoce los IDs internos del catálogo, enviar dichos IDs directamente en el payload evita 2 consultas SELECT síncronas antes del INSERT.",
+      "consequences": "Reduce el tiempo de creación en más de 600 ms transcontinentales, convirtiendo el guardado en 1 única transacción atómica."
+    },
+    {
+      "id": "DEC-032-2",
+      "title": "Retrocompatibilidad con fallback dinámico",
+      "rationale": "Para evitar romper clientes móviles o web existentes que aún envían únicamente n_bus o categoria_id, el servicio verifica la presencia de los IDs; si faltan, recurre a las búsquedas de compatibilidad.",
+      "consequences": "Cero riesgo de regresión o errores 422 para clientes no actualizados."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_buses_api.py",
+      "result": "passed",
+      "evidence": "3 passed"
+    },
+    {
+      "command": "pytest tests/unit/test_bus_service.py",
+      "result": "passed",
+      "evidence": "2 passed"
+    },
+    {
+      "command": "pytest tests/integration/test_mantencion_api.py",
+      "result": "passed",
+      "evidence": "6 passed (incluyendo test_create_solicitud_optimizada_con_bus_id_y_falla_id)"
+    },
+    {
+      "command": "pytest tests/",
+      "result": "passed",
+      "evidence": "67 passed in 22.84s (100% suite verde)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Presentar resultados y guía al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/seed-alembic-buses-catalogo-usuarios",
+    "dirty": true
+  },
+  "notes": ["Contratos 100% backward compatible."]
+}

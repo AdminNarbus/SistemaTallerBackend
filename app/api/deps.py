@@ -1,4 +1,5 @@
-from typing import Optional
+import time
+from typing import Optional, Dict, Tuple
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
@@ -15,6 +16,14 @@ reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False
 )
 
+_USER_CACHE: Dict[int, Tuple[float, Usuario]] = {}
+_USER_CACHE_TTL_SECONDS: float = 60.0
+
+
+def clear_user_cache() -> None:
+    """Invalida la caché en memoria de usuarios autenticados."""
+    _USER_CACHE.clear()
+
 
 async def get_current_user(
     db: AsyncSession = SessionDep,
@@ -22,7 +31,8 @@ async def get_current_user(
 ) -> Optional[Usuario]:
     """
     Extrae y valida el token JWT del encabezado Authorization: Bearer <token>.
-    Devuelve el modelo Usuario autenticado si es válido.
+    Devuelve el modelo Usuario autenticado si es válido, utilizando una caché ligera en memoria (TTL=60s)
+    para evitar consultas redundantes a la base de datos en ráfagas de peticiones.
     """
     if not token:
         return None
@@ -37,9 +47,18 @@ async def get_current_user(
     except Exception:
         return None
 
+    now = time.monotonic()
+    if user_id in _USER_CACHE:
+        cached_time, cached_user = _USER_CACHE[user_id]
+        if (now - cached_time) < _USER_CACHE_TTL_SECONDS and cached_user.is_active:
+            return cached_user
+
     user = await user_repository.get_by_id(db, user_id=user_id)
     if not user or not user.is_active:
+        _USER_CACHE.pop(user_id, None)
         return None
+
+    _USER_CACHE[user_id] = (now, user)
     return user
 
 

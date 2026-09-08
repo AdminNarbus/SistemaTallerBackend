@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
@@ -340,10 +343,23 @@ class MantencionService:
     async def create_solicitud(self, db: AsyncSession, dto: SolicitudCreateDTO, creador_id: int) -> SolicitudDTO:
         logger.info("[MANTENCION] Creando solicitud | n_bus='%s' | creador_id=%s", dto.n_bus, creador_id)
 
+        # 1. Resolver bus_id y patente en una sola consulta optimizada
         bus_id = dto.bus_id
-        if not bus_id and dto.n_bus:
-            bus_id = await mantencion_repository.get_bus_id_by_n_bus(db, dto.n_bus)
+        bus_patente = None
+        if dto.n_bus:
+            bus_info = await mantencion_repository.get_bus_info_by_n_bus(db, dto.n_bus)
+            if bus_info:
+                bus_id, bus_patente = bus_info
+        elif bus_id:
+            bus_obj = await mantencion_repository.get_bus_by_id(db, bus_id)
+            if bus_obj:
+                bus_patente = bus_obj.patente
 
+        # 2. Creador de la solicitud
+        u_creador = await mantencion_repository.get_usuario_by_id(db, creador_id)
+        creador_nombre = u_creador.nombre_completo if u_creador else None
+
+        now = datetime.now()
         solicitud = TallerSolicitud(
             n_bus=dto.n_bus,
             bus_id=bus_id,
@@ -351,41 +367,156 @@ class MantencionService:
             estado="REPORTADO",
             descripcion_general=dto.descripcion_general,
             foto_url=dto.foto_url,
-            fecha_creacion=datetime.now(),
+            fecha_creacion=now,
         )
         mantencion_repository.add_solicitud(db, solicitud)
         await mantencion_repository.flush(db)
 
+        # 3. Resolución batch de fallas por categoría y fallas explícitas para evitar consultas N+1
+        detalles_dtos: List[SolicitudDetalleDTO] = []
         if dto.detalles:
+            needed_cats = [d.categoria_id for d in dto.detalles if not d.falla_id and d.categoria_id]
+            fallas_map = await mantencion_repository.find_fallas_activas_by_categorias(db, needed_cats) if needed_cats else {}
+
+            explicit_falla_ids = [d.falla_id for d in dto.detalles if d.falla_id]
+            explicit_fallas: Dict[int, FallaTaller] = {}
+            if explicit_falla_ids:
+                stmt_f = (
+                    select(FallaTaller)
+                    .options(joinedload(FallaTaller.categoria))
+                    .where(FallaTaller.id.in_(explicit_falla_ids))
+                )
+                res_f = await db.execute(stmt_f)
+                for f in res_f.scalars().all():
+                    explicit_fallas[f.id] = f
+
             for det_dto in dto.detalles:
                 falla_id = det_dto.falla_id
-                if not falla_id and det_dto.categoria_id:
-                    falla_id = await mantencion_repository.find_falla_activa_by_categoria(db, det_dto.categoria_id)
-                    if not falla_id:
-                        cat = await mantencion_repository.get_categoria_by_id(db, det_dto.categoria_id)
-                        cat_nom = cat.nombre if cat else f"Categoría #{det_dto.categoria_id}"
+                cat_id = det_dto.categoria_id
+                falla_nombre = None
+                cat_dto = None
+
+                if not falla_id and cat_id:
+                    if cat_id in fallas_map:
+                        falla_id, falla_nombre = fallas_map[cat_id]
+                    else:
+                        cat = await mantencion_repository.get_categoria_by_id(db, cat_id)
+                        cat_nom = cat.nombre if cat else f"Categoría #{cat_id}"
                         nueva_falla = FallaTaller(
-                            categoria_id=det_dto.categoria_id,
+                            categoria_id=cat_id,
                             nombre=f"Avería de {cat_nom}",
                             is_active=True,
                         )
                         mantencion_repository.add_falla(db, nueva_falla)
                         await mantencion_repository.flush(db)
                         falla_id = nueva_falla.id
+                        falla_nombre = nueva_falla.nombre
 
                 detalle = TallerSolicitudDetalle(
                     solicitud_id=solicitud.id,
                     falla_id=falla_id,
                     descripcion_personalizada=det_dto.descripcion_personalizada,
                     resuelto=False,
-                    fecha_creacion=datetime.now(),
+                    fecha_creacion=now,
                 )
                 mantencion_repository.add_detalle(db, detalle)
+                await mantencion_repository.flush(db)
+
+                # Construir DTO del detalle en memoria
+                falla_dto = None
+                if falla_id:
+                    if falla_id in explicit_fallas:
+                        f_obj = explicit_fallas[falla_id]
+                        falla_nombre = f_obj.nombre
+                        cat_id = f_obj.categoria_id
+                        if f_obj.categoria:
+                            cat_dto = CategoriaFallaDTO(
+                                id=f_obj.categoria.id,
+                                nombre=f_obj.categoria.nombre,
+                                is_active=f_obj.categoria.is_active,
+                            )
+                    elif cat_id:
+                        c_obj = await db.get(CategoriaFalla, cat_id)
+                        if c_obj:
+                            cat_dto = CategoriaFallaDTO(
+                                id=c_obj.id,
+                                nombre=c_obj.nombre,
+                                is_active=c_obj.is_active,
+                            )
+                    else:
+                        f_obj = await db.get(FallaTaller, falla_id)
+                        if f_obj:
+                            falla_nombre = f_obj.nombre
+                            cat_id = f_obj.categoria_id
+                            if f_obj.categoria_id:
+                                c_obj = await db.get(CategoriaFalla, f_obj.categoria_id)
+                                if c_obj:
+                                    cat_dto = CategoriaFallaDTO(
+                                        id=c_obj.id,
+                                        nombre=c_obj.nombre,
+                                        is_active=c_obj.is_active,
+                                    )
+
+                    falla_dto = FallaTallerDTO(
+                        id=falla_id,
+                        categoria_id=cat_id or 1,
+                        nombre=falla_nombre or "Avería",
+                        is_active=True,
+                        categoria=cat_dto,
+                    )
+
+                cat_nombre = cat_dto.nombre if cat_dto else None
+                detalles_dtos.append(
+                    SolicitudDetalleDTO(
+                        id=detalle.id,
+                        solicitud_id=solicitud.id,
+                        categoria_id=cat_id,
+                        categoria_nombre=cat_nombre,
+                        falla_id=falla_id,
+                        falla=falla_dto,
+                        descripcion_personalizada=det_dto.descripcion_personalizada,
+                        resuelto=False,
+                        falta_repuesto=False,
+                        comentario_repuesto=None,
+                        fecha_creacion=now,
+                        fecha_resolucion=None,
+                        mecanico_resolvio_id=None,
+                        mecanico_resolvio_nombre=None,
+                        mecanicos_asignados=[],
+                        historial_asignaciones=[],
+                    )
+                )
 
         await db.commit()
-        sol = await mantencion_repository.get_solicitud_by_id(db, solicitud.id)
-        logger.info("[MANTENCION] Solicitud creada | id=%s | n_bus='%s' | estado=REPORTADO", sol.id, sol.n_bus)
-        return self._to_solicitud_dto(sol)
+        logger.info("[MANTENCION] Solicitud creada exitosamente | id=%s | n_bus='%s' | estado=REPORTADO", solicitud.id, solicitud.n_bus)
+
+        # 4. Retornar DTO directamente construido en memoria sin disparar 15 consultas selectinload a tablas vacías
+        return SolicitudDTO(
+            id=solicitud.id,
+            n_bus=solicitud.n_bus,
+            bus_id=solicitud.bus_id,
+            bus_patente=bus_patente,
+            usuario_creador_id=solicitud.usuario_creador_id,
+            usuario_creador_nombre=creador_nombre,
+            mecanico_cierre_id=None,
+            mecanico_cierre_nombre=None,
+            estado=solicitud.estado,
+            descripcion_general=solicitud.descripcion_general,
+            foto_url=solicitud.foto_url,
+            motivo_incompleto_checklist=None,
+            motivo_cierre_parcial=None,
+            fecha_creacion=solicitud.fecha_creacion,
+            fecha_cierre=None,
+            pauta_completada=False,
+            total_fallas=len(detalles_dtos),
+            fallas_resueltas=0,
+            fallas_con_falta_repuesto=0,
+            detalles=detalles_dtos,
+            mecanicos=[],
+            historial_mecanicos=[],
+            comentarios=[],
+            pauta_respuestas=[],
+        )
 
     async def tomar_trabajo(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: TomarTrabajoDTO

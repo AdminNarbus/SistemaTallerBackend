@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional, Set
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.models.bus import Bus
@@ -64,7 +64,11 @@ class MantencionRepository:
         return await db.get(CategoriaFalla, categoria_id)
 
     async def get_fallas(self, db: AsyncSession, categoria_id: Optional[int] = None) -> List[FallaTaller]:
-        stmt = select(FallaTaller).where(FallaTaller.is_active == True)
+        stmt = (
+            select(FallaTaller)
+            .where(FallaTaller.is_active == True)
+            .options(joinedload(FallaTaller.categoria))
+        )
         if categoria_id:
             stmt = stmt.where(FallaTaller.categoria_id == categoria_id)
         res = await db.execute(stmt)
@@ -83,6 +87,31 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def find_fallas_activas_by_categorias(
+        self, db: AsyncSession, categoria_ids: List[int]
+    ) -> dict[int, tuple[int, str]]:
+        """
+        Retorna un mapa {categoria_id: (falla_id, falla_nombre)} en UNA SOLA consulta batch.
+        """
+        if not categoria_ids:
+            return {}
+        stmt = (
+            select(FallaTaller.categoria_id, FallaTaller.id, FallaTaller.nombre)
+            .where(
+                and_(
+                    FallaTaller.categoria_id.in_(categoria_ids),
+                    FallaTaller.is_active == True,
+                )
+            )
+            .order_by(FallaTaller.id.asc())
+        )
+        res = await db.execute(stmt)
+        mapping = {}
+        for cat_id, f_id, f_nom in res.all():
+            if cat_id not in mapping:
+                mapping[cat_id] = (f_id, f_nom)
+        return mapping
+
     async def find_falla_otro(self, db: AsyncSession) -> Optional[int]:
         stmt_cat_otro = select(CategoriaFalla.id).where(CategoriaFalla.nombre == "OTRO").limit(1)
         res_cat_otro = await db.execute(stmt_cat_otro)
@@ -100,6 +129,16 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_bus_info_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[tuple[int, Optional[str]]]:
+        """Recupera id y patente del bus en una sola consulta."""
+        clean_nb = str(n_bus).strip()
+        stmt = select(Bus.id, Bus.patente).where(Bus.n_bus == clean_nb)
+        res = await db.execute(stmt)
+        row = res.first()
+        if row:
+            return row[0], row[1]
+        return None
+
     async def get_bus_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
         return await db.get(Bus, bus_id)
 
@@ -107,25 +146,29 @@ class MantencionRepository:
         return await db.get(Usuario, usuario_id)
 
     async def get_solicitud_by_id(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
+        """
+        Recupera la solicitud completa optimizando relaciones escalares con joinedload
+        y colecciones con selectinload, reduciendo drásticamente viajes de red innecesarios.
+        """
         logger.debug("[MANTENCION-REPO] Query get_solicitud_by_id | id=%s", solicitud_id)
-        db.expire_all()
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)
+            .execution_options(populate_existing=True)
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.mecanico_cierre),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.asignado_por),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.asignado_por),
-                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.item),
-                selectinload(TallerSolicitud.pauta_respuestas).selectinload(TallerSolicitudPauta.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                joinedload(TallerSolicitud.mecanico_cierre),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.asignado_por),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.asignado_por),
+                selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.item),
+                selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -137,13 +180,13 @@ class MantencionRepository:
             .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]))
             .order_by(TallerSolicitud.fecha_creacion.asc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -177,13 +220,13 @@ class MantencionRepository:
             )
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -194,15 +237,15 @@ class MantencionRepository:
             select(TallerSolicitud)
             .order_by(TallerSolicitud.fecha_creacion.desc())
             .options(
-                selectinload(TallerSolicitud.bus),
-                selectinload(TallerSolicitud.creador),
-                selectinload(TallerSolicitud.mecanico_cierre),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.falla).selectinload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.mecanico_resolvio),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).selectinload(TallerAsignacionFalla.mecanico),
-                selectinload(TallerSolicitud.mecanicos).selectinload(TallerSolicitudMecanico.mecanico),
-                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.usuario),
-                selectinload(TallerSolicitud.asignaciones_fallas).selectinload(TallerAsignacionFalla.mecanico),
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                joinedload(TallerSolicitud.mecanico_cierre),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
             )
         )
         res = await db.execute(stmt)

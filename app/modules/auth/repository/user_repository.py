@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash, verify_password
@@ -29,9 +30,13 @@ class UserRepository:
     async def get_by_username(
         self, db: AsyncSession, username: str
     ) -> Optional[Usuario]:
-        """Busca un usuario por su username (case-insensitive)."""
+        """Busca un usuario por su username (case-insensitive) con su rol en un solo JOIN."""
         logger.debug("[AUTH] Buscando usuario por username='%s'", username.strip())
-        stmt = select(Usuario).where(Usuario.username.ilike(username.strip()))
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.username.ilike(username.strip()))
+        )
         res = await db.execute(stmt)
         user = res.scalar_one_or_none()
         if not user:
@@ -41,9 +46,13 @@ class UserRepository:
     async def get_by_id(
         self, db: AsyncSession, user_id: int
     ) -> Optional[Usuario]:
-        """Busca un usuario por su ID de clave primaria."""
+        """Busca un usuario por su ID de clave primaria con su rol en un solo JOIN."""
         logger.debug("[AUTH] Buscando usuario por id=%s", user_id)
-        stmt = select(Usuario).where(Usuario.id == user_id)
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.id == user_id)
+        )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 

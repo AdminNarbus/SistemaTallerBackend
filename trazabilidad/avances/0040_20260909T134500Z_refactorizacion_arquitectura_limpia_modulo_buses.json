@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 40,
+  "id": "AV-0040",
+  "timestamp": "2026-09-09T13:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "ARQ-2",
+    "name": "Refactorización Arquitectura Limpia Módulo Buses",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica limpia integral del módulo de Buses: separación estricta por capas (API, DTOs, Services, Repositories, Models). Desacoplamiento total de modelos ORM de SQLAlchemy en el router mediante inyección de UsuarioResponseDTO, exportación completa de los 7 DTOs de buses en dtos/__init__.py, erradicación del anti-patrón Smart Repository dejando a BusRepository como capa pura de persistencia SQL, y reubicación de la regla de negocio de flota operativa (200 <= n_bus < 900) y ordenamiento numérico en BusService.",
+  "scope": {
+    "planned": [
+      "Exportar los 7 DTOs de buses en app/modules/buses/dtos/__init__.py",
+      "Desacoplar modelos ORM en app/modules/buses/api/router.py usando UsuarioResponseDTO",
+      "Incorporar logging estándar en buses/api/router.py",
+      "Extraer anti-patrón Smart Repository de bus_repository.py (quitar dependencias de DTOs y reglas de negocio)",
+      "Centralizar la regla es_bus_operativo_taller (200 <= n_bus < 900) y ordenamiento numérico en bus_service.py",
+      "Asegurar el 100% de la suite de pruebas unitarias, de integración y e2e pasando (71 tests)"
+    ],
+    "completed": [
+      "app/modules/buses/dtos/__init__.py exporta completamente todos los DTOs del módulo",
+      "app/modules/buses/api/router.py opera exclusivamente con DTOs (UsuarioResponseDTO, BusSimpleDTO, BusAutocompleteDTO, BusResponseDTO) con logging",
+      "bus_repository.py desacoplado de Pydantic DTOs y enfocado en persistencia SQL pura",
+      "bus_service.py asume la regla de negocio de flota operativa, formateo y ordenamiento numérico natural de catálogos",
+      "100% de las pruebas automatizadas ejecutadas exitosamente (71/71 tests aprobados en 23.80s)"
+    ],
+    "pending": [
+      "Continuar con la refactorización arquitectónica modular de los siguientes módulos (Neumáticos, Mantención, Supervisión)"
+    ],
+    "outOfScope": [
+      "Cambios en repositorio Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/buses/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación centralizada de BusAutocompleteDTO, BusSimpleDTO, BusUpdateEnTallerDTO y los demás esquemas en __all__."
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Eliminación del import del modelo ORM Usuario; inyección de UsuarioResponseDTO en actualizar_en_taller e incorporación de logger."
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Eliminación de la importación directa de BusSimpleDTO y extracción de la regla de filtrado de negocio hacia el servicio."
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "Centralización de la función de dominio es_bus_operativo_taller, mapeo a BusSimpleDTO y ordenamiento numérico de catálogo."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-043",
+      "title": "Desacoplamiento de Modelos ORM en Buses Router",
+      "rationale": "El endpoint PATCH /{bus_id}/en-taller importaba directamente Usuario desde el módulo de autenticación para su firma. Se reemplazó por UsuarioResponseDTO inyectado mediante require_supervisor_or_admin para garantizar que los controladores trabajen exclusivamente con contratos DTO.",
+      "consequences": "Cero acoplamiento a SQLAlchemy ORM en el router de buses, cumpliendo la regla de backend."
+    },
+    {
+      "id": "DEC-044",
+      "title": "Erradicación del Smart Repository en BusRepository",
+      "rationale": "El repositorio construía directamente DTOs de presentación (BusSimpleDTO), realizaba deduplicación en memoria y ejecutaba la regla de negocio es_bus_operativo_taller. La persistencia SQL debe devolver entidades o registros, mientras que las reglas de catálogo y transformación corresponden al Servicio.",
+      "consequences": "BusRepository es ahora una capa SQL limpia y reutilizable, mientras que BusService concentra el 100% de las políticas operacionales de flota."
+    },
+    {
+      "id": "DEC-045",
+      "title": "Exportación Limpia de DTOs en el Paquete buses.dtos",
+      "rationale": "Los routers y servicios debían importar DTOs directamente desde el archivo interno bus_dto.py. Exportar todos los DTOs en __init__.py estandariza la convención del proyecto.",
+      "consequences": "Imports más legibles y cohesión modular reforzada."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/unit/test_bus_service.py tests/integration/test_buses_api.py",
+      "result": "passed",
+      "evidence": "5 passed in 1.19s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "71 passed, 1 warning in 23.80s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Proceder con la refactorización arquitectónica de Neumáticos, Mantención o Supervisión según preferencia del usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-modular",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Refactorización del módulo Buses completada exitosamente sin regresiones."
+  ]
+}

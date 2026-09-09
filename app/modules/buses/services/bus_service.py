@@ -1,16 +1,35 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
-from app.modules.buses.dtos.bus_dto import BusAutocompleteDTO, BusResponseDTO, BusSimpleDTO
+from app.modules.buses.dtos import (
+    BusAutocompleteDTO,
+    BusResponseDTO,
+    BusSimpleDTO,
+)
 from app.modules.buses.repository.bus_repository import bus_repository
 
 logger = logging.getLogger(__name__)
 
 
+def es_bus_operativo_taller(n_bus: Optional[str]) -> bool:
+    """
+    Regla de Dominio: Verifica si el número de bus pertenece al rango operativo
+    de buses de pasajeros de taller: 200 <= n_bus < 900.
+    Los vehículos con n_bus < 200 o n_bus >= 900 se excluyen del catálogo operativo de taller.
+    """
+    if not n_bus:
+        return False
+    try:
+        n = int(str(n_bus).strip())
+        return 200 <= n < 900
+    except (ValueError, TypeError):
+        return False
+
+
 class BusService:
-    """Capa de servicio de negocio para el catálogo de Buses."""
+    """Capa de servicio de negocio para el catálogo y operaciones sobre Buses."""
 
     async def buscar_sugerencias_buses(
         self,
@@ -29,9 +48,40 @@ class BusService:
             prefix,
             solo_flota_taller,
         )
-        return await bus_repository.buscar_n_buses_por_prefijo(
-            db, prefix=prefix, solo_flota_taller=solo_flota_taller
+        buses = await bus_repository.buscar_por_prefijo(
+            db, prefix=prefix, solo_activos=True
         )
+
+        if solo_flota_taller:
+            buses = [b for b in buses if es_bus_operativo_taller(b.n_bus)]
+
+        dtos: List[BusSimpleDTO] = []
+        vistos = set()
+        for b in buses:
+            if not b.n_bus:
+                continue
+            s_nb = str(b.n_bus).strip()
+            if not s_nb or b.id in vistos:
+                continue
+            vistos.add(b.id)
+            dtos.append(
+                BusSimpleDTO(
+                    id=b.id,
+                    n_bus=s_nb,
+                    patente=b.patente,
+                    en_taller=bool(b.en_taller),
+                )
+            )
+
+        # Ordenar numéricamente si es posible, alfabéticamente como fallback
+        def sort_key(dto: BusSimpleDTO):
+            try:
+                return (0, int(dto.n_bus))
+            except ValueError:
+                return (1, dto.n_bus)
+
+        dtos.sort(key=sort_key)
+        return dtos
 
     async def get_bus_by_id(self, db: AsyncSession, bus_id: int) -> BusResponseDTO:
         bus = await bus_repository.get_by_id(db, bus_id)
@@ -53,9 +103,15 @@ class BusService:
         solo_activos: bool = True,
         solo_flota_taller: bool = True,
     ) -> List[BusAutocompleteDTO]:
-        buses = await bus_repository.get_all(
-            db, solo_activos=solo_activos, solo_flota_taller=solo_flota_taller
+        logger.debug(
+            "[BUSES] Listando catálogo de buses | solo_activos=%s, solo_flota_taller=%s",
+            solo_activos,
+            solo_flota_taller,
         )
+        buses = await bus_repository.get_all(db, solo_activos=solo_activos)
+        if solo_flota_taller:
+            buses = [b for b in buses if es_bus_operativo_taller(b.n_bus)]
+
         return [BusAutocompleteDTO.model_validate(b) for b in buses]
 
     async def actualizar_en_taller(
@@ -66,13 +122,15 @@ class BusService:
         motivo: Optional[str] = None,
     ) -> BusResponseDTO:
         """
-        Actualiza el estado en_taller de un bus (movimiento suspendido en taller).
+        Actualiza el estado en_taller de un bus (movimiento físico a taller).
+        Gobierna la transacción (commit y refresh).
         """
-        bus = await bus_repository.update_en_taller(db, bus_id=bus_id, en_taller=en_taller)
+        bus = await bus_repository.get_by_id(db, bus_id)
         if not bus:
             logger.warning("[BUSES] Bus no encontrado para actualizar en_taller | id=%s", bus_id)
             raise NotFoundException(f"Bus con ID {bus_id} no encontrado")
 
+        await bus_repository.update_en_taller(db, bus_or_id=bus, en_taller=en_taller)
         await db.commit()
         await db.refresh(bus)
 

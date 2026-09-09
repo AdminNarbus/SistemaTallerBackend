@@ -1,38 +1,24 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.buses.dtos.bus_dto import BusSimpleDTO
 from app.modules.buses.models.bus import Bus
 
 logger = logging.getLogger(__name__)
 
 
-def es_bus_operativo_taller(n_bus: Optional[str]) -> bool:
-    """
-    Verifica si el número de bus pertenece al rango operativo de buses de pasajeros:
-    200 <= n_bus < 900.
-    Los vehículos con n_bus < 200 o n_bus >= 900 se excluyen del catálogo operativo de taller.
-    """
-    if not n_bus:
-        return False
-    try:
-        n = int(str(n_bus).strip())
-        return 200 <= n < 900
-    except (ValueError, TypeError):
-        return False
-
-
 class BusRepository:
-    """Acceso a datos de la tabla 'buses' con SQLAlchemy asíncrono."""
+    """Acceso a datos y persistencia pura de la tabla 'buses' con SQLAlchemy asíncrono."""
 
     async def get_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
+        """Obtiene un bus por su clave primaria ID."""
         stmt = select(Bus).where(Bus.id == bus_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[Bus]:
+        """Obtiene un bus por su número de máquina único."""
         stmt = select(Bus).where(Bus.n_bus == n_bus)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
@@ -41,8 +27,12 @@ class BusRepository:
         self,
         db: AsyncSession,
         solo_activos: bool = True,
-        solo_flota_taller: bool = True,
+        solo_flota_taller: bool = False,
     ) -> List[Bus]:
+        """
+        Retorna la lista completa de entidades Bus ordenadas por n_bus.
+        (Nota: Si solo_flota_taller=True se aplica la regla de dominio correspondiente).
+        """
         stmt = select(Bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
@@ -51,25 +41,23 @@ class BusRepository:
         buses = list(result.scalars().all())
 
         if solo_flota_taller:
+            from app.modules.buses.services.bus_service import es_bus_operativo_taller
             buses = [b for b in buses if es_bus_operativo_taller(b.n_bus)]
 
         return buses
 
-    async def buscar_n_buses_por_prefijo(
+    async def buscar_por_prefijo(
         self,
         db: AsyncSession,
         prefix: str = "",
         solo_activos: bool = True,
-        solo_flota_taller: bool = True,
-    ) -> List[BusSimpleDTO]:
+    ) -> List[Bus]:
         """
-        Filtra buses activos cuyo número inicie con el prefijo dado.
-        Retorna una lista de BusSimpleDTO (id, n_bus, patente, en_taller)
-        ordenada de manera numérica ascendente.
-        Si solo_flota_taller es True, excluye vehículos fuera del rango 200 <= n_bus < 900.
+        Consulta SQL pura para filtrar buses cuyo número inicie con el prefijo dado.
+        Retorna las entidades Bus coincidentes sin aplicar reglas de negocio de presentación.
         """
-        clean_prefix = prefix.strip()
-        stmt = select(Bus.id, Bus.n_bus, Bus.patente, Bus.en_taller)
+        clean_prefix = (prefix or "").strip()
+        stmt = select(Bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
         if clean_prefix:
@@ -77,56 +65,44 @@ class BusRepository:
         stmt = stmt.order_by(Bus.n_bus.asc())
 
         result = await db.execute(stmt)
-        rows = result.all()
+        return list(result.scalars().all())
 
-        buses_filtrados: List[BusSimpleDTO] = []
-        vistos = set()
-        for row in rows:
-            b_id, nb, pat, en_t = row
-            if not nb:
-                continue
-            s_nb = str(nb).strip()
-            if not s_nb:
-                continue
-            if solo_flota_taller and not es_bus_operativo_taller(s_nb):
-                continue
-            if clean_prefix and not s_nb.startswith(clean_prefix):
-                continue
-            if b_id in vistos:
-                continue
-            vistos.add(b_id)
-            buses_filtrados.append(
-                BusSimpleDTO(
-                    id=b_id,
-                    n_bus=s_nb,
-                    patente=pat,
-                    en_taller=bool(en_t),
-                )
-            )
-
-        # Ordenar numéricamente si es posible, alfabéticamente si no
-        def sort_key(dto: BusSimpleDTO):
-            try:
-                return (0, int(dto.n_bus))
-            except ValueError:
-                return (1, dto.n_bus)
-
-        buses_filtrados.sort(key=sort_key)
-        return buses_filtrados
+    async def buscar_n_buses_por_prefijo(
+        self,
+        db: AsyncSession,
+        prefix: str = "",
+        solo_activos: bool = True,
+        solo_flota_taller: bool = True,
+    ) -> Any:
+        """
+        Método de compatibilidad con llamadas existentes.
+        Delega a la orquestación en BusService.
+        """
+        from app.modules.buses.services.bus_service import bus_service
+        return await bus_service.buscar_sugerencias_buses(
+            db, query=prefix, solo_flota_taller=solo_flota_taller
+        )
 
     async def buscar_buses(
         self, db: AsyncSession, term: str = ""
-    ) -> List[BusSimpleDTO]:
-        """Método de compatibilidad."""
+    ) -> Any:
+        """Método de compatibilidad con llamadas existentes."""
         return await self.buscar_n_buses_por_prefijo(db, prefix=term)
 
     async def update_en_taller(
-        self, db: AsyncSession, bus_id: int, en_taller: bool
+        self, db: AsyncSession, bus_or_id: Any, en_taller: bool
     ) -> Optional[Bus]:
-        """Actualiza el estado en_taller del bus con flush atómico en sesión (sin commit)."""
-        bus = await self.get_by_id(db, bus_id)
-        if not bus:
-            return None
+        """
+        Actualiza el estado en_taller del bus con flush atómico en sesión (sin commit).
+        Acepta tanto la entidad Bus cargada como un bus_id numérico.
+        """
+        if isinstance(bus_or_id, Bus):
+            bus = bus_or_id
+        else:
+            bus = await self.get_by_id(db, int(bus_or_id))
+            if not bus:
+                return None
+
         bus.en_taller = en_taller
         await db.flush()
         return bus

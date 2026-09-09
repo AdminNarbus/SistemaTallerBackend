@@ -1,16 +1,19 @@
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Body, Depends, Path, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
-from app.modules.auth.models.usuario import Usuario
-from app.modules.buses.dtos.bus_dto import (
+from app.modules.auth.dtos import UsuarioResponseDTO
+from app.modules.buses.dtos import (
     BusAutocompleteDTO,
     BusResponseDTO,
     BusSimpleDTO,
     BusUpdateEnTallerDTO,
 )
 from app.modules.buses.services.bus_service import bus_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -86,9 +89,15 @@ async def get_bus_por_numero(
 async def actualizar_en_taller(
     bus_id: int = Path(..., description="ID numérico del bus", ge=1),
     payload: BusUpdateEnTallerDTO = Body(...),
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ) -> BusResponseDTO:
+    logger.info(
+        "[BUSES] Solicitud de cambio en_taller | bus_id=%s | en_taller=%s | supervisor_id=%s",
+        bus_id,
+        payload.en_taller,
+        current_user.id,
+    )
     return await bus_service.actualizar_en_taller(
         db, bus_id=bus_id, en_taller=payload.en_taller, motivo=payload.motivo
     )

@@ -2,8 +2,6 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
@@ -346,10 +344,70 @@ class MantencionService:
 
     async def get_solicitud(self, db: AsyncSession, solicitud_id: int) -> SolicitudDTO:
         logger.debug("[MANTENCION] Consultando solicitud | id=%s", solicitud_id)
-        sol = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        sol = await mantencion_repository.get_solicitud_dto_by_id(db, solicitud_id)
         if not sol:
             raise NotFoundException("Solicitud de taller no encontrada")
+        if isinstance(sol, dict):
+            return self._dict_to_solicitud_dto(sol)
         return self._to_solicitud_dto(sol)
+
+    def _dict_to_solicitud_dto(self, r: dict) -> SolicitudDTO:
+        """Convierte una fila de detalle de alta velocidad (1 sola consulta SQL CTE) a SolicitudDTO."""
+        detalles_raw = r.get("detalles_json") or []
+        if isinstance(detalles_raw, str):
+            detalles_raw = json.loads(detalles_raw)
+        mecanicos_raw = r.get("mecanicos_json") or []
+        if isinstance(mecanicos_raw, str):
+            mecanicos_raw = json.loads(mecanicos_raw)
+        historial_mecanicos_raw = r.get("historial_mecanicos_json") or []
+        if isinstance(historial_mecanicos_raw, str):
+            historial_mecanicos_raw = json.loads(historial_mecanicos_raw)
+        comentarios_raw = r.get("comentarios_json") or []
+        if isinstance(comentarios_raw, str):
+            comentarios_raw = json.loads(comentarios_raw)
+        pauta_respuestas_raw = r.get("pauta_respuestas_json") or []
+        if isinstance(pauta_respuestas_raw, str):
+            pauta_respuestas_raw = json.loads(pauta_respuestas_raw)
+
+        tot = len(detalles_raw)
+        resueltos = sum(1 for d in detalles_raw if d.get("resuelto"))
+        faltas = sum(1 for d in detalles_raw if d.get("falta_repuesto"))
+        pauta_completada = len(pauta_respuestas_raw) >= 11
+
+        if r.get("estado") == "FINALIZADO" and not mecanicos_raw and historial_mecanicos_raw:
+            vistos_fin = set()
+            for h in historial_mecanicos_raw:
+                m_id = h.get("mecanico_id")
+                if m_id not in vistos_fin:
+                    vistos_fin.add(m_id)
+                    mecanicos_raw.append(h)
+
+        return SolicitudDTO(
+            id=r["id"],
+            n_bus=r["n_bus"],
+            bus_id=r.get("bus_id"),
+            bus_patente=r.get("bus_patente"),
+            usuario_creador_id=r.get("usuario_creador_id"),
+            usuario_creador_nombre=r.get("usuario_creador_nombre"),
+            mecanico_cierre_id=r.get("mecanico_cierre_id"),
+            mecanico_cierre_nombre=r.get("mecanico_cierre_nombre"),
+            estado=r["estado"],
+            descripcion_general=r.get("descripcion_general"),
+            foto_url=r.get("foto_url"),
+            motivo_incompleto_checklist=r.get("motivo_incompleto_checklist"),
+            motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
+            fecha_creacion=r["fecha_creacion"],
+            fecha_cierre=r.get("fecha_cierre"),
+            pauta_completada=pauta_completada,
+            total_fallas=tot,
+            fallas_resueltas=resueltos,
+            fallas_con_falta_repuesto=faltas,
+            detalles=detalles_raw,
+            mecanicos=mecanicos_raw,
+            historial_mecanicos=historial_mecanicos_raw,
+            comentarios=comentarios_raw,
+            pauta_respuestas=pauta_respuestas_raw,
+        )
 
     def _dict_to_solicitud_resumen_dto(self, r: dict) -> SolicitudResumenDTO:
         """Convierte una fila del listado de alta velocidad (1 sola consulta SQL) directamente a SolicitudResumenDTO."""
@@ -601,7 +659,7 @@ class MantencionService:
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: TomarTrabajoDTO
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Tomar trabajo | solicitud_id=%s | mecanico_id=%s | colaboradores=%s", solicitud_id, mecanico_id, dto.colaboradores_ids)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -698,7 +756,7 @@ class MantencionService:
 
         await db.commit()
         logger.info("[MANTENCION] Solicitud en reparación | id=%s | estado=EN_REPARACION", solicitud.id)
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def agregar_colaborador(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: AgregarColaboradorDTO
@@ -706,7 +764,7 @@ class MantencionService:
         logger.info("[MANTENCION] Agregando colaborador en caliente | solicitud_id=%s | solicitado_por=%s", solicitud_id, mecanico_id)
         from app.modules.auth.repository.user_repository import user_repository
 
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -754,13 +812,13 @@ class MantencionService:
             solicitud.mecanicos.append(colab_entry)
 
         await db.commit()
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def desasignar_mecanico(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, comentario: Optional[str] = None
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Desasignando mecánico | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -804,13 +862,13 @@ class MantencionService:
             logger.info("[MANTENCION] Sin mecánicos activos → PENDIENTE_REASIGNACION | solicitud_id=%s", solicitud_id)
 
         await db.commit()
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def liberar_turno(
         self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: LiberarTurnoDTO
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Liberar turno | solicitud_id=%s | usuario_id=%s", solicitud_id, usuario_id)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -846,13 +904,13 @@ class MantencionService:
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def check_detalle(
         self, db: AsyncSession, solicitud_id: int, detalle_id: int, mecanico_id: int, resuelto: bool
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Check detalle | solicitud_id=%s | detalle_id=%s | mecanico_id=%s | resuelto=%s", solicitud_id, detalle_id, mecanico_id, resuelto)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -908,13 +966,13 @@ class MantencionService:
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def agregar_comentario(
         self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: ComentarioCreateDTO
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Agregando comentario | solicitud_id=%s | usuario_id=%s | tipo=%s", solicitud_id, usuario_id, dto.tipo)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -934,13 +992,13 @@ class MantencionService:
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def finalizar_solicitud(
         self, db: AsyncSession, solicitud_id: int, mecanico_cierre_id: int, dto: FinalizarSolicitudDTO
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s", solicitud_id, mecanico_cierre_id)
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -998,7 +1056,7 @@ class MantencionService:
 
         # 4. Liberar bus del taller si corresponde
         if dto.liberar_bus_taller and solicitud.bus_id:
-            bus = await mantencion_repository.get_bus_by_id(db, solicitud.bus_id)
+            bus = solicitud.bus or await mantencion_repository.get_bus_by_id(db, solicitud.bus_id)
             if bus:
                 bus.en_taller = False
 
@@ -1044,7 +1102,7 @@ class MantencionService:
             solicitud.bus_id,
             dto.liberar_bus_taller,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def autoasignar_fallas(
         self, db: AsyncSession, solicitud_id: int, dto: AutoasignarFallasDTO, mecanico_id: int
@@ -1056,7 +1114,7 @@ class MantencionService:
             dto.detalles_ids,
             dto.colaboradores_ids,
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1174,7 +1232,7 @@ class MantencionService:
             mecanico_id,
             asignadas_count,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def asignar_fallas_supervisora(
         self, db: AsyncSession, solicitud_id: int, dto: AsignarFallasSupervisoraDTO, supervisor_id: int
@@ -1186,7 +1244,7 @@ class MantencionService:
             dto.mecanico_id,
             dto.detalles_ids,
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1291,7 +1349,7 @@ class MantencionService:
             dto.mecanico_id,
             asignadas_count,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def terminar_avance(
         self, db: AsyncSession, solicitud_id: int, dto: TerminarAvanceDTO, mecanico_id: int
@@ -1302,7 +1360,7 @@ class MantencionService:
             mecanico_id,
             dto.detalles_ids,
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1417,7 +1475,7 @@ class MantencionService:
             list(mecanicos_involucrados_ids),
             solicitud.estado,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def reportar_repuesto(
         self,
@@ -1433,7 +1491,7 @@ class MantencionService:
             detalle_id,
             dto.falta_repuesto,
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1482,7 +1540,7 @@ class MantencionService:
             detalle_id,
             dto.falta_repuesto,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
     async def get_pauta_items(self, db: AsyncSession) -> List[PautaTallerItemDTO]:
         items = await mantencion_repository.get_pauta_items(db)
@@ -1549,7 +1607,7 @@ class MantencionService:
             solicitud_id,
             len(dto.respuestas),
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1633,7 +1691,7 @@ class MantencionService:
             mecanico_id,
             dto.autoasignar,
         )
-        solicitud = await mantencion_repository.get_solicitud_by_id(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1773,7 +1831,7 @@ class MantencionService:
             nuevo_detalle.id,
             dto.autoasignar,
         )
-        return self._to_solicitud_dto(solicitud)
+        return await self.get_solicitud(db, solicitud.id)
 
 
 mantencion_service = MantencionService()

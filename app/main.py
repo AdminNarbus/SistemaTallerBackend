@@ -35,16 +35,17 @@ os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
 
 async def _neon_keepalive_loop():
     """
-    Tarea en background que realiza un ping liviano cada 3 minutos a la BD en la nube.
+    Tarea en background que realiza un ping liviano cada 2 minutos a la BD en la nube.
     Evita que el cómputo serverless de Neon se suspenda por inactividad (timeout de 5 min)
     y previene el retraso inicial (cold-start) de 3 segundos en las peticiones.
     """
+    from app.core.database import AsyncSessionLocal
     while True:
         try:
-            await asyncio.sleep(180)
+            await asyncio.sleep(120)
             t0 = time.perf_counter()
-            async with engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
             rtt_ms = (time.perf_counter() - t0) * 1000
             logger.info(
                 "[KEEPALIVE] Pulso a Neon exitoso (compute activo 24/7) | rtt=%.1fms",
@@ -79,8 +80,9 @@ async def lifespan(app: FastAPI):
 
         # Pre-calentar el pool de conexiones e iniciar keep-alive si se usa BD remota
         if "sqlite" not in settings.async_database_url:
-            async with engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
             logger.info("[STARTUP] Pool de base de datos pre-calentado e iniciado.")
             keepalive_task = asyncio.create_task(_neon_keepalive_loop())
     except Exception as e:

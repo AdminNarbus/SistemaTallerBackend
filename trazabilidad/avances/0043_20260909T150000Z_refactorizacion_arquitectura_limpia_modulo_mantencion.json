@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 43,
+  "id": "AV-0043",
+  "timestamp": "2026-09-09T15:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REFACTOR-MODULAR-5",
+    "name": "Refactorización Arquitectura Limpia - Módulo Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica limpia del módulo central `app/modules/mantencion`: 1) Erradicación total de fuga de modelos ORM en `router.py`, sustituyendo el tipo `Usuario` por `UsuarioResponseDTO` a lo largo de los 20 endpoints del controlador; 2) Inicialización de logging estructurado (`logger = logging.getLogger(__name__)`) con trazas detalladas en operaciones críticas de taller (creación de solicitud, toma de trabajo, autoasignación, liberación de turno, agregado de fallas, checks, reportes de repuestos y finalización); 3) Estandarización canónica de importaciones de DTOs utilizando el paquete `app.modules.mantencion.dtos` tanto en el router como en el servicio; 4) Mantenimiento de la integridad transaccional (gobierno exclusivo de commit/rollback en `mantencion_service.py` y persistencia pura SQL con flush atómico en `mantencion_repository.py`), preservando las optimizaciones de 1 sola consulta SQL nativa y serialización protegida contra lazy loading; 5) Verificación exitosa de la suite completa de pruebas (76/76 tests verdes).",
+  "scope": {
+    "planned": [
+      "Eliminar dependencia del modelo ORM Usuario en app/modules/mantencion/api/router.py",
+      "Tipar current_user con UsuarioResponseDTO en los 20 endpoints de mantención",
+      "Agregar logging estructurado en router.py para observabilidad de operaciones clave",
+      "Estandarizar importaciones de DTOs utilizando app.modules.mantencion.dtos",
+      "Garantizar persistencia pura en mantencion_repository.py sin commits y sin DTOs",
+      "Verificar suite completa de pruebas unitarias, de integración y e2e"
+    ],
+    "completed": [
+      "app/modules/mantencion/api/router.py refactorizado con UsuarioResponseDTO en 20 endpoints y logging estructurado",
+      "app/modules/mantencion/services/mantencion_service.py actualizado con importaciones canónicas de DTOs",
+      "Verificación de 27/27 pruebas del subsistema de mantención y suite general de 76/76 tests verdes"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Alteraciones en esquemas de tablas o migraciones de Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Reemplazo de importación del modelo ORM Usuario por UsuarioResponseDTO en los 20 endpoints, incorporación de logger estándar y trazas de observabilidad."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Consumo canónico de DTOs desde el paquete app.modules.mantencion.dtos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-043",
+      "title": "Desacoplamiento Total de Modelos ORM en los 20 Endpoints de Mantención y Observabilidad Completa",
+      "rationale": "El router central de mantención dependía del modelo ORM `Usuario` en todos sus endpoints autenticados, violando la regla de Clean Architecture contra la exposición o uso de entidades de base de datos en controladores HTTP. Al migrar a `UsuarioResponseDTO`, los 20 endpoints interactúan exclusivamente con DTOs inmutables de Pydantic. Asimismo, se incorporó logging estructurado para registrar cada transición operativa del taller (autoasignación, entrega de turno, reporte de repuestos, checklist y finalización), fortaleciendo la observabilidad en producción sin impacto alguno en los contratos REST.",
+      "consequences": "Aislamiento arquitectónico definitivo de la API frente a SQLAlchemy, código robusto y homogéneo en los 5 módulos del backend (Auth, Buses, Neumáticos, Supervisión, Mantención) y 100% de tests pasando."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/integration/test_mantencion_api.py tests/integration/test_fase3_asignacion_atomica.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/unit/test_mantencion_service.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_duracion_y_autoasignacion_colaborativa.py tests/unit/test_query_optimizations.py tests/e2e/test_flujo_completo_taller_e2e.py",
+      "result": "passed",
+      "evidence": "27 passed in 10.5s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "76 passed in 25.4s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar la rama feature/refactor-arquitectura-modular e informar el estado global de la refactorización arquitectónica limpia completada.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-modular",
+    "dirty": true
+  },
+  "notes": [
+    "Con este avance, los 5 módulos del backend (Auth, Buses, Neumáticos, Supervisión y Mantención) han sido completamente refactorizados bajo Arquitectura Limpia."
+  ]
+}

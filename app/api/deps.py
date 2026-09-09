@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.auth.repository.user_repository import user_repository
 
 SessionDep = Depends(get_db)
@@ -16,7 +16,7 @@ reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False
 )
 
-_USER_CACHE: Dict[int, Tuple[float, Usuario]] = {}
+_USER_CACHE: Dict[int, Tuple[float, UsuarioResponseDTO]] = {}
 _USER_CACHE_TTL_SECONDS: float = 300.0  # 5 minutos de TTL para mantener sesiones activas sin reconsultar a la nube
 
 
@@ -28,10 +28,10 @@ def clear_user_cache() -> None:
 async def get_current_user(
     db: AsyncSession = SessionDep,
     token: Optional[str] = Depends(reusable_oauth2),
-) -> Optional[Usuario]:
+) -> Optional[UsuarioResponseDTO]:
     """
     Extrae y valida el token JWT del encabezado Authorization: Bearer <token>.
-    Devuelve el modelo Usuario autenticado si es válido, utilizando una caché ligera en memoria (TTL=60s)
+    Devuelve el DTO UsuarioResponseDTO autenticado si es válido, utilizando una caché ligera en memoria
     para evitar consultas redundantes a la base de datos en ráfagas de peticiones.
     """
     if not token:
@@ -58,13 +58,14 @@ async def get_current_user(
         _USER_CACHE.pop(user_id, None)
         return None
 
-    _USER_CACHE[user_id] = (now, user)
-    return user
+    user_dto = UsuarioResponseDTO.model_validate(user)
+    _USER_CACHE[user_id] = (now, user_dto)
+    return user_dto
 
 
 async def require_current_user(
-    user: Optional[Usuario] = Depends(get_current_user),
-) -> Usuario:
+    user: Optional[UsuarioResponseDTO] = Depends(get_current_user),
+) -> UsuarioResponseDTO:
     """
     Dependencia estricta que exige estar autenticado; de lo contrario lanza HTTP 401.
     """
@@ -78,8 +79,8 @@ async def require_current_user(
 
 
 async def require_supervisor_or_admin(
-    current_user: Usuario = Depends(require_current_user),
-) -> Usuario:
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
     """
     Exige que el usuario autenticado sea SUPERVISOR o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
     """
@@ -93,8 +94,8 @@ async def require_supervisor_or_admin(
 
 
 async def require_mecanico_or_admin(
-    current_user: Usuario = Depends(require_current_user),
-) -> Usuario:
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
     """
     Exige que el usuario autenticado sea MECÁNICO o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
     """
@@ -108,8 +109,8 @@ async def require_mecanico_or_admin(
 
 
 async def require_conductor_or_admin(
-    current_user: Usuario = Depends(require_current_user),
-) -> Usuario:
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
     """
     Exige que el usuario autenticado sea CONDUCTOR o ADMIN; de lo contrario lanza HTTP 403 Forbidden.
     """

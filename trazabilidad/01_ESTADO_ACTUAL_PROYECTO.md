@@ -7,7 +7,7 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
 
 | Módulo | Estado | Descripción |
 | --- | --- | --- |
-| **Auth & Usuarios** | `COMPLETADO` | Autenticación JWT Bearer, gestión de roles (Mecánico, Conductor, Supervisor, Admin) y soft-delete de usuarios. |
+| **Auth & Usuarios** | `REFACTORIZADO / COMPLETADO` | Clean Architecture estricta por capas: API desacoplada de ORMs operando 100% con DTOs (`UsuarioResponseDTO`), AuthService agnóstico a HTTP y centralizando seguridad (hashing y verificación de contraseñas), UserRepository como persistencia pura SQL, y autenticación JWT Bearer con caché en memoria. |
 | **Buses (Catálogo y Flota Taller)** | `COMPLETADO` | Catálogo de buses/flota centralizado, claves foráneas relacionales (`bus_id`), filtro de flota taller (`200 <= n_bus < 900`), control de presencia física `en_taller` y búsqueda por prefijo (`/buses/buscar`). |
 | **Mantención Taller y Pauta Preventiva** | `COMPLETADO` | Reporte simplificado de conductor por 6 categorías macro (`categoria_id`), asignación atómica de averías con co-responsabilidad multi-mecánico, bitácora cronológica con comentarios predeterminados legibles para usuarios (sin exposición de IDs numéricos internos), registro automático de resolución/reapertura de averías, reporte de falta de repuestos, catálogo de 11 ítems de pauta preventiva exclusiva para mecánicos, validación estricta de checklist antes de liberación y cierre parcial justificado. |
 | **Neumáticos** | `COMPLETADO` | Captura multipart/form-data de formularios de reporte de neumáticos y persistencia asíncrona de evidencias fotográficas (`asyncio.to_thread`). |

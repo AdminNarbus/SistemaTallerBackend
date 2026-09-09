@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +15,6 @@ from app.modules.auth.dtos import (
     UsuarioLoginDTO,
     UsuarioResponseDTO,
 )
-from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.services.auth_service import auth_service
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ router = APIRouter()
 async def login(
     login_data: UsuarioLoginDTO,
     db: AsyncSession = SessionDep,
-) -> Any:
+) -> TokenDTO:
     """
     Endpoint para autenticación de usuario vía JSON payload.
     Retorna el Token JWT Bearer y los datos del perfil de usuario.
@@ -49,11 +48,12 @@ async def login(
 async def login_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = SessionDep,
-) -> Any:
+) -> TokenDTO:
     """
     Endpoint compatible con OAuth2 Password Flow (Form Data).
     """
-    return await auth_service.login_access_token(db, form_data=form_data)
+    login_dto = UsuarioLoginDTO(username=form_data.username, password=form_data.password)
+    return await auth_service.login(db, login_data=login_dto)
 
 
 @router.post(
@@ -65,7 +65,7 @@ async def login_access_token(
 async def register(
     usuario_in: UsuarioCreateDTO,
     db: AsyncSession = SessionDep,
-) -> Any:
+) -> TokenDTO:
     """
     Registra un nuevo usuario en la base de datos y retorna su token de acceso.
     """
@@ -78,12 +78,12 @@ async def register(
     summary="Obtener perfil del usuario actual logueado",
 )
 async def get_me(
-    current_user: Usuario = Depends(require_current_user),
-) -> Any:
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
     """
     Devuelve la información del usuario autenticado que envió el Token Bearer.
     """
-    return UsuarioResponseDTO.model_validate(current_user)
+    return current_user
 
 
 @router.get(
@@ -100,8 +100,8 @@ async def buscar_mecanicos(
     q: Optional[str] = Query("", description="Texto a buscar por nombre, apellido o username. Si está vacío, retorna todos."),
     exclude_id: Optional[int] = Query(None, description="ID de usuario a excluir de los resultados (ej: el mecánico logueado)"),
     db: AsyncSession = SessionDep,
-    current_user: Usuario = Depends(require_current_user),
-) -> Any:
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> List[UsuarioResponseDTO]:
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
     """
@@ -123,8 +123,8 @@ async def listar_usuarios(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = SessionDep,
-    current_user: Usuario = Depends(require_supervisor_or_admin),
-) -> Any:
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+) -> List[UsuarioResponseDTO]:
     """
     Retorna la lista completa de usuarios del sistema.
     Exige rol de SUPERVISOR o ADMIN.
@@ -141,8 +141,8 @@ async def listar_usuarios(
 async def crear_usuario_supervisor(
     usuario_in: UsuarioCreateDTO,
     db: AsyncSession = SessionDep,
-    current_user: Usuario = Depends(require_supervisor_or_admin),
-) -> Any:
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+) -> UsuarioResponseDTO:
     """
     Permite a un Supervisor o Admin registrar un usuario (Conductor, Mecánico, Supervisor, etc.).
     """
@@ -157,8 +157,8 @@ async def crear_usuario_supervisor(
 async def deshabilitar_usuario(
     usuario_id: int,
     db: AsyncSession = SessionDep,
-    current_user: Usuario = Depends(require_supervisor_or_admin),
-) -> Any:
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+) -> UsuarioResponseDTO:
     """
     Deshabilita la cuenta de un usuario estableciendo `is_active = False`.
     No borra la fila físicamente para garantizar la trazabilidad de reportes y mantenimientos.

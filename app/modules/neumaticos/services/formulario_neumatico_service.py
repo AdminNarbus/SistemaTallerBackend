@@ -87,12 +87,26 @@ class FormularioNeumaticoService:
 
         if evidencia and evidencia.filename:
             nombre_original_evidencia = evidencia.filename
-            extension = os.path.splitext(evidencia.filename)[1] or ".jpg"
+            extension = (os.path.splitext(evidencia.filename)[1] or ".jpg").lower()
+
+            extensiones_permitidas = {".jpg", ".jpeg", ".png", ".webp"}
+            if extension not in extensiones_permitidas:
+                raise BusinessRuleException(
+                    f"Tipo de archivo no permitido: '{extension}'. Extensiones válidas: {', '.join(sorted(extensiones_permitidas))}"
+                )
+
+            contenido = await evidencia.read()
+
+            max_tamano_bytes = 10 * 1024 * 1024  # 10 MB
+            if len(contenido) > max_tamano_bytes:
+                raise BusinessRuleException(
+                    f"El archivo supera el tamaño máximo permitido de {max_tamano_bytes // (1024 * 1024)} MB."
+                )
+
             nombre_archivo_unico = f"{uuid.uuid4()}{extension}"
             ruta_destino = os.path.join(UPLOAD_EVIDENCIAS_DIR, nombre_archivo_unico)
 
             os.makedirs(UPLOAD_EVIDENCIAS_DIR, exist_ok=True)
-            contenido = await evidencia.read()
             await asyncio.to_thread(_guardar_archivo_disco, ruta_destino, contenido)
 
             evidencia_url = f"/uploads/evidencias/{nombre_archivo_unico}"

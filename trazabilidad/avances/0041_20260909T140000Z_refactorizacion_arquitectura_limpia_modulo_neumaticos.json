@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 41,
+  "id": "AV-0041",
+  "timestamp": "2026-09-09T14:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REFACTOR-MODULAR-3",
+    "name": "Refactorización Arquitectura Limpia - Módulo Neumáticos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica limpia del módulo `app/modules/neumaticos`: 1) Eliminación de fuga del modelo ORM `Usuario` en `router.py`, tipando la inyección de `current_user` con `UsuarioResponseDTO`; 2) Incorporación de logging estructurado (`logging.getLogger(__name__)`) en routers y servicios según Regla 4 de estándares; 3) Robustecimiento de la seguridad en la recepción de evidencias fotográficas en `formulario_neumatico_service.py` con validación estricta de extensiones permitidas (.jpg, .jpeg, .png, .webp) y tamaño máximo de archivo (10 MB), manteniendo I/O no bloqueante en disco (`asyncio.to_thread`) y gobierno transaccional explícito (commit/rollback); 4) Persistencia pura en `neumatico_repository.py` con operaciones atómicas (`flush()` sin commits); 5) Cobertura de tests incrementada a 73 tests (100% pasando).",
+  "scope": {
+    "planned": [
+      "Eliminar dependencia del modelo ORM Usuario en app/modules/neumaticos/api/router.py",
+      "Tipar current_user con UsuarioResponseDTO en el router de neumáticos",
+      "Agregar logging estructurado en router.py y formulario_neumatico_service.py",
+      "Validar extensiones de archivo permitidas y tamaño máximo en subida de evidencias",
+      "Garantizar persistencia pura en neumatico_repository.py sin lógica de negocio ni commits",
+      "Verificar suite completa de pruebas unitarias, de integración y e2e"
+    ],
+    "completed": [
+      "app/modules/neumaticos/api/router.py refactorizado usando UsuarioResponseDTO y logging estructurado",
+      "app/modules/neumaticos/services/formulario_neumatico_service.py reforzado con validación de extensiones y tamaño de archivo",
+      "Agregados 2 nuevos tests unitarios en tests/unit/test_neumaticos_service.py para validar rechazo de extensiones y archivos pesados",
+      "Verificación de 12/12 pruebas del módulo neumáticos y suite completa 73/73 tests verdes"
+    ],
+    "pending": [
+      "Continuar refactorización modular con módulo Supervisión (app/modules/supervision)",
+      "Continuar refactorización modular con módulo Mantención (app/modules/mantencion)"
+    ],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Alteraciones en esquemas de tablas o migraciones de Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/neumaticos/api/router.py",
+      "action": "modified",
+      "summary": "Reemplazo de importación del modelo ORM Usuario por UsuarioResponseDTO, tipado de current_user y adición de logger estándar."
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Validación estricta de tipo de archivo y tamaño máximo en subida de evidencias, manteniendo I/O asíncrono en thread pool y control de transacciones."
+    },
+    {
+      "path": "tests/unit/test_neumaticos_service.py",
+      "action": "modified",
+      "summary": "Inclusión de casos de prueba para subida con extensión no permitida y archivo excedido en tamaño lanzando BusinessRuleException."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-041",
+      "title": "Desacoplamiento Total de Modelos ORM en Router de Neumáticos y Validación Preventiva de Archivos",
+      "rationale": "El router de neumáticos importaba el modelo ORM `Usuario` directamente para tipar la dependencia `get_current_user`, acoplando la capa HTTP al modelo físico. Al cambiar a `UsuarioResponseDTO`, se elimina la fuga de abstracción. Adicionalmente, el almacenamiento de evidencias aceptaba cualquier archivo sin verificar tipo ni tamaño, por lo que se implementó validación defensiva en el servicio lanzando BusinessRuleException sin bloquear el Event Loop.",
+      "consequences": "Mayor seguridad en el manejo de archivos multipart, prevención de ataques de denegación de servicio por archivos gigantes, código limpio alineado a SOLID y cero impacto en el contrato REST público."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/integration/test_neumaticos_api.py tests/unit/test_neumaticos_service.py tests/e2e/test_flujo_neumaticos_e2e.py",
+      "result": "passed",
+      "evidence": "12 passed in 3.76s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "73 passed in 23.4s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Refactorizar con arquitectura limpia el módulo de Supervisión (app/modules/supervision) en la rama feature/refactor-arquitectura-modular.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-modular",
+    "dirty": true
+  },
+  "notes": [
+    "La suite completa de pruebas pasó a tener 73 tests con la adición de los 2 nuevos tests de seguridad de archivos."
+  ]
+}

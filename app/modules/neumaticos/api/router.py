@@ -1,9 +1,10 @@
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, get_current_user
-from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.neumaticos.dtos import (
     FormularioNeumaticoResponseDTO,
     FormularioNeumaticoStatusDTO,
@@ -14,6 +15,7 @@ from app.modules.neumaticos.services.formulario_neumatico_service import (
     formulario_neumatico_service,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -47,7 +49,7 @@ async def enviar_formulario_neumatico(
     precio: Optional[str] = Form(None),
     marca_fuego: Optional[str] = Form(None),
     evidencia: Optional[UploadFile] = File(None),
-    current_user: Optional[Usuario] = Depends(get_current_user),
+    current_user: Optional[UsuarioResponseDTO] = Depends(get_current_user),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -59,6 +61,13 @@ async def enviar_formulario_neumatico(
     - Retorna el FormularioNeumaticoResponseDTO tipado.
     """
     effective_user_id = current_user.id if current_user else usuario_id
+
+    logger.info(
+        "Recibida solicitud POST /formularioNeumatico | usuario_id_efectivo=%s | maquina=%s | con_evidencia=%s",
+        effective_user_id,
+        maquina,
+        bool(evidencia and evidencia.filename),
+    )
 
     dto = ReporteNeumaticoCreateDTO(
         usuario_id=effective_user_id,
@@ -91,4 +100,5 @@ async def get_reporte_neumatico_by_id(
     """
     Endpoint HTTP: Obtiene el detalle de un reporte de neumático específico por su ID.
     """
+    logger.debug("Consultando reporte de neumático por ID=%s", id)
     return await formulario_neumatico_service.get_reporte_by_id(db=db, reporte_id=id)

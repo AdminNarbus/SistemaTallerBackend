@@ -17,7 +17,7 @@ from app.modules.mantencion.repository.mantencion_repository import (
     mantencion_repository,
     _calcular_duracion_minutos,
 )
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.mantencion.dtos import (
     CategoriaFallaDTO,
     FallaTallerDTO,
     SolicitudDTO,

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 39,
+  "id": "AV-0039",
+  "timestamp": "2026-09-09T13:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "ARQ-1",
+    "name": "Refactorización Arquitectura Limpia Módulo Auth",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica limpia integral del módulo de autenticación (Auth): separación estricta por capas (API, DTOs, Services, Repositories, Models). Desacoplamiento total de modelos ORM en controladores mediante el retorno de UsuarioResponseDTO en dependencias, eliminación de dependencias HTTP de FastAPI en la capa de servicios, y reubicación de la lógica de negocio de seguridad (hasheo y verificación de contraseñas) desde el repositorio hacia el servicio de autenticación.",
+  "scope": {
+    "planned": [
+      "Crear rama general de refactorización feature/refactor-arquitectura-modular bajo GitFlow",
+      "Desacoplar modelos ORM de SQLAlchemy de los controladores en auth/api/router.py",
+      "Refactorizar app/api/deps.py para inyectar UsuarioResponseDTO en lugar del modelo ORM Usuario",
+      "Limpiar AuthService eliminando acoplamiento a OAuth2PasswordRequestForm de FastAPI",
+      "Reubicar la verificación y hashing de contraseñas desde UserRepository hacia AuthService",
+      "Optimizar UserRepository para recibir entidades directas y evitar lecturas duplicadas en desactivación",
+      "Exportar limpiamente modelos y DTOs en sus respectivos __init__.py",
+      "Garantizar que el 100% de la suite de pruebas (71 tests) pase sin regresiones"
+    ],
+    "completed": [
+      "Rama feature/refactor-arquitectura-modular creada a partir de develop limpio",
+      "auth/api/router.py 100% libre de imports de modelos ORM; opera exclusivamente con DTOs (UsuarioResponseDTO, TokenDTO, UsuarioLoginDTO, etc.)",
+      "app/api/deps.py actualizado para cachear y retornar UsuarioResponseDTO tipado",
+      "AuthService.login y AuthService.login_access_token desacoplados de FastAPI; verificación de contraseñas y hashing integrados en AuthService",
+      "UserRepository refactorizado como capa pura de persistencia SQL con SQLAlchemy AsyncSession",
+      "Exportaciones completas en auth/models/__init__.py (Usuario, Rol) y auth/dtos/__init__.py (UsuarioBaseDTO, etc.)",
+      "100% de la suite de pruebas automatizadas ejecutada exitosamente (71/71 tests aprobados en 27.44s)"
+    ],
+    "pending": [
+      "Continuar con la refactorización arquitectónica modular de los siguientes módulos (Buses, Mantención, Neumáticos, Supervisión)"
+    ],
+    "outOfScope": [
+      "Cambios en repositorio Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/auth/models/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de Rol y Usuario en __all__."
+    },
+    {
+      "path": "app/modules/auth/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de UsuarioBaseDTO junto al resto de DTOs en __all__."
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "Eliminación de imports de security a nivel superior; soporte de persistencia con entidades directas y eliminación de query duplicada en desactivar."
+    },
+    {
+      "path": "app/modules/auth/services/auth_service.py",
+      "action": "modified",
+      "summary": "Eliminación de acoplamiento con OAuth2PasswordRequestForm; asunción de hashing (get_password_hash) y verificación (verify_password) en reglas de negocio."
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "Eliminación total del modelo ORM Usuario en el controlador; uso exclusivo de UsuarioResponseDTO y delegación limpia a auth_service."
+    },
+    {
+      "path": "app/api/deps.py",
+      "action": "modified",
+      "summary": "Caché e inyección de UsuarioResponseDTO en lugar del modelo ORM Usuario en require_current_user y dependencias de roles."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-040",
+      "title": "Inyección de UsuarioResponseDTO en Dependencias de Autenticación",
+      "rationale": "Los controladores no deben interactuar ni depender de los modelos ORM de SQLAlchemy. Al retornar UsuarioResponseDTO desde require_current_user y los validadores de rol, todos los routers reciben un objeto inmutable y tipado con las propiedades exactas que necesitan (id, rol, nombre_completo), eliminando la necesidad de importar el modelo Usuario en la capa de transporte HTTP.",
+      "consequences": "Desacoplamiento estricto entre el motor de persistencia relacional y los controladores HTTP de la API, garantizando el cumplimiento de las reglas del proyecto."
+    },
+    {
+      "id": "DEC-041",
+      "title": "Centralización de Seguridad (Hashing y Verificación) en AuthService",
+      "rationale": "El repositorio debe responsabilizarse únicamente del acceso a datos y consultas SQL. La lógica de verificar contraseñas con bcrypt y calcular hashes al registrar o crear usuarios es una regla de negocio y seguridad de la aplicación, por lo que reside formalmente en AuthService.",
+      "consequences": "Capa de repositorio más limpia y testeable; AuthService controla todo el ciclo de vida del caso de uso de registro y autenticación."
+    },
+    {
+      "id": "DEC-042",
+      "title": "Agnosticismo HTTP en AuthService",
+      "rationale": "La clase OAuth2PasswordRequestForm pertenece al framework FastAPI/Starlette. Para respetar Clean Architecture, AuthService solo recibe parámetros o DTOs independientes de la capa web. El router de FastAPI actúa como adaptador extrayendo username y password del formulario para invocar a AuthService.login.",
+      "consequences": "Eliminación de código duplicado entre login JSON y login Form, y posibilidad de reutilizar AuthService en cualquier contexto (CLI, workers, scripts)."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/unit/test_auth_service.py tests/integration/test_auth_api.py",
+      "result": "passed",
+      "evidence": "10 passed in 4.75s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "71 passed, 1 warning in 27.44s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Proceder con la refactorización arquitectónica de los siguientes módulos en la rama feature/refactor-arquitectura-modular según las indicaciones del usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-modular",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Rama general de refactorización creada y operativa.",
+    "Módulo Auth completado con éxito al 100%."
+  ]
+}

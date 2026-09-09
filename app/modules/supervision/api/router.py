@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
-from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
-from app.modules.supervision.dtos.supervision_dto import ResumenTallerDTO, AlertaSupervisionDTO
-from app.modules.supervision.services.supervision_service import supervision_service
+from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO
+from app.modules.supervision.services import supervision_service
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/supervision", tags=["supervision"])
 
 @router.get("/alertas", response_model=List[AlertaSupervisionDTO])
 async def get_alertas_taller(
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -35,7 +35,7 @@ async def get_auditoria_buses_taller(
     mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
     skip: int = Query(0, ge=0, description="Número de registros a omitir para paginación"),
     limit: int = Query(50, ge=1, le=100, description="Límite máximo de solicitudes a retornar"),
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -62,7 +62,7 @@ async def get_auditoria_buses_taller(
 
 @router.get("/resumen-taller", response_model=ResumenTallerDTO)
 async def get_resumen_taller(
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -81,7 +81,7 @@ async def get_resumen_taller(
 async def asignar_fallas_supervisora(
     id: int,
     dto: AsignarFallasSupervisoraDTO,
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """

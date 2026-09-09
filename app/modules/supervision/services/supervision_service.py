@@ -4,8 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mantencion.services.mantencion_service import mantencion_service
 from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
-from app.modules.supervision.repository.supervision_repository import supervision_repository
-from app.modules.supervision.dtos.supervision_dto import (
+from app.modules.supervision.repository import supervision_repository
+from app.modules.supervision.dtos import (
     ResumenTallerDTO,
     MetricasEstadoDTO,
     CategoriaFrecuenciaDTO,

@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +10,9 @@ from app.api.deps import (
     require_mecanico_or_admin,
     require_conductor_or_admin,
 )
-from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.mantencion.dtos import (
     CategoriaFallaDTO,
     FallaTallerDTO,
     SolicitudDTO,
@@ -33,13 +34,15 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     AgregarFallaDTO,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/mantencion", tags=["mantencion"])
 
 
 @router.get("/pauta/items", response_model=List[PautaTallerItemDTO])
 async def get_pauta_items(
     response: Response,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
     """Retorna el catálogo maestro de 11 ítems de inspección preventiva de taller."""
@@ -69,9 +72,14 @@ async def get_fallas(
 @router.post("/solicitudes", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
 async def create_solicitud(
     dto: SolicitudCreateDTO,
-    current_user: Usuario = Depends(require_conductor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_conductor_or_admin),
     db: AsyncSession = SessionDep,
 ):
+    logger.info(
+        "[MANTENCION] Creando solicitud de mantención | conductor_id=%s | n_bus='%s'",
+        current_user.id,
+        dto.n_bus,
+    )
     return await mantencion_service.create_solicitud(
         db, dto, creador_id=current_user.id, creador_nombre=current_user.nombre_completo
     )
@@ -82,7 +90,7 @@ async def list_pendientes(
     response: Response,
     skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
     limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE / PENDIENTE_REASIGNACION)."""
@@ -95,7 +103,7 @@ async def list_mis_trabajos(
     response: Response,
     skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
     limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta."""
@@ -106,17 +114,18 @@ async def list_mis_trabajos(
 @router.get("/{id}", response_model=SolicitudDTO)
 async def get_solicitud(
     id: int,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
     """Obtiene el detalle completo de una solicitud por su ID."""
+    logger.debug("[MANTENCION] Consultando solicitud id=%s por usuario_id=%s", id, current_user.id)
     return await mantencion_service.get_solicitud(db, id)
 
 
 @router.get("/{id}/pauta", response_model=PautaEstadoResumenDTO)
 async def get_pauta_solicitud(
     id: int,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
     """Retorna el estado de completitud y respuestas de la pauta preventiva para una solicitud."""
@@ -127,10 +136,16 @@ async def get_pauta_solicitud(
 async def guardar_respuestas_pauta(
     id: int,
     dto: PautaBatchUpdateDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Registra o actualiza en lote respuestas a los ítems de la pauta preventiva."""
+    logger.info(
+        "[MANTENCION] Guardando respuestas de pauta en solicitud_id=%s | mecanico_id=%s | total_respuestas=%s",
+        id,
+        current_user.id,
+        len(dto.respuestas),
+    )
     return await mantencion_service.guardar_respuestas_pauta(
         db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
     )
@@ -140,7 +155,7 @@ async def guardar_respuestas_pauta(
 async def autoasignar_fallas(
     id: int,
     dto: AutoasignarFallasDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -148,6 +163,12 @@ async def autoasignar_fallas(
     Cada mecánico responde únicamente por las fallas específicas que toma.
     Soporta co-responsabilidad: si 2 o más mecánicos toman la misma falla, ambos quedan registrados.
     """
+    logger.info(
+        "[MANTENCION] Autoasignación de fallas en solicitud_id=%s | mecanico_id=%s | detalles=%s",
+        id,
+        current_user.id,
+        dto.detalles_ids,
+    )
     return await mantencion_service.autoasignar_fallas(
         db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
     )
@@ -157,13 +178,19 @@ async def autoasignar_fallas(
 async def asignar_fallas_supervisora(
     id: int,
     dto: AsignarFallasSupervisoraDTO,
-    current_user: Usuario = Depends(require_supervisor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
     Asignación atómica de fallas realizada por la supervisora o administradores a un mecánico específico.
     Permite co-responsabilidad si la falla ya tenía otro mecánico asignado.
     """
+    logger.info(
+        "[MANTENCION] Supervisora id=%s asignando fallas a mecanico_id=%s en solicitud_id=%s",
+        current_user.id,
+        dto.mecanico_id,
+        id,
+    )
     return await mantencion_service.asignar_fallas_supervisora(
         db, solicitud_id=id, dto=dto, supervisor_id=current_user.id
     )
@@ -173,13 +200,19 @@ async def asignar_fallas_supervisora(
 async def terminar_avance(
     id: int,
     dto: TerminarAvanceDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
     Cierra el turno o avance del mecánico en sus fallas asignadas, registrando la duración en minutos.
     Si ya no quedan mecánicos activos en la solicitud, el estado pasa a PENDIENTE.
     """
+    logger.info(
+        "[MANTENCION] Mecánico id=%s terminando avance en solicitud_id=%s | comentario='%s'",
+        current_user.id,
+        id,
+        dto.comentario,
+    )
     return await mantencion_service.terminar_avance(
         db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
     )
@@ -189,10 +222,16 @@ async def terminar_avance(
 async def tomar_trabajo(
     id: int,
     dto: TomarTrabajoDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Auto-asignación de bus + invitación a colaboradores + comentario inicial opcional."""
+    logger.info(
+        "[MANTENCION] Mecánico id=%s tomando trabajo en solicitud_id=%s | colaboradores=%s",
+        current_user.id,
+        id,
+        dto.colaboradores_ids,
+    )
     return await mantencion_service.tomar_trabajo(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
 
 
@@ -200,10 +239,16 @@ async def tomar_trabajo(
 async def desasignar_mecanico(
     id: int,
     comentario: Optional[str] = Query(None, description="Comentario opcional de salida"),
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Desasignación individual de un mecánico ('[🚪 Salir del Equipo]')."""
+    logger.info(
+        "[MANTENCION] Mecánico id=%s desasignándose de solicitud_id=%s | comentario='%s'",
+        current_user.id,
+        id,
+        comentario,
+    )
     return await mantencion_service.desasignar_mecanico(db, solicitud_id=id, mecanico_id=current_user.id, comentario=comentario)
 
 
@@ -211,10 +256,15 @@ async def desasignar_mecanico(
 async def liberar_turno(
     id: int,
     dto: LiberarTurnoDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Liberación / Entrega de turno para el equipo completo ('[🔄 Entregar / Pasar Turno]')."""
+    logger.info(
+        "[MANTENCION] Usuario id=%s liberando turno completo en solicitud_id=%s",
+        current_user.id,
+        id,
+    )
     return await mantencion_service.liberar_turno(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
 
 
@@ -222,10 +272,16 @@ async def liberar_turno(
 async def agregar_falla(
     id: int,
     dto: AgregarFallaDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Permite a un mecánico o supervisor agregar una nueva avería detectada durante la atención."""
+    logger.info(
+        "[MANTENCION] Agregando nueva avería en solicitud_id=%s | mecanico_id=%s | falla_id=%s",
+        id,
+        current_user.id,
+        dto.falla_id,
+    )
     return await mantencion_service.agregar_falla(
         db, solicitud_id=id, mecanico_id=current_user.id, dto=dto
     )
@@ -236,10 +292,17 @@ async def check_detalle(
     id: int,
     detalle_id: int,
     resuelto: bool = Query(..., description="True para marcar resuelto, False para desmarcar"),
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Marca o desmarca un check de falla resuelta guardando el timestamp y el ID del mecánico."""
+    logger.info(
+        "[MANTENCION] Check falla en solicitud_id=%s | detalle_id=%s | resuelto=%s | mecanico_id=%s",
+        id,
+        detalle_id,
+        resuelto,
+        current_user.id,
+    )
     return await mantencion_service.check_detalle(
         db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id, resuelto=resuelto
     )
@@ -250,10 +313,16 @@ async def reportar_repuesto(
     id: int,
     detalle_id: int,
     dto: ReportarRepuestoDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Reporta si una falla no puede continuar por falta de repuestos."""
+    logger.info(
+        "[MANTENCION] Reportando repuesto en solicitud_id=%s | detalle_id=%s | falta_repuesto=%s",
+        id,
+        detalle_id,
+        dto.falta_repuesto,
+    )
     return await mantencion_service.reportar_repuesto(
         db,
         solicitud_id=id,
@@ -267,10 +336,16 @@ async def reportar_repuesto(
 async def agregar_colaborador(
     id: int,
     dto: AgregarColaboradorDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Agrega un colaborador al equipo mientras la solicitud está EN_REPARACION."""
+    logger.info(
+        "[MANTENCION] Agregando colaborador_id=%s a solicitud_id=%s por mecanico_id=%s",
+        dto.colaborador_id,
+        id,
+        current_user.id,
+    )
     return await mantencion_service.agregar_colaborador(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
 
 
@@ -278,10 +353,15 @@ async def agregar_colaborador(
 async def agregar_comentario(
     id: int,
     dto: ComentarioCreateDTO,
-    current_user: Usuario = Depends(require_current_user),
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
     """Agrega un comentario a la bitácora independiente de la solicitud."""
+    logger.info(
+        "[MANTENCION] Agregando comentario en solicitud_id=%s | usuario_id=%s",
+        id,
+        current_user.id,
+    )
     return await mantencion_service.agregar_comentario(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
 
 
@@ -289,10 +369,15 @@ async def agregar_comentario(
 async def finalizar_solicitud(
     id: int,
     dto: FinalizarSolicitudDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Finaliza los trabajos de la solicitud, verifica pauta preventiva y fallas, liberando el bus de taller."""
+    logger.info(
+        "[MANTENCION] Finalizando solicitud_id=%s | mecanico_cierre_id=%s",
+        id,
+        current_user.id,
+    )
     return await mantencion_service.finalizar_solicitud(
         db, solicitud_id=id, mecanico_cierre_id=current_user.id, dto=dto
     )
@@ -302,12 +387,15 @@ async def finalizar_solicitud(
 async def liberar_solicitud(
     id: int,
     dto: LiberarSolicitudDTO,
-    current_user: Usuario = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Cierra y libera el bus de taller. Exige justificación si la pauta está incompleta o si quedan fallas no resueltas."""
+    logger.info(
+        "[MANTENCION] Liberando bus y cerrando solicitud_id=%s | mecanico_id=%s",
+        id,
+        current_user.id,
+    )
     return await mantencion_service.liberar_solicitud(
         db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
     )
-
-

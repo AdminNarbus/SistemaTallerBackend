@@ -1,11 +1,9 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_password_hash, verify_password
-from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
 
@@ -85,6 +83,15 @@ class UserRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def get_rol_by_nombre(
+        self, db: AsyncSession, nombre_rol: str
+    ) -> Optional[Rol]:
+        """Busca un rol por su nombre en la tabla roles."""
+        rol_clean = (nombre_rol or "").upper().strip()
+        stmt = select(Rol).where(Rol.nombre == rol_clean)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def add(self, db: AsyncSession, usuario: Usuario) -> Usuario:
         """Agrega un usuario a la sesión y realiza flush atómico sin commit."""
         db.add(usuario)
@@ -92,32 +99,53 @@ class UserRepository:
         return usuario
 
     async def create(
-        self, db: AsyncSession, usuario_in: UsuarioCreateDTO
+        self, db: AsyncSession, usuario_or_dto: Any
     ) -> Usuario:
-        """Crea un nuevo usuario en la BD (flush atómico sin commit)."""
-        logger.debug("[AUTH] Creando usuario | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
-        rol_obj = await self.get_or_create_rol(db, usuario_in.rol or "CONDUCTOR")
-        password_hash = get_password_hash(usuario_in.password)
+        """
+        Persiste un usuario en la BD con flush atómico sin commit.
+        Acepta una entidad Usuario ya configurada o un DTO UsuarioCreateDTO.
+        """
+        if isinstance(usuario_or_dto, Usuario):
+            return await self.add(db, usuario_or_dto)
+
+        # Soporte para UsuarioCreateDTO (retrocompatibilidad)
+        logger.debug("[AUTH] Creando usuario desde DTO | username='%s' | rol='%s'", usuario_or_dto.username, getattr(usuario_or_dto, "rol", None))
+        rol_obj = await self.get_or_create_rol(db, getattr(usuario_or_dto, "rol", None) or "CONDUCTOR")
+        
+        # En caso de venir de DTO, si la contraseña viene en texto plano se hashea; si ya viene hasheada se preserva
+        pwd = getattr(usuario_or_dto, "password", "")
+        if pwd.startswith("$2b$") or pwd.startswith("$2a$"):
+            password_hash = pwd
+        else:
+            from app.core.security import get_password_hash
+            password_hash = get_password_hash(pwd)
+
         db_usuario = Usuario(
-            nombre=usuario_in.nombre,
-            apellido=usuario_in.apellido,
-            username=usuario_in.username.strip(),
+            nombre=getattr(usuario_or_dto, "nombre", None),
+            apellido=getattr(usuario_or_dto, "apellido", None),
+            username=usuario_or_dto.username.strip(),
             password_hash=password_hash,
             rol_id=rol_obj.id,
-            is_active=usuario_in.is_active if usuario_in.is_active is not None else True,
+            is_active=getattr(usuario_or_dto, "is_active", True) if getattr(usuario_or_dto, "is_active", None) is not None else True,
         )
         await self.add(db, db_usuario)
         logger.info("[AUTH] Usuario creado en sesión | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
         return db_usuario
 
     async def desactivar(
-        self, db: AsyncSession, user_id: int
+        self, db: AsyncSession, user_or_id: Any
     ) -> Optional[Usuario]:
-        """Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico."""
-        user = await self.get_by_id(db, user_id=user_id)
-        if not user:
-            logger.warning("[AUTH] Intento de desactivar usuario inexistente | id=%s", user_id)
-            return None
+        """
+        Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico.
+        Acepta tanto la entidad Usuario ya cargada (evitando consultas SQL duplicadas) como un user_id entero.
+        """
+        if isinstance(user_or_id, Usuario):
+            user = user_or_id
+        else:
+            user = await self.get_by_id(db, user_id=int(user_or_id))
+            if not user:
+                logger.warning("[AUTH] Intento de desactivar usuario inexistente | id=%s", user_or_id)
+                return None
 
         user.is_active = False
         await db.flush()
@@ -127,16 +155,21 @@ class UserRepository:
     async def authenticate(
         self, db: AsyncSession, username: str, password: str
     ) -> Optional[Usuario]:
-        """Valida credenciales ingresadas contra el hash guardado."""
-        logger.debug("[AUTH] Intento de autenticación | username='%s'", username)
+        """
+        Valida credenciales contra la BD.
+        (Nota arquitectónica: La orquestación principal reside en AuthService;
+        este método se mantiene por compatibilidad en tests de repositorio).
+        """
+        logger.debug("[AUTH] Intento de autenticación en repositorio | username='%s'", username)
         user = await self.get_by_username(db, username)
         if not user:
             logger.warning("[AUTH] Autenticación fallida: usuario no existe | username='%s'", username)
             return None
+        from app.core.security import verify_password
         if not verify_password(password, user.password_hash):
             logger.warning("[AUTH] Autenticación fallida: contraseña incorrecta | username='%s'", username)
             return None
-        logger.info("[AUTH] Autenticación exitosa | id=%s | username='%s'", user.id, username)
+        logger.info("[AUTH] Autenticación exitosa en repositorio | id=%s | username='%s'", user.id, username)
         return user
 
 

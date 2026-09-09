@@ -1,6 +1,8 @@
+import io
 import pytest
 from datetime import datetime, timezone
-from app.core.exceptions import NotFoundException
+from starlette.datastructures import UploadFile as StarletteUploadFile
+from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.neumaticos.dtos.reporte_neumatico_dto import ReporteNeumaticoCreateDTO
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 from app.modules.neumaticos.repository.neumatico_repository import neumatico_repository
@@ -146,3 +148,40 @@ async def test_neumatico_repository_operaciones_atomicas(db_session, seed_test_d
     assert total >= 1
     lista = await neumatico_repository.list_reportes(db_session, limit=10)
     assert len(lista) >= 1
+
+
+@pytest.mark.asyncio
+async def test_procesar_formulario_evidencia_extension_invalida(db_session, seed_test_data):
+    """Prueba que subir un archivo con extensión no permitida lance BusinessRuleException."""
+    conductor_id = seed_test_data["conductor"].id
+    fake_file = io.BytesIO(b"binary executable")
+    upload_file = StarletteUploadFile(filename="script.exe", file=fake_file)
+
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await formulario_neumatico_service.procesar_formulario(
+            usuario_id=conductor_id,
+            maquina="BUS-101",
+            evidencia=upload_file,
+            db=db_session,
+        )
+    assert "Tipo de archivo no permitido" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_procesar_formulario_evidencia_tamano_excedido(db_session, seed_test_data):
+    """Prueba que un archivo que excede 10 MB lance BusinessRuleException."""
+    conductor_id = seed_test_data["conductor"].id
+    # Simular 11 MB de contenido
+    large_content = b"x" * (11 * 1024 * 1024)
+    fake_file = io.BytesIO(large_content)
+    upload_file = StarletteUploadFile(filename="foto_pesada.jpg", file=fake_file)
+
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await formulario_neumatico_service.procesar_formulario(
+            usuario_id=conductor_id,
+            maquina="BUS-101",
+            evidencia=upload_file,
+            db=db_session,
+        )
+    assert "supera el tamaño máximo" in str(exc_info.value)
+

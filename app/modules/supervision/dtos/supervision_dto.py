@@ -2,8 +2,6 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-from app.modules.mantencion.dtos.mantencion_dto import SolicitudDTO
-
 
 class MetricasEstadoDTO(BaseModel):
     total_solicitudes: int = Field(0, description="Total histórico/activo de solicitudes de taller")

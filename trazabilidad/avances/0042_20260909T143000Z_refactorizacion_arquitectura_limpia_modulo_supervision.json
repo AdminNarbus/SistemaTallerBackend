@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 42,
+  "id": "AV-0042",
+  "timestamp": "2026-09-09T14:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REFACTOR-MODULAR-4",
+    "name": "Refactorización Arquitectura Limpia - Módulo Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización arquitectónica limpia del módulo `app/modules/supervision`: 1) Eliminación de fuga del modelo ORM `Usuario` en `router.py`, tipando la inyección de `current_user` con `UsuarioResponseDTO` en los 4 endpoints de supervisión; 2) Estandarización de la estructura de paquetes creando archivos `__init__.py` con exportaciones canónicas en `dtos`, `repository`, `services` y `api`; 3) Limpieza de DTOs en `supervision_dto.py` eliminando dependencias no utilizadas; 4) Mantenimiento del repositorio analítico `supervision_repository.py` con persistencia pura SQL y agregaciones nativas (`func.count`, `group_by`, `exists()`), sin llamadas a `commit()`; 5) Creación de archivo de pruebas unitarias dedicado `tests/unit/test_supervision_service.py` validando resumen, alertas y consultas atómicas, elevando la suite general a 76 tests (100% pasando).",
+  "scope": {
+    "planned": [
+      "Eliminar dependencia del modelo ORM Usuario en app/modules/supervision/api/router.py",
+      "Tipar current_user con UsuarioResponseDTO en todos los endpoints de supervisión",
+      "Crear archivos __init__.py en dtos, repository, services y api de supervisión",
+      "Limpiar imports no utilizados en supervision_dto.py",
+      "Crear tests unitarios dedicados para SupervisionService y SupervisionRepository",
+      "Verificar suite completa de pruebas unitarias, de integración y e2e"
+    ],
+    "completed": [
+      "app/modules/supervision/api/router.py refactorizado con UsuarioResponseDTO y contratos DTO",
+      "Creados app/modules/supervision/dtos/__init__.py, repository/__init__.py, services/__init__.py y api/__init__.py",
+      "Limpieza de imports en app/modules/supervision/dtos/supervision_dto.py",
+      "Creado tests/unit/test_supervision_service.py con 3 nuevos casos de prueba unitarios",
+      "Verificación de 8/8 pruebas del módulo supervisión y suite completa 76/76 tests verdes"
+    ],
+    "pending": [
+      "Continuar refactorización modular con módulo Mantención (app/modules/mantencion)"
+    ],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Alteraciones en esquemas de tablas o migraciones de Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Reemplazo de modelo ORM Usuario por UsuarioResponseDTO en la inyección de dependencias de los 4 endpoints."
+    },
+    {
+      "path": "app/modules/supervision/dtos/__init__.py",
+      "action": "created",
+      "summary": "Exportación canónica de MetricasEstadoDTO, CategoriaFrecuenciaDTO, AlertaSupervisionDTO y ResumenTallerDTO."
+    },
+    {
+      "path": "app/modules/supervision/repository/__init__.py",
+      "action": "created",
+      "summary": "Exportación canónica de SupervisionRepository y supervision_repository."
+    },
+    {
+      "path": "app/modules/supervision/services/__init__.py",
+      "action": "created",
+      "summary": "Exportación canónica de SupervisionService y supervision_service."
+    },
+    {
+      "path": "app/modules/supervision/api/__init__.py",
+      "action": "created",
+      "summary": "Exportación canónica de router de supervisión."
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "Eliminación de import no utilizado de SolicitudDTO."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Actualización de imports para consumir DTOs y repositorio desde módulos canónicos locales."
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "created",
+      "summary": "Pruebas unitarias para cálculo de KPIs de resumen de taller, generación de alertas operacionales y consultas analíticas del repositorio."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-042",
+      "title": "Desacoplamiento Estricto de ORM en Router de Supervisión y Estandarización de Paquetes Modulares",
+      "rationale": "El router de supervisión utilizaba el modelo ORM `Usuario` como tipo para el usuario autenticado en 4 endpoints, generando acoplamiento con la capa de datos. Al cambiar a `UsuarioResponseDTO`, los controladores operan exclusivamente sobre contratos DTO. Además, se crearon los archivos `__init__.py` ausentes en dtos, repository, services y api para garantizar una interfaz de importación uniforme y canónica idéntica al resto de módulos refactorizados.",
+      "consequences": "Mayor aislamiento arquitectónico, eliminación de leaks de modelos ORM hacia capas externas, código más testeable con 3 nuevas pruebas unitarias y consistencia modular en todo el backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v tests/unit/test_supervision_service.py tests/integration/test_supervision_api.py tests/integration/test_fase5_supervision_y_alertas.py",
+      "result": "passed",
+      "evidence": "8 passed in 3.10s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "76 passed in 24.8s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Refactorizar con arquitectura limpia el módulo central de Mantención (app/modules/mantencion) en la rama feature/refactor-arquitectura-modular.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-modular",
+    "dirty": true
+  },
+  "notes": [
+    "La suite completa de pruebas pasó de 73 a 76 tests tras agregar la cobertura unitaria dedicada de supervisión."
+  ]
+}

@@ -28,8 +28,11 @@
 - [x] Estandarización de comentarios predeterminados en bitácora de la OT (inicio, check de fallas, repuestos, avance, cierre) con nombres legibles y eliminación de IDs internos.
 - [x] Suite de 61 pruebas automatizadas aprobadas al 100% sin regresiones.
 
-## Fase 6: Control de Versiones Git y Despliegue
-- [x] Consolidación de ramas de características mediante GitFlow (`feature/pruebas-sistema-backend`).
-- [ ] Etiquetado de versión de release (Git Tagging).
-- [ ] Merge controlado hacia `main` (previo paso por pruebas en entorno Staging/Producción).
-- [ ] Despliegue en servidor / entorno productivo autorizados.
+## Fase 6: Control de Versiones Git y Despliegue en la Nube
+- [x] Consolidación de ramas de características mediante GitFlow (`develop`).
+- [x] Configuración de pipeline CI/CD en Google Cloud Build (`cloudbuild.yaml`) sincronizado con Git.
+- [x] Empaquetado Docker con auto-migraciones de esquema (`docker-entrypoint.sh` + `alembic upgrade head`).
+- [x] Despliegue Serverless en Google Cloud Run con Artifact Registry y Secret Manager.
+- [x] Guía operativa y manual de despliegue (`GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md`).
+- [ ] Etiquetado de versión de release (Git Tagging para producción).
+- [ ] Despliegue y verificación en vivo con dominio asignado.

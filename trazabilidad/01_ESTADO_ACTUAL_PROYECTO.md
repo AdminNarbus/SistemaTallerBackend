@@ -16,6 +16,7 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
 | **Core, Database & Security** | `COMPLETADO` | Manejo centralizado de excepciones con respuestas JSON estandarizadas, AuthService desacoplado, eliminación de DDLs en caliente (`db_patch.py`), resolución de límite VARCHAR(32) en Alembic (migración 005) y endpoints seguros de salud (`/health/db` con HTTP 503 y sin leak de stack traces). |
 | **Contratos Frontend** | `COMPLETADO` | Especificación completa de contratos REST, schemas TypeScript y ejemplos en `trazabilidad/05_CONTRATOS_API_FRONTEND.md`. |
 | **Catálogo de Endpoints y Payloads** | `COMPLETADO` | Diccionario exhaustivo de los 43 endpoints con sus payloads, campos, respuestas y casos de uso en `trazabilidad/06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md`. |
+| **Despliegue y CI/CD (Google Cloud Build & Cloud Run)** | `COMPLETADO` | Pipeline Serverless con Google Cloud Build sincronizado nativamente con Git, compilación Docker optimizada con caché en Artifact Registry, auto-migración de esquema Alembic (`docker-entrypoint.sh`) y despliegue a Cloud Run con gestión de secretos en Secret Manager. |
 
 ## Arquitectura y Buenas Prácticas
 - **Integridad Referencial con Flexibilidad Operativa:** Clave foránea `bus_id` enlazada a `buses.id` con resolución automática a partir de `n_bus` para mantener compatibilidad con flujos de conductores y mecánicos.
@@ -69,3 +70,8 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Migración Autónoma en Alembic 007 (`007_seed_conductores_dataset.py`):** Inserción masiva e idempotente con `ON CONFLICT (username) DO UPDATE` y sincronización de secuencia `usuarios_id_seq`.
   - **Optimización de Recarga en Desarrollo:** Verificación rápida por conteo (`SELECT count(*) WHERE rol_id = 3`) en `seed.py`, evitando roundtrips hacia Neon en cada `uvicorn --reload`.
   - **Validación y Pruebas Unitarias:** Suite `tests/unit/test_conductores_dataset.py` aprobada al 100% (conteo, formato de RUT, correspondencia de hashes). Verificación de 128 usuarios activos totales en base de datos de Neon y login funcional por RUT.
+- **Pipeline CI/CD y Despliegue Continuo en Google Cloud (AV-0053):**
+  - **Integración Nativa con Git:** Sincronización del repositorio con Google Cloud Build mediante Triggers directos, eliminando intermediarios como GitHub Actions.
+  - **Compilación Optimizada con Caché:** Extracción de capas previas de Artifact Registry con `--cache-from` para acelerar el ciclo de construcción Docker.
+  - **Auto-Migración Idempotente en Contenedor:** `docker-entrypoint.sh` ejecuta `alembic upgrade head` previo al arranque de Uvicorn, garantizando actualización de esquema 3NF sin intervención manual.
+  - **Serverless y Secretos Seguros:** Despliegue en Cloud Run con inyección de credenciales sensibles desde Secret Manager (`DATABASE_URL`, `SECRET_KEY`), autoescalado de 0 a 10 instancias y soporte de almacenamiento en GCS.

@@ -1,0 +1,98 @@
+# ==============================================================================
+# Pipeline de Integración y Despliegue Continuo (CI/CD): Google Cloud Build
+# ==============================================================================
+# Repositorio: BackendTallerNarbus
+# Destino: Google Cloud Run (Servicio Administrado) + Artifact Registry
+# ==============================================================================
+
+steps:
+  # ----------------------------------------------------------------------------
+  # 1. Recuperar imagen previa para optimizar tiempos de compilación (Caché Docker)
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest || exit 0
+    id: 'pull-cache'
+
+  # ----------------------------------------------------------------------------
+  # 2. Compilar la imagen Docker del backend con tags $COMMIT_SHA y latest
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+      - '--cache-from'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+      - '.'
+    id: 'build-image'
+    waitFor: ['pull-cache']
+
+  # ----------------------------------------------------------------------------
+  # 3. Publicar la imagen compilada en Google Artifact Registry
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}'
+    id: 'push-image'
+    waitFor: ['build-image']
+
+  # ----------------------------------------------------------------------------
+  # 4. Desplegar la nueva revisión en Google Cloud Run
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8000'
+      - '--min-instances=${_MIN_INSTANCES}'
+      - '--max-instances=${_MAX_INSTANCES}'
+      - '--memory=${_MEMORY}'
+      - '--cpu=${_CPU}'
+      - '--timeout=300'
+      - '--set-env-vars=ENVIRONMENT=production,STORAGE_PROVIDER=gcs,GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCP_PROJECT_ID=$PROJECT_ID'
+      - '--set-secrets=DATABASE_URL=${_SECRET_DATABASE_URL}:latest,SECRET_KEY=${_SECRET_KEY}:latest'
+    id: 'deploy-cloud-run'
+    waitFor: ['push-image']
+
+# ------------------------------------------------------------------------------
+# Imágenes gestionadas por Cloud Build
+# ------------------------------------------------------------------------------
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:$COMMIT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+
+# ------------------------------------------------------------------------------
+# Variables de Sustitución por Defecto (Personalizables en el Trigger de Cloud Build)
+# ------------------------------------------------------------------------------
+substitutions:
+  _REGION: 'us-central1'
+  _SERVICE_NAME: 'narbus-backend-api'
+  _REPO_NAME: 'narbus-backend'
+  _MIN_INSTANCES: '0'
+  _MAX_INSTANCES: '10'
+  _MEMORY: '512Mi'
+  _CPU: '1'
+  _SECRET_DATABASE_URL: 'DATABASE_URL'
+  _SECRET_KEY: 'SECRET_KEY'
+  _GCS_BUCKET_NAME: 'narbus-taller-evidencias'
+
+# ------------------------------------------------------------------------------
+# Opciones de Ejecución
+# ------------------------------------------------------------------------------
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitution_option: 'ALLOW_LOOSE'

@@ -1,10 +1,13 @@
+import asyncio
 import json
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.core.storage.storage_service import storage_service
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
@@ -13,6 +16,7 @@ from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolici
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
+from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.mantencion.repository.mantencion_repository import (
     mantencion_repository,
     _calcular_duracion_minutos,
@@ -22,6 +26,7 @@ from app.modules.mantencion.dtos import (
     FallaTallerDTO,
     SolicitudDTO,
     SolicitudResumenDTO,
+    SolicitudEvidenciaDTO,
     SolicitudDetalleDTO,
     SolicitudMecanicoDTO,
     SolicitudComentarioDTO,
@@ -43,6 +48,8 @@ from app.modules.mantencion.dtos import (
     PautaEstadoResumenDTO,
     LiberarSolicitudDTO,
     AgregarFallaDTO,
+    DetalleUpdateDTO,
+    ComentarioAddedDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +88,24 @@ class MantencionService:
     Responsabilidad exclusiva: Validaciones de reglas operacionales, orquestación de pasos,
     transformación a DTOs y control transaccional (commit/rollback).
     """
+
+    def _attach_comentario_safe(self, solicitud, comentario, usuario_nombre: Optional[str] = None) -> None:
+        if usuario_nombre:
+            comentario._usuario_nombre_cached = usuario_nombre
+        if "comentarios" in getattr(solicitud, "__dict__", {}) and solicitud.__dict__["comentarios"] is not None:
+            solicitud.__dict__["comentarios"].append(comentario)
+        else:
+            if not hasattr(solicitud, "_comentarios_nuevos") or solicitud._comentarios_nuevos is None:
+                solicitud._comentarios_nuevos = []
+            solicitud._comentarios_nuevos.append(comentario)
+
+    def _attach_mecanico_safe(self, solicitud, mecanico) -> None:
+        if "mecanicos" in getattr(solicitud, "__dict__", {}) and solicitud.__dict__["mecanicos"] is not None:
+            solicitud.__dict__["mecanicos"].append(mecanico)
+        else:
+            if not hasattr(solicitud, "_mecanicos_nuevos") or solicitud._mecanicos_nuevos is None:
+                solicitud._mecanicos_nuevos = []
+            solicitud._mecanicos_nuevos.append(mecanico)
 
     def _to_solicitud_dto(self, sol) -> Optional[SolicitudDTO]:
         if not sol:
@@ -186,7 +211,11 @@ class MantencionService:
         historial_mecanicos_dtos = []
         mecanicos_activos_ids = set()
 
-        mecanicos_list = _get_rel(sol, "mecanicos") or []
+        mecanicos_list = list(_get_rel(sol, "mecanicos") or [])
+        nuevos_mecs = getattr(sol, "_mecanicos_nuevos", [])
+        for nm in nuevos_mecs:
+            if nm not in mecanicos_list:
+                mecanicos_list.append(nm)
         for mec in mecanicos_list:
             mec_u = _get_rel(mec, "mecanico")
             mec_nombre = mec_u.nombre_completo if mec_u else None
@@ -242,10 +271,14 @@ class MantencionService:
                     mecanicos_dtos.append(h_mec)
 
         comentarios_dtos = []
-        comentarios_val = _get_rel(sol, "comentarios") or []
+        comentarios_val = list(_get_rel(sol, "comentarios") or [])
+        nuevos_coms = getattr(sol, "_comentarios_nuevos", [])
+        for nc in nuevos_coms:
+            if nc not in comentarios_val:
+                comentarios_val.append(nc)
         for com in comentarios_val:
             usr = _get_rel(com, "usuario")
-            usr_nombre = usr.nombre_completo if usr else None
+            usr_nombre = usr.nombre_completo if usr else getattr(com, "_usuario_nombre_cached", None)
 
             comentarios_dtos.append(
                 SolicitudComentarioDTO(
@@ -285,13 +318,34 @@ class MantencionService:
         creador = _get_rel(sol, "creador")
         creador_nombre = creador.nombre_completo if creador else None
         mec_cierre = _get_rel(sol, "mecanico_cierre")
-        mecanico_cierre_nombre = mec_cierre.nombre_completo if mec_cierre else None
+        mecanico_cierre_nombre = (
+            mec_cierre.nombre_completo
+            if mec_cierre
+            else getattr(sol, "_mecanico_cierre_nombre_cached", None)
+        )
         bus_obj = _get_rel(sol, "bus")
         bus_patente = bus_obj.patente if bus_obj else None
 
         total_fallas = len(detalles_dtos)
         fallas_resueltas = len([d for d in detalles_dtos if d.resuelto])
         fallas_con_falta_repuesto = len([d for d in detalles_dtos if d.falta_repuesto])
+
+        evidencias_dtos = []
+        evidencias_val = _get_rel(sol, "evidencias") or []
+        for ev in evidencias_val:
+            evidencias_dtos.append(
+                SolicitudEvidenciaDTO(
+                    id=ev.id,
+                    solicitud_id=ev.solicitud_id,
+                    detalle_id=ev.detalle_id,
+                    usuario_id=ev.usuario_id,
+                    url=ev.url,
+                    original_filename=ev.original_filename,
+                    size_bytes=ev.size_bytes,
+                    content_type=ev.content_type,
+                    fecha_creacion=ev.fecha_creacion,
+                )
+            )
 
         return SolicitudDTO(
             id=sol.id,
@@ -318,6 +372,7 @@ class MantencionService:
             historial_mecanicos=historial_mecanicos_dtos,
             comentarios=comentarios_dtos,
             pauta_respuestas=pauta_dtos,
+            evidencias=evidencias_dtos,
         )
 
     # --- Consultas de Catálogos ---
@@ -489,8 +544,52 @@ class MantencionService:
         dto: SolicitudCreateDTO,
         creador_id: int,
         creador_nombre: Optional[str] = None,
+        foto: Optional[UploadFile] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Creando solicitud | n_bus='%s' | bus_id=%s | creador_id=%s", dto.n_bus, dto.bus_id, creador_id)
+
+        # Recopilar todos los archivos fotográficos recibidos (soporta fotos múltiple y foto singular)
+        archivos_fotos: List[UploadFile] = []
+        if fotos:
+            for f in fotos:
+                if f and hasattr(f, "filename") and f.filename and f not in archivos_fotos:
+                    archivos_fotos.append(f)
+        elif foto and hasattr(foto, "filename") and foto.filename:
+            archivos_fotos.append(foto)
+
+        # Subir archivos a almacenamiento (GCS o Local) de manera asíncrona
+        uploaded_evidencias: List[dict] = []
+        for f in archivos_fotos:
+            upload_res = await storage_service.upload_image(file=f, folder="solicitudes")
+            uploaded_evidencias.append(upload_res)
+            logger.info(
+                "[MANTENCION] Evidencia de solicitud subida | url='%s' | tamano=%s bytes",
+                upload_res["url"],
+                upload_res["size_bytes"],
+            )
+
+        # Si el cliente envió fotos_urls predefinidas vía JSON
+        if dto.fotos_urls:
+            for u in dto.fotos_urls:
+                if u and not any(e["url"] == u for e in uploaded_evidencias):
+                    uploaded_evidencias.append({
+                        "url": u,
+                        "original_filename": None,
+                        "size_bytes": None,
+                        "content_type": None,
+                    })
+
+        # Asignar foto principal para retrocompatibilidad con frontend que lee foto_url
+        if uploaded_evidencias and not dto.foto_url:
+            dto.foto_url = uploaded_evidencias[0]["url"]
+        elif dto.foto_url and not any(e["url"] == dto.foto_url for e in uploaded_evidencias):
+            uploaded_evidencias.insert(0, {
+                "url": dto.foto_url,
+                "original_filename": None,
+                "size_bytes": None,
+                "content_type": None,
+            })
 
         # 1. Resolver bus_id y patente
         bus_id = dto.bus_id
@@ -527,6 +626,19 @@ class MantencionService:
             foto_url=dto.foto_url,
             fecha_creacion=now,
         )
+
+        evidencias_a_procesar: List[TallerSolicitudEvidencia] = []
+        for ev_data in uploaded_evidencias:
+            ev_obj = TallerSolicitudEvidencia(
+                usuario_id=creador_id,
+                url=ev_data["url"],
+                original_filename=ev_data.get("original_filename"),
+                size_bytes=ev_data.get("size_bytes"),
+                content_type=ev_data.get("content_type"),
+                fecha_creacion=now,
+            )
+            solicitud.evidencias.append(ev_obj)
+            evidencias_a_procesar.append(ev_obj)
 
         # 3. Resolución batch y vinculación de detalles en memoria (0 flushes)
         # 3. Resolución batch y vinculación de detalles en memoria (0 flushes)
@@ -628,6 +740,21 @@ class MantencionService:
         logger.info("[MANTENCION] Solicitud creada exitosamente | id=%s | n_bus='%s' | estado=REPORTADO", solicitud.id, solicitud.n_bus)
 
         # 4. Retornar DTO directamente construido en memoria sin disparar 15 consultas selectinload a tablas vacías
+        evidencias_dtos = [
+            SolicitudEvidenciaDTO(
+                id=ev.id,
+                solicitud_id=solicitud.id,
+                detalle_id=ev.detalle_id,
+                usuario_id=ev.usuario_id,
+                url=ev.url,
+                original_filename=ev.original_filename,
+                size_bytes=ev.size_bytes,
+                content_type=ev.content_type,
+                fecha_creacion=ev.fecha_creacion,
+            )
+            for ev in evidencias_a_procesar
+        ]
+
         return SolicitudDTO(
             id=solicitud.id,
             n_bus=solicitud.n_bus,
@@ -653,13 +780,14 @@ class MantencionService:
             historial_mecanicos=[],
             comentarios=[],
             pauta_respuestas=[],
+            evidencias=evidencias_dtos,
         )
 
     async def tomar_trabajo(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: TomarTrabajoDTO
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Tomar trabajo | solicitud_id=%s | mecanico_id=%s | colaboradores=%s", solicitud_id, mecanico_id, dto.colaboradores_ids)
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -699,8 +827,7 @@ class MantencionService:
         if u_mec:
             mecanico_entry.mecanico = u_mec
         mantencion_repository.add_mecanico(db, mecanico_entry)
-        if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-            solicitud.mecanicos.append(mecanico_entry)
+        self._attach_mecanico_safe(solicitud, mecanico_entry)
         logger.info("[MANTENCION] Mecánico asignado a solicitud | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
 
         # 4. Asignar colaboradores
@@ -720,8 +847,7 @@ class MantencionService:
                 if u_c:
                     colab_entry.mecanico = u_c
                 mantencion_repository.add_mecanico(db, colab_entry)
-                if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-                    solicitud.mecanicos.append(colab_entry)
+                self._attach_mecanico_safe(solicitud, colab_entry)
                 logger.info("[MANTENCION] Colaborador co-responsable asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
 
         # 5. Actualizar estado
@@ -750,13 +876,12 @@ class MantencionService:
         )
         if u_mec:
             comentario_entry.usuario = u_mec
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, mec_nom)
 
         await db.commit()
         logger.info("[MANTENCION] Solicitud en reparación | id=%s | estado=EN_REPARACION", solicitud.id)
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def agregar_colaborador(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: AgregarColaboradorDTO
@@ -808,36 +933,45 @@ class MantencionService:
         if u_colab:
             colab_entry.mecanico = u_colab
         mantencion_repository.add_mecanico(db, colab_entry)
-        if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-            solicitud.mecanicos.append(colab_entry)
+        self._attach_mecanico_safe(solicitud, colab_entry)
 
         await db.commit()
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def desasignar_mecanico(
-        self, db: AsyncSession, solicitud_id: int, mecanico_id: int, comentario: Optional[str] = None
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        comentario: Optional[str] = None,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Desasignando mecánico | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
         solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
-        mecanico_entry = None
-        for mec in solicitud.mecanicos:
-            if mec.mecanico_id == mecanico_id and mec.is_activo:
-                mecanico_entry = mec
-                break
-
-        if not mecanico_entry:
+        now = datetime.now()
+        mecs_desactivados = await mantencion_repository.desactivar_mecanicos_por_ids(
+            db, solicitud_id=solicitud.id, mecanicos_ids={mecanico_id}, fecha_desasignacion=now
+        )
+        if not mecs_desactivados:
             logger.warning("[MANTENCION] Desasignación fallida: mecánico no activo | solicitud_id=%s | mecanico_id=%s", solicitud_id, mecanico_id)
             raise BusinessRuleException("El mecánico no está asignado activamente a esta solicitud")
 
-        now = datetime.now()
-        mecanico_entry.is_activo = False
-        mecanico_entry.fecha_desasignacion = now
+        if hasattr(solicitud, "mecanicos") and solicitud.mecanicos:
+            for m in solicitud.mecanicos:
+                if m.mecanico_id == mecanico_id and getattr(m, "is_activo", False):
+                    m.is_activo = False
+                    m.fecha_desasignacion = now
 
-        u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        if mecanico_nombre:
+            mec_nom = mecanico_nombre
+            u_mec = None
+        else:
+            u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
+            mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+
         texto_desasig = f"{mec_nom} se retiró de los trabajos de la OT"
         if comentario and comentario.strip():
             texto_desasig += f". Motivo: {comentario.strip()}"
@@ -851,24 +985,27 @@ class MantencionService:
         )
         if u_mec:
             comentario_entry.usuario = u_mec
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, mec_nom)
 
-        activos = [m for m in solicitud.mecanicos if m.is_activo and m.id != mecanico_entry.id]
-
-        if not activos:
+        presencias_activas = await mantencion_repository.get_presencias_activas(db, solicitud_id=solicitud.id)
+        if not presencias_activas:
             solicitud.estado = "PENDIENTE_REASIGNACION"
             logger.info("[MANTENCION] Sin mecánicos activos → PENDIENTE_REASIGNACION | solicitud_id=%s", solicitud_id)
 
         await db.commit()
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def liberar_turno(
-        self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: LiberarTurnoDTO
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        usuario_id: int,
+        dto: LiberarTurnoDTO,
+        usuario_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Liberar turno | solicitud_id=%s | usuario_id=%s", solicitud_id, usuario_id)
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -884,8 +1021,13 @@ class MantencionService:
 
         solicitud.estado = "PENDIENTE_REASIGNACION"
 
-        u_usr = await mantencion_repository.get_usuario_by_id(db, usuario_id)
-        usr_nom = u_usr.nombre_completo if u_usr else "Usuario"
+        if usuario_nombre:
+            usr_nom = usuario_nombre
+            u_usr = None
+        else:
+            u_usr = await mantencion_repository.get_usuario_by_id(db, usuario_id)
+            usr_nom = u_usr.nombre_completo if u_usr else "Usuario"
+
         texto_liberar = f"{usr_nom} entregó y liberó su turno de trabajo en la OT"
         if dto.comentario and dto.comentario.strip():
             texto_liberar += f". Observación: {dto.comentario.strip()}"
@@ -899,28 +1041,26 @@ class MantencionService:
         )
         if u_usr:
             comentario_entry.usuario = u_usr
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, usr_nom)
 
         await db.commit()
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def check_detalle(
-        self, db: AsyncSession, solicitud_id: int, detalle_id: int, mecanico_id: int, resuelto: bool
-    ) -> SolicitudDTO:
-        logger.info("[MANTENCION] Check detalle | solicitud_id=%s | detalle_id=%s | mecanico_id=%s | resuelto=%s", solicitud_id, detalle_id, mecanico_id, resuelto)
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
-        if not solicitud:
-            raise NotFoundException("Solicitud de taller no encontrada")
-
-        detalle_target = None
-        for det in solicitud.detalles:
-            if det.id == detalle_id:
-                detalle_target = det
-                break
-
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        mecanico_id: int,
+        resuelto: bool,
+        mecanico_nombre: Optional[str] = None,
+    ) -> DetalleUpdateDTO:
+        logger.info("[MANTENCION] Check detalle atómico | solicitud_id=%s | detalle_id=%s | mecanico_id=%s | resuelto=%s", solicitud_id, detalle_id, mecanico_id, resuelto)
+        detalle_target = await mantencion_repository.get_detalle_operacional(db, solicitud_id, detalle_id)
         if not detalle_target:
+            if not await mantencion_repository.check_solicitud_exists(db, solicitud_id):
+                raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException("Detalle de falla no encontrado")
 
         if resuelto and getattr(detalle_target, "falta_repuesto", False):
@@ -938,8 +1078,13 @@ class MantencionService:
             detalle_target.mecanico_resolvio_id = None
             detalle_target.fecha_resolucion = None
 
-        u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        if not mecanico_nombre:
+            u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
+            mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        else:
+            u_mec = None
+            mec_nom = mecanico_nombre
+
         falla_nom = _describir_detalle(detalle_target)
 
         if resuelto:
@@ -953,7 +1098,7 @@ class MantencionService:
             tipo_check = "REAPERTURA"
 
         comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
+            solicitud_id=solicitud_id,
             usuario_id=mecanico_id,
             tipo=tipo_check,
             comentario=texto_check,
@@ -961,41 +1106,71 @@ class MantencionService:
         )
         if u_mec:
             comentario_entry.usuario = u_mec
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
-        return await self.get_solicitud(db, solicitud.id)
+        # Nivel 3: retornar DTO atómico construido en memoria (0 RTTs adicionales)
+        return DetalleUpdateDTO(
+            detalle_id=detalle_target.id,
+            solicitud_id=solicitud_id,
+            resuelto=detalle_target.resuelto,
+            falta_repuesto=getattr(detalle_target, "falta_repuesto", False),
+            mecanico_resolvio_id=detalle_target.mecanico_resolvio_id,
+            mecanico_resolvio_nombre=mec_nom if resuelto else None,
+            comentario_repuesto=getattr(detalle_target, "comentario_repuesto", None),
+            fecha_resolucion=detalle_target.fecha_resolucion,
+        )
 
     async def agregar_comentario(
-        self, db: AsyncSession, solicitud_id: int, usuario_id: int, dto: ComentarioCreateDTO
-    ) -> SolicitudDTO:
-        logger.info("[MANTENCION] Agregando comentario | solicitud_id=%s | usuario_id=%s | tipo=%s", solicitud_id, usuario_id, dto.tipo)
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
-        if not solicitud:
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        usuario_id: int,
+        dto: ComentarioCreateDTO,
+        usuario_nombre: Optional[str] = None,
+    ) -> ComentarioAddedDTO:
+        logger.info("[MANTENCION] Agregando comentario atómico | solicitud_id=%s | usuario_id=%s | tipo=%s", solicitud_id, usuario_id, dto.tipo)
+        if not await mantencion_repository.check_solicitud_exists(db, solicitud_id):
             raise NotFoundException("Solicitud de taller no encontrada")
 
-        u_usr = await mantencion_repository.get_usuario_by_id(db, usuario_id)
+        if not usuario_nombre:
+            u_usr = await mantencion_repository.get_usuario_by_id(db, usuario_id)
+        else:
+            u_usr = None
 
+        now = datetime.now()
+        tipo_com = dto.tipo if dto.tipo else "GENERAL"
         comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
+            solicitud_id=solicitud_id,
             usuario_id=usuario_id,
-            tipo=dto.tipo if dto.tipo else "GENERAL",
+            tipo=tipo_com,
             comentario=dto.comentario,
-            fecha_registro=datetime.now(),
+            fecha_registro=now,
         )
         if u_usr:
             comentario_entry.usuario = u_usr
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
-        return await self.get_solicitud(db, solicitud.id)
+        # Nivel 3: retornar DTO atómico construido en memoria (0 RTTs adicionales)
+        # El id del comentario queda disponible tras el commit cuando expire_on_commit=False
+        return ComentarioAddedDTO(
+            comentario_id=comentario_entry.id,
+            solicitud_id=solicitud_id,
+            usuario_id=usuario_id,
+            usuario_nombre=usuario_nombre or (u_usr.nombre_completo if u_usr else None),
+            tipo=tipo_com,
+            comentario=dto.comentario,
+            fecha_registro=now,
+        )
 
     async def finalizar_solicitud(
-        self, db: AsyncSession, solicitud_id: int, mecanico_cierre_id: int, dto: FinalizarSolicitudDTO
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_cierre_id: int,
+        dto: FinalizarSolicitudDTO,
+        mecanico_cierre_nom: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s", solicitud_id, mecanico_cierre_id)
         solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
@@ -1004,12 +1179,11 @@ class MantencionService:
 
         now = datetime.now()
 
-        # 1. Validar Checklist / Pauta de Taller Preventiva
-        items_activos = await mantencion_repository.get_pauta_items(db)
-        total_items_pauta = len(items_activos)
-
-        respuestas_registradas = await mantencion_repository.get_pauta_respuestas_by_solicitud(db, solicitud_id)
-        items_respondidos = len(respuestas_registradas)
+        # 1. Validar Checklist / Pauta de Taller Preventiva y obtener datos de mecánico en 1 sola consulta SQL consolidada
+        total_items_pauta, items_respondidos, mec_nom_db, _ = await mantencion_repository.get_conteo_pauta_y_mecanico(
+            db, solicitud_id, mecanico_cierre_id
+        )
+        mec_cierre_nom = mecanico_cierre_nom or mec_nom_db or "Mecánico"
 
         if total_items_pauta > 0 and items_respondidos < total_items_pauta:
             if not (dto.motivo_incompleto_checklist and dto.motivo_incompleto_checklist.strip()):
@@ -1023,7 +1197,7 @@ class MantencionService:
 
         # 2. Validar Cierre Parcial / Fallas no resueltas o falta de repuesto
         fallas_no_resueltas = [
-            d for d in solicitud.detalles if not d.resuelto or getattr(d, "falta_repuesto", False)
+            d for d in (solicitud.detalles or []) if not d.resuelto or getattr(d, "falta_repuesto", False)
         ]
         if fallas_no_resueltas:
             if not (dto.motivo_cierre_parcial and dto.motivo_cierre_parcial.strip()):
@@ -1038,32 +1212,37 @@ class MantencionService:
         solicitud.estado = "FINALIZADO"
         solicitud.mecanico_cierre_id = mecanico_cierre_id
         solicitud.fecha_cierre = now
+        solicitud._mecanico_cierre_nombre_cached = mec_cierre_nom
 
-        # 3. Marcar mecánicos y asignaciones activas como completadas
-        for mec in solicitud.mecanicos:
-            if mec.is_activo:
-                mec.is_activo = False
-                mec.fecha_desasignacion = now
-                if mec.fecha_asignacion:
-                    mec.duracion_minutos = _calcular_duracion_minutos(mec.fecha_asignacion, now)
+        # 3. Marcar mecánicos y asignaciones activas como completadas (en bloque sin flushes intermedios)
+        await mantencion_repository.desactivar_cuadrilla_y_asignaciones_completas(
+            db, solicitud_id=solicitud.id, fecha_desasignacion=now
+        )
+        if hasattr(solicitud, "mecanicos") and solicitud.mecanicos:
+            for mec in solicitud.mecanicos:
+                if getattr(mec, "is_activo", False):
+                    mec.is_activo = False
+                    mec.fecha_desasignacion = now
+                    if mec.fecha_asignacion:
+                        mec.duracion_minutos = _calcular_duracion_minutos(mec.fecha_asignacion, now)
 
-        asigs_activas = await mantencion_repository.get_asignaciones_activas(db, solicitud_id)
-        for asig in asigs_activas:
-            asig.is_activo = False
-            asig.fecha_desasignacion = now
-            if asig.fecha_asignacion:
-                asig.duracion_minutos = _calcular_duracion_minutos(asig.fecha_asignacion, now)
+        if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas:
+            for asig in solicitud.asignaciones_fallas:
+                if getattr(asig, "is_activo", False):
+                    asig.is_activo = False
+                    asig.fecha_desasignacion = now
+                    if asig.fecha_asignacion:
+                        asig.duracion_minutos = _calcular_duracion_minutos(asig.fecha_asignacion, now)
 
         # 4. Liberar bus del taller si corresponde
-        if dto.liberar_bus_taller and solicitud.bus_id:
-            bus = solicitud.bus or await mantencion_repository.get_bus_by_id(db, solicitud.bus_id)
+        if dto.liberar_bus_taller and solicitud.bus:
+            solicitud.bus.en_taller = False
+        elif dto.liberar_bus_taller and solicitud.bus_id:
+            bus = await mantencion_repository.get_bus_by_id(db, solicitud.bus_id)
             if bus:
                 bus.en_taller = False
 
         # 5. Registrar comentario de cierre en bitácora
-        u_cierre = await mantencion_repository.get_usuario_by_id(db, mecanico_cierre_id)
-        mec_cierre_nom = u_cierre.nombre_completo if u_cierre else "Mecánico"
-
         if dto.liberar_bus_taller:
             texto_cierre = f"{mec_cierre_nom} finalizó los trabajos de la OT y liberó el bus para operaciones."
         else:
@@ -1083,17 +1262,8 @@ class MantencionService:
             comentario=texto_cierre,
             fecha_registro=now,
         )
-        if u_cierre:
-            comentario_entry.usuario = u_cierre
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
-
-        solicitud.estado = "FINALIZADO"
-        solicitud.mecanico_cierre_id = mecanico_cierre_id
-        if u_cierre:
-            solicitud.mecanico_cierre = u_cierre
-        solicitud.fecha_cierre = now
+        self._attach_comentario_safe(solicitud, comentario_entry, mec_cierre_nom)
 
         await db.commit()
         logger.info(
@@ -1102,10 +1272,15 @@ class MantencionService:
             solicitud.bus_id,
             dto.liberar_bus_taller,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def autoasignar_fallas(
-        self, db: AsyncSession, solicitud_id: int, dto: AutoasignarFallasDTO, mecanico_id: int
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: AutoasignarFallasDTO,
+        mecanico_id: int,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info(
             "[MANTENCION] Autoasignando fallas atómicas | solicitud_id=%s, mecanico_id=%s, fallas=%s, colaboradores=%s",
@@ -1135,13 +1310,23 @@ class MantencionService:
                 if c_id not in mecanicos_objetivo:
                     mecanicos_objetivo.append(c_id)
 
-        from app.modules.auth.repository.user_repository import user_repository
-        users_map = await user_repository.get_by_ids_map(db, mecanicos_objetivo)
-        u_mec = users_map.get(mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        if not dto.colaboradores_ids and mecanico_nombre:
+            users_map = {}
+            u_mec = None
+            mec_nom = mecanico_nombre
+        else:
+            from app.modules.auth.repository.user_repository import user_repository
+            users_map = await user_repository.get_by_ids_map(db, mecanicos_objetivo)
+            u_mec = users_map.get(mecanico_id)
+            mec_nom = u_mec.nombre_completo if u_mec else (mecanico_nombre or "Mecánico")
 
-        asigs_exist = await mantencion_repository.get_asignaciones_activas(
-            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=mecanicos_objetivo
+        asigs_exist, presencias_activas_existentes = await asyncio.gather(
+            mantencion_repository.get_asignaciones_activas(
+                db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=mecanicos_objetivo
+            ),
+            mantencion_repository.get_presencias_activas_mecanicos(
+                db, solicitud_id=solicitud_id, mecanicos_ids=mecanicos_objetivo
+            ),
         )
         activas_existentes = {(a.mecanico_id, a.detalle_id) for a in asigs_exist}
 
@@ -1167,14 +1352,15 @@ class MantencionService:
                     nueva_asig.asignado_por = u_mec
                 mantencion_repository.add_asignacion_falla(db, nueva_asig)
                 if d_id in sol_detalles_map:
-                    if hasattr(sol_detalles_map[d_id], "asignaciones") and sol_detalles_map[d_id].asignaciones is not None:
-                        sol_detalles_map[d_id].asignaciones.append(nueva_asig)
-                if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas is not None:
-                    solicitud.asignaciones_fallas.append(nueva_asig)
+                    if not hasattr(sol_detalles_map[d_id], "asignaciones") or sol_detalles_map[d_id].asignaciones is None:
+                        sol_detalles_map[d_id].asignaciones = []
+                    sol_detalles_map[d_id].asignaciones.append(nueva_asig)
+                if not hasattr(solicitud, "asignaciones_fallas") or solicitud.asignaciones_fallas is None:
+                    solicitud.asignaciones_fallas = []
+                solicitud.asignaciones_fallas.append(nueva_asig)
                 asignadas_count += 1
 
-            presencia = await mantencion_repository.get_presencia_activa_individual(db, solicitud_id, m_id)
-            if not presencia:
+            if m_id not in presencias_activas_existentes:
                 nueva_presencia = TallerSolicitudMecanico(
                     solicitud_id=solicitud_id,
                     mecanico_id=m_id,
@@ -1186,8 +1372,8 @@ class MantencionService:
                 if u_target:
                     nueva_presencia.mecanico = u_target
                 mantencion_repository.add_mecanico(db, nueva_presencia)
-                if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-                    solicitud.mecanicos.append(nueva_presencia)
+                self._attach_mecanico_safe(solicitud, nueva_presencia)
+                presencias_activas_existentes.add(m_id)
 
         if solicitud.estado in ["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]:
             solicitud.estado = "EN_REPARACION"
@@ -1221,9 +1407,8 @@ class MantencionService:
         )
         if u_mec:
             comentario_entry.usuario = u_mec
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, mec_nom)
 
         await db.commit()
         logger.info(
@@ -1232,7 +1417,7 @@ class MantencionService:
             mecanico_id,
             asignadas_count,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def asignar_fallas_supervisora(
         self, db: AsyncSession, solicitud_id: int, dto: AsignarFallasSupervisoraDTO, supervisor_id: int
@@ -1259,13 +1444,16 @@ class MantencionService:
         now = datetime.now()
         asignadas_count = 0
 
-        asigs_exist = await mantencion_repository.get_asignaciones_activas(
-            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=[dto.mecanico_id]
+        from app.modules.auth.repository.user_repository import user_repository
+        asigs_exist, users_map, presencia = await asyncio.gather(
+            mantencion_repository.get_asignaciones_activas(
+                db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=[dto.mecanico_id]
+            ),
+            user_repository.get_by_ids_map(db, [supervisor_id, dto.mecanico_id]),
+            mantencion_repository.get_presencia_activa_individual(db, solicitud_id, dto.mecanico_id),
         )
         activas_existentes = {a.detalle_id for a in asigs_exist}
 
-        from app.modules.auth.repository.user_repository import user_repository
-        users_map = await user_repository.get_by_ids_map(db, [supervisor_id, dto.mecanico_id])
         u_sup = users_map.get(supervisor_id)
         sup_nom = u_sup.nombre_completo if u_sup else "Supervisión"
 
@@ -1292,13 +1480,14 @@ class MantencionService:
                 nueva_asig.asignado_por = u_sup
             mantencion_repository.add_asignacion_falla(db, nueva_asig)
             if d_id in sol_detalles_map:
-                if hasattr(sol_detalles_map[d_id], "asignaciones") and sol_detalles_map[d_id].asignaciones is not None:
-                    sol_detalles_map[d_id].asignaciones.append(nueva_asig)
-            if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas is not None:
-                solicitud.asignaciones_fallas.append(nueva_asig)
+                if not hasattr(sol_detalles_map[d_id], "asignaciones") or sol_detalles_map[d_id].asignaciones is None:
+                    sol_detalles_map[d_id].asignaciones = []
+                sol_detalles_map[d_id].asignaciones.append(nueva_asig)
+            if not hasattr(solicitud, "asignaciones_fallas") or solicitud.asignaciones_fallas is None:
+                solicitud.asignaciones_fallas = []
+            solicitud.asignaciones_fallas.append(nueva_asig)
             asignadas_count += 1
 
-        presencia = await mantencion_repository.get_presencia_activa_individual(db, solicitud_id, dto.mecanico_id)
         if not presencia:
             nueva_presencia = TallerSolicitudMecanico(
                 solicitud_id=solicitud_id,
@@ -1311,8 +1500,7 @@ class MantencionService:
             if u_mec:
                 nueva_presencia.mecanico = u_mec
             mantencion_repository.add_mecanico(db, nueva_presencia)
-            if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-                solicitud.mecanicos.append(nueva_presencia)
+            self._attach_mecanico_safe(solicitud, nueva_presencia)
 
         if solicitud.estado in ["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]:
             solicitud.estado = "EN_REPARACION"
@@ -1337,9 +1525,8 @@ class MantencionService:
         )
         if u_sup:
             comentario_entry.usuario = u_sup
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, sup_nom)
 
         await db.commit()
         logger.info(
@@ -1349,10 +1536,15 @@ class MantencionService:
             dto.mecanico_id,
             asignadas_count,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def terminar_avance(
-        self, db: AsyncSession, solicitud_id: int, dto: TerminarAvanceDTO, mecanico_id: int
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: TerminarAvanceDTO,
+        mecanico_id: int,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info(
             "[MANTENCION] Registrando término de avance | solicitud_id=%s, mecanico_id=%s, fallas=%s",
@@ -1366,10 +1558,11 @@ class MantencionService:
 
         now = datetime.now()
 
-        asignaciones_activas = await mantencion_repository.get_asignaciones_activas(
-            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids
+        # Nivel 2: paralelizar SELECTs independientes en 1 solo RTT con asyncio.gather
+        asignaciones_activas, presencias_activas = await asyncio.gather(
+            mantencion_repository.get_asignaciones_activas(db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids),
+            mantencion_repository.get_presencias_activas(db, solicitud_id=solicitud_id),
         )
-        presencias_activas = await mantencion_repository.get_presencias_activas(db, solicitud_id=solicitud_id)
 
         if not asignaciones_activas and not presencias_activas:
             raise BusinessRuleException("No hay asignaciones ni mecánicos activos para finalizar avance en esta solicitud")
@@ -1419,21 +1612,24 @@ class MantencionService:
             solicitud.estado = "PENDIENTE"
             logger.info("[MANTENCION] Solicitud sin cuadrilla activa → PENDIENTE | solicitud_id=%s", solicitud_id)
 
-        await mantencion_repository.flush(db)
-
-        from app.modules.auth.repository.user_repository import user_repository
-        all_ids = list(mecanicos_involucrados_ids)
-        if mecanico_id not in all_ids:
-            all_ids.append(mecanico_id)
-        users_map = await user_repository.get_by_ids_map(db, all_ids)
-
         mecanicos_nombres = []
-        for m_id in sorted(mecanicos_involucrados_ids):
-            u = users_map.get(m_id)
-            mecanicos_nombres.append(u.nombre_completo if u else "Mecánico")
+        u_ejecutor = None
+        if mecanico_nombre and (not mecanicos_involucrados_ids or mecanicos_involucrados_ids == {mecanico_id}):
+            ejecutor_nombre = mecanico_nombre
+            mecanicos_nombres = [mecanico_nombre]
+        else:
+            from app.modules.auth.repository.user_repository import user_repository
+            all_ids = list(mecanicos_involucrados_ids)
+            if mecanico_id not in all_ids:
+                all_ids.append(mecanico_id)
+            users_map = await user_repository.get_by_ids_map(db, all_ids)
 
-        u_ejecutor = users_map.get(mecanico_id)
-        ejecutor_nombre = u_ejecutor.nombre_completo if u_ejecutor else "Mecánico"
+            for m_id in sorted(mecanicos_involucrados_ids):
+                u = users_map.get(m_id)
+                mecanicos_nombres.append(u.nombre_completo if u else "Mecánico")
+
+            u_ejecutor = users_map.get(mecanico_id)
+            ejecutor_nombre = u_ejecutor.nombre_completo if u_ejecutor else (mecanico_nombre or "Mecánico")
 
         fallas_involucradas = [
             _describir_detalle(sol_detalles_map[a.detalle_id])
@@ -1463,9 +1659,8 @@ class MantencionService:
         )
         if u_ejecutor:
             comentario_entry.usuario = u_ejecutor
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, ejecutor_nombre)
 
         await db.commit()
         logger.info(
@@ -1475,7 +1670,7 @@ class MantencionService:
             list(mecanicos_involucrados_ids),
             solicitud.estado,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
     async def reportar_repuesto(
         self,
@@ -1484,19 +1679,18 @@ class MantencionService:
         detalle_id: int,
         dto: ReportarRepuestoDTO,
         mecanico_id: int,
-    ) -> SolicitudDTO:
+        mecanico_nombre: Optional[str] = None,
+    ) -> DetalleUpdateDTO:
         logger.info(
-            "[MANTENCION] Reportando repuesto | solicitud_id=%s, detalle_id=%s, falta=%s",
+            "[MANTENCION] Reportando repuesto atómico | solicitud_id=%s, detalle_id=%s, falta=%s",
             solicitud_id,
             detalle_id,
             dto.falta_repuesto,
         )
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
-        if not solicitud:
-            raise NotFoundException("Solicitud de taller no encontrada")
-
-        detalle = next((d for d in solicitud.detalles if d.id == detalle_id), None)
+        detalle = await mantencion_repository.get_detalle_operacional(db, solicitud_id, detalle_id)
         if not detalle:
+            if not await mantencion_repository.check_solicitud_exists(db, solicitud_id):
+                raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException(f"Detalle con ID {detalle_id} no encontrado en la solicitud")
 
         if dto.falta_repuesto and getattr(detalle, "resuelto", False):
@@ -1511,8 +1705,13 @@ class MantencionService:
         now = datetime.now()
         tipo_accion = "FALTA_REPUESTO" if dto.falta_repuesto else "REPUESTO_DISPONIBLE"
 
-        u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        if not mecanico_nombre:
+            u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
+            mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        else:
+            u_mec = None
+            mec_nom = mecanico_nombre
+
         falla_nom = _describir_detalle(detalle)
         estado_str = "FALTA DE REPUESTO" if dto.falta_repuesto else "REPUESTO DISPONIBLE"
 
@@ -1521,7 +1720,7 @@ class MantencionService:
             texto += f" - Detalle: {dto.comentario.strip()}"
 
         comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
+            solicitud_id=solicitud_id,
             usuario_id=mecanico_id,
             tipo=tipo_accion,
             comentario=texto,
@@ -1529,18 +1728,26 @@ class MantencionService:
         )
         if u_mec:
             comentario_entry.usuario = u_mec
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
 
         await db.commit()
         logger.info(
-            "[MANTENCION] Reporte de repuesto | solicitud_id=%s, detalle_id=%s, falta_repuesto=%s",
+            "[MANTENCION] Reporte de repuesto guardado | solicitud_id=%s, detalle_id=%s, falta_repuesto=%s",
             solicitud_id,
             detalle_id,
             dto.falta_repuesto,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        # Nivel 3: retornar DTO atómico construido en memoria (0 RTTs adicionales)
+        return DetalleUpdateDTO(
+            detalle_id=detalle.id,
+            solicitud_id=solicitud_id,
+            resuelto=getattr(detalle, "resuelto", False),
+            falta_repuesto=detalle.falta_repuesto,
+            mecanico_resolvio_id=getattr(detalle, "mecanico_resolvio_id", None),
+            mecanico_resolvio_nombre=None,
+            comentario_repuesto=detalle.comentario_repuesto,
+            fecha_resolucion=getattr(detalle, "fecha_resolucion", None),
+        )
 
     async def get_pauta_items(self, db: AsyncSession) -> List[PautaTallerItemDTO]:
         items = await mantencion_repository.get_pauta_items(db)
@@ -1549,40 +1756,10 @@ class MantencionService:
     async def get_pauta_resumen(
         self, db: AsyncSession, solicitud_id: int
     ) -> PautaEstadoResumenDTO:
-        items = await mantencion_repository.get_pauta_items(db)
-        total_items = len(items)
+        total_items, respuestas = await mantencion_repository.get_pauta_resumen(db, solicitud_id)
 
-        respuestas_orm = await mantencion_repository.get_pauta_respuestas_by_solicitud(
-            db, solicitud_id
-        )
-
-        resp_dtos = []
-        defectos_count = 0
-        for r in respuestas_orm:
-            if r.estado == "DEFECTO":
-                defectos_count += 1
-            cat = r.item.categoria if r.item else None
-            nom = r.item.item if r.item else None
-            mec_nom = (
-                f"{r.mecanico.nombre or ''} {r.mecanico.apellido or ''}".strip()
-                if r.mecanico
-                else None
-            )
-            resp_dtos.append(
-                PautaRespuestaDTO(
-                    id=r.id,
-                    solicitud_id=r.solicitud_id,
-                    item_id=r.item_id,
-                    item_categoria=cat,
-                    item_nombre=nom,
-                    estado=r.estado,
-                    observacion=r.observacion,
-                    mecanico_id=r.mecanico_id,
-                    mecanico_nombre=mec_nom,
-                    fecha_registro=r.fecha_registro,
-                )
-            )
-
+        resp_dtos = [PautaRespuestaDTO(**r) for r in respuestas]
+        defectos_count = sum(1 for r in respuestas if r["estado"] == "DEFECTO")
         respondidos = len(resp_dtos)
         pendientes = max(0, total_items - respondidos)
 
@@ -1607,47 +1784,35 @@ class MantencionService:
             solicitud_id,
             len(dto.respuestas),
         )
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
-        if not solicitud:
-            raise NotFoundException("Solicitud de taller no encontrada")
-
         if not dto.respuestas:
             raise BusinessRuleException("Debe enviar al menos una respuesta de pauta")
 
         now = datetime.now()
 
+        # 1. Validar existencia de solicitud, obtener datos del mecánico y verificar ítems en paralelo
         item_ids = [r.item_id for r in dto.respuestas]
-        valid_item_ids = await mantencion_repository.get_pauta_items_by_ids(db, item_ids)
-
-        respuestas_previas = await mantencion_repository.get_pauta_respuestas_by_solicitud(db, solicitud_id)
-        existentes_map = {r.item_id: r for r in respuestas_previas}
+        valid_item_ids, (total_p, resp_p, mec_nom, sol_existe) = await asyncio.gather(
+            mantencion_repository.get_pauta_items_by_ids(db, item_ids),
+            mantencion_repository.get_conteo_pauta_y_mecanico(db, solicitud_id, mecanico_id),
+        )
+        if not sol_existe:
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         for r_dto in dto.respuestas:
             if r_dto.item_id not in valid_item_ids:
                 raise NotFoundException(f"Ítem de pauta con ID {r_dto.item_id} no existe")
 
-            if r_dto.item_id in existentes_map:
-                obj = existentes_map[r_dto.item_id]
-                obj.estado = r_dto.estado
-                obj.observacion = r_dto.observacion
-                obj.mecanico_id = mecanico_id
-                obj.fecha_registro = now
-            else:
-                nuevo = TallerSolicitudPauta(
-                    solicitud_id=solicitud_id,
-                    item_id=r_dto.item_id,
-                    estado=r_dto.estado,
-                    observacion=r_dto.observacion,
-                    mecanico_id=mecanico_id,
-                    fecha_registro=now,
-                )
-                mantencion_repository.add_pauta_respuesta(db, nuevo)
+        mec_nom = mec_nom or "Mecánico"
 
-        u_mec = await mantencion_repository.get_usuario_by_id(db, mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
+        # 2. Guardar o actualizar en lote (1 sola operación atómica ON CONFLICT DO UPDATE)
+        respuestas_data = [r.model_dump() for r in dto.respuestas]
+        await mantencion_repository.upsert_pauta_respuestas(
+            db, solicitud_id, respuestas_data, mecanico_id, now
+        )
 
+        # 3. Registrar comentario de bitácora
         comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
+            solicitud_id=solicitud_id,
             usuario_id=mecanico_id,
             tipo="CHECKLIST",
             comentario=f"{mec_nom} registró/actualizó {len(dto.respuestas)} ítem(s) de la pauta preventiva",
@@ -1664,6 +1829,7 @@ class MantencionService:
         solicitud_id: int,
         dto: LiberarSolicitudDTO,
         mecanico_id: int,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info(
             "[MANTENCION] Liberación de solicitud solicitada | solicitud_id=%s, mecanico_id=%s, liberar_bus=%s",
@@ -1676,6 +1842,7 @@ class MantencionService:
             solicitud_id=solicitud_id,
             mecanico_cierre_id=mecanico_id,
             dto=dto,
+            mecanico_cierre_nom=mecanico_nombre,
         )
 
     async def agregar_falla(
@@ -1691,7 +1858,7 @@ class MantencionService:
             mecanico_id,
             dto.autoasignar,
         )
-        solicitud = await mantencion_repository.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await mantencion_repository.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1782,8 +1949,7 @@ class MantencionService:
                 if u:
                     nueva_presencia.mecanico = u
                 mantencion_repository.add_mecanico(db, nueva_presencia)
-                if hasattr(solicitud, "mecanicos") and solicitud.mecanicos is not None:
-                    solicitud.mecanicos.append(nueva_presencia)
+                self._attach_mecanico_safe(solicitud, nueva_presencia)
 
             if solicitud.estado in ["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]:
                 solicitud.estado = "EN_REPARACION"
@@ -1819,9 +1985,8 @@ class MantencionService:
         )
         if u:
             comentario_entry.usuario = u
-        if hasattr(solicitud, "comentarios") and solicitud.comentarios is not None:
-            solicitud.comentarios.append(comentario_entry)
         mantencion_repository.add_comentario(db, comentario_entry)
+        self._attach_comentario_safe(solicitud, comentario_entry, mec_nombre)
 
         await db.commit()
         logger.info(
@@ -1831,7 +1996,7 @@ class MantencionService:
             nuevo_detalle.id,
             dto.autoasignar,
         )
-        return await self.get_solicitud(db, solicitud.id)
+        return self._to_solicitud_dto(solicitud)
 
 
 mantencion_service = MantencionService()

@@ -78,8 +78,14 @@ class UserRepository:
     async def get_all(
         self, db: AsyncSession, skip: int = 0, limit: int = 100
     ) -> List[Usuario]:
-        """Lista todos los usuarios registrados."""
-        stmt = select(Usuario).order_by(Usuario.id.asc()).offset(skip).limit(limit)
+        """Lista todos los usuarios registrados con su rol en un solo JOIN."""
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .order_by(Usuario.id.asc())
+            .offset(skip)
+            .limit(limit)
+        )
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
@@ -93,26 +99,26 @@ class UserRepository:
         return res.scalar_one_or_none()
 
     async def add(self, db: AsyncSession, usuario: Usuario) -> Usuario:
-        """Agrega un usuario a la sesión y realiza flush atómico sin commit."""
+        """Agrega un usuario a la sesión."""
         db.add(usuario)
-        await db.flush()
         return usuario
 
     async def create(
         self, db: AsyncSession, usuario_or_dto: Any
     ) -> Usuario:
         """
-        Persiste un usuario en la BD con flush atómico sin commit.
+        Persiste un usuario en la BD con flush atómico en sesión (sin commit).
         Acepta una entidad Usuario ya configurada o un DTO UsuarioCreateDTO.
         """
         if isinstance(usuario_or_dto, Usuario):
-            return await self.add(db, usuario_or_dto)
+            db.add(usuario_or_dto)
+            await db.flush()
+            return usuario_or_dto
 
         # Soporte para UsuarioCreateDTO (retrocompatibilidad)
         logger.debug("[AUTH] Creando usuario desde DTO | username='%s' | rol='%s'", usuario_or_dto.username, getattr(usuario_or_dto, "rol", None))
         rol_obj = await self.get_or_create_rol(db, getattr(usuario_or_dto, "rol", None) or "CONDUCTOR")
         
-        # En caso de venir de DTO, si la contraseña viene en texto plano se hashea; si ya viene hasheada se preserva
         pwd = getattr(usuario_or_dto, "password", "")
         if pwd.startswith("$2b$") or pwd.startswith("$2a$"):
             password_hash = pwd
@@ -128,8 +134,10 @@ class UserRepository:
             rol_id=rol_obj.id,
             is_active=getattr(usuario_or_dto, "is_active", True) if getattr(usuario_or_dto, "is_active", None) is not None else True,
         )
-        await self.add(db, db_usuario)
-        logger.info("[AUTH] Usuario creado en sesión | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
+        db_usuario.rol_rel = rol_obj
+        db.add(db_usuario)
+        await db.flush()
+        logger.info("[AUTH] Usuario registrado en sesión | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
         return db_usuario
 
     async def desactivar(
@@ -137,7 +145,7 @@ class UserRepository:
     ) -> Optional[Usuario]:
         """
         Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico.
-        Acepta tanto la entidad Usuario ya cargada (evitando consultas SQL duplicadas) como un user_id entero.
+        Acepta tanto la entidad Usuario ya cargada como un user_id entero.
         """
         if isinstance(user_or_id, Usuario):
             user = user_or_id
@@ -184,7 +192,8 @@ class UserRepository:
         from sqlalchemy import or_, and_, func
         stmt = (
             select(Usuario)
-            .join(Rol)
+            .options(joinedload(Usuario.rol_rel))
+            .join(Rol, Usuario.rol_id == Rol.id)
             .where(
                 and_(
                     Usuario.is_active == True,

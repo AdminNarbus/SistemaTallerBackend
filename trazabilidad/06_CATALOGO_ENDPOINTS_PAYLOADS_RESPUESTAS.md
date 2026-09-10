@@ -455,14 +455,16 @@ Códigos de error estándar:
 
 ### 6.4 `POST /api/v1/mantencion/solicitudes`
 - **Autenticación:** Token Bearer (`require_conductor_or_admin`).
-- **Propósito:** Creación de una orden/solicitud de taller por parte del conductor. Establece automáticamente el bus con `en_taller = True`.
-- **Payload (`SolicitudCreateDTO` - `application/json`):**
+- **Propósito:** Creación de una orden/solicitud de taller por parte del conductor. Establece automáticamente el bus con `en_taller = True`. Admite dos modalidades de envío en **1 solo request HTTP** (eliminando pasos previos y cuellos de botella de subida):
+  1. `application/json`: Payload tradicional enviando `foto_url` preexistente.
+  2. `multipart/form-data`: Envío simultáneo de los datos del formulario y el archivo fotográfico adjunto (`foto`), almacenándolo automáticamente en **Google Cloud Storage** a través del servicio interno de backend sin requerir endpoints separados.
+- **Payload Modalidad 1 (`application/json`):**
 ```json
 {
   "n_bus": "339",
   "bus_id": 12,
   "descripcion_general": "Pérdida de potencia en pendientes y ruido en frenos delanteros",
-  "foto_url": "https://servidor/fotos/evidencia1.jpg",
+  "foto_url": "https://storage.googleapis.com/narbus-taller-media/solicitudes/foto1.jpg",
   "detalles": [
     {
       "categoria_id": 1,
@@ -479,6 +481,12 @@ Códigos de error estándar:
   ]
 }
 ```
+- **Payload Modalidad 2 (`multipart/form-data` - Recomendado con archivo adjunto):**
+  - `n_bus` *(string)*: "339"
+  - `bus_id` *(integer, opcional)*: 12
+  - `descripcion_general` *(string, opcional)*: "Pérdida de potencia..."
+  - `foto` *(binary/file, opcional)*: Archivo de imagen (.jpg, .jpeg, .png, .webp).
+  - `detalles` *(JSON string, opcional)*: `[{"categoria_id": 1, "descripcion_personalizada": "..."}]`
   - **Explicación de campos del Payload:**
     - `n_bus` *(string, obligatorio)*: Número visible del bus reportado.
     - `bus_id` *(integer, opcional)*: ID primario del bus. Si no se provee, se resuelve automáticamente por el `n_bus`.

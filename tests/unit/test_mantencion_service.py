@@ -59,8 +59,10 @@ async def test_workflow_tomar_liberar_y_finalizar_trabajo(db_session, seed_test_
 
     # 3. Check detalle de falla resuelta por mecánico 1
     detalle_id = sol_en_proceso.detalles[0].id
-    sol_checked = await mantencion_service.check_detalle(db_session, solicitud.id, detalle_id, mecanico1_id, True)
-    assert sol_checked.detalles[0].resuelto is True
+    # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
+    dto_checked = await mantencion_service.check_detalle(db_session, solicitud.id, detalle_id, mecanico1_id, True)
+    assert dto_checked.resuelto is True
+    assert dto_checked.detalle_id == detalle_id
 
     # 4. Liberar turno
     sol_liberada = await mantencion_service.liberar_turno(

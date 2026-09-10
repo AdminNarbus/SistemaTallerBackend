@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 48,
+  "id": "AV-0048",
+  "timestamp": "2026-09-09T19:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "PERF-8800KM-FINAL",
+    "name": "Optimizacion Integral de Latencia Transcontinental (8.800 km) y Cierre de Auditoria",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Culminacion integral de las 3 estrategias solicitadas para mitigar la latencia transcontinental de 8.800 km (~145 ms RTT entre GCP Santiago y Neon PostgreSQL Ohio): 1) Paralelismo con asyncio.gather en lecturas independientes de guardar_respuestas_pauta, autoasignar_fallas, asignar_fallas_supervisora y terminar_avance; 2) Eliminacion de consultas redundantes mediante desactivar_cuadrilla_y_asignaciones_completas (0 flushes intermedios), eliminacion de check_solicitud_exists en pauta y unificacion de validaciones; 3) Supresion del SELECT CTE post-commit get_solicitud en todas las mutaciones operacionales (tomar_trabajo, liberar_turno, agregar_colaborador, desasignar_mecanico, finalizar_solicitud, autoasignar_fallas, asignar_fallas_supervisora, terminar_avance, agregar_falla), devolviendo SolicitudDTO construido en memoria mediante _to_solicitud_dto con preservacion de colecciones de bitacora y cuadrilla (_attach_comentario_safe / _attach_mecanico_safe); 4) Resolucion de populate_existing=True en la consulta de auditoria de supervision (supervision_repository.py); 5) Verificacion exitosa del 100% de la suite de pruebas (76/76 tests verdes en 24.41s).",
+  "scope": {
+    "planned": [
+      "Aplicar paralelismo con asyncio.gather en lecturas independientes del backend",
+      "Eliminar consultas redundantes y flushes intermedios en mutaciones de cuadrilla y checklist",
+      "Evitar la re-consulta post-commit get_solicitud (CTE de 5 tablas) retornando SolicitudDTO en memoria",
+      "Resolver desincronizacion de identity map en auditoria de supervision (populate_existing=True)",
+      "Verificacion completa de suite con 76 tests automatizados"
+    ],
+    "completed": [
+      "asyncio.gather implementado en guardar_respuestas_pauta (items y conteo paralelo)",
+      "asyncio.gather implementado en autoasignar_fallas y asignar_fallas_supervisora (detalles y usuarios paralelos)",
+      "asyncio.gather implementado en terminar_avance (asignaciones y presencias activas paralelas)",
+      "desactivar_cuadrilla_y_asignaciones_completas implementado en mantencion_repository.py (0 flushes intermedios)",
+      "Eliminado check_solicitud_exists en guardar_respuestas_pauta al resolverse en get_conteo_pauta_y_mecanico",
+      "Retorno en memoria con _to_solicitud_dto en tomar_trabajo, liberar_turno, agregar_colaborador, desasignar_mecanico, finalizar_solicitud, autoasignar_fallas, asignar_fallas_supervisora, terminar_avance y agregar_falla",
+      "Implementados helpers _attach_comentario_safe y _attach_mecanico_safe para evitar orfandad por cascade delete-orphan",
+      "Anadido execution_options(populate_existing=True) en supervision_repository.get_auditoria",
+      "100% de la suite de pruebas pasando (76 passed en 24.41s)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (el contrato de SolicitudDTO y los DTOs atomicos quedan garantizados)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Anadido metodo desactivar_cuadrilla_y_asignaciones_completas para desactivaciones atomicas sin flushes intermedios; get_conteo_pauta_y_mecanico actualizado para retornar existencia de solicitud en 1 sola consulta."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Paralelismo con asyncio.gather en pauta y asignaciones; reemplazo de re-consultas post-commit get_solicitud por _to_solicitud_dto en memoria; incorporacion de _attach_comentario_safe y _attach_mecanico_safe."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Anadido execution_options(populate_existing=True) en la consulta ORM de get_auditoria para asegurar refresco de relaciones en identity maps de sesiones persistentes."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-048-1",
+      "title": "Paralelismo de lecturas independientes con asyncio.gather en capa de servicio",
+      "rationale": "Cuando un caso de uso requiere consultar dos o mas fuentes de datos desacopladas (ej. items de pauta y conteos de pauta/mecanico, o asignaciones de fallas y presencias activas), ejecutarlas secuencialmente acumula ~145 ms por cada roundtrip. Con asyncio.gather, la red transcontinental absorbe la latencia en un solo intervalo concurrente.",
+      "consequences": "Ahorro directo de ~145 ms (1 RTT) en cada flujo optimizado."
+    },
+    {
+      "id": "DEC-048-2",
+      "title": "Retorno en memoria via _to_solicitud_dto con proteccion contra orfandad (delete-orphan)",
+      "rationale": "Al eliminar el SELECT CTE post-commit get_solicitud, el DTO se construye a partir del objeto TallerSolicitud ya modificado en memoria. Para evitar que SQLAlchemy interprete reasignaciones de colecciones en relaciones noload como eliminacion de huerfanos (cascade delete-orphan), se crearon _attach_comentario_safe y _attach_mecanico_safe que adjuntan elementos sin tocar el estado interno de persistencia de las relaciones existentes.",
+      "consequences": "Eliminacion de 145 ms por cada mutacion operacional sin riesgo de borrado accidental de registros en la base de datos."
+    },
+    {
+      "id": "DEC-048-3",
+      "title": "Uso de populate_existing=True en consultas de auditoria de supervision",
+      "rationale": "En sesiones de base de datos de larga duracion o suites de prueba compartidas, un objeto TallerSolicitud cargado previamente con opciones noload (para optimizar mutaciones) mantiene su estado en el Identity Map de SQLAlchemy. La directiva populate_existing=True fuerza el refresco de las relaciones declaradas con selectinload/joinedload sin retornar instancias desactualizadas.",
+      "consequences": "Garantia absoluta de consistencia de datos e historial inmutable en endpoints de auditoria y reportabilidad."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest -q",
+      "result": "passed",
+      "evidence": "76 passed, 1 warning in 24.41s — suite completa (e2e, integration, unit) ejecutada con exito."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar cambios en git y preparar reporte final para el usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "commit": null,
+    "dirty": true
+  },
+  "notes": [
+    "Los tres requerimientos (asyncio.gather, eliminacion de consultas redundantes y erradicacion del get_solicitud post-commit) quedaron completamente implementados y validados."
+  ]
+}

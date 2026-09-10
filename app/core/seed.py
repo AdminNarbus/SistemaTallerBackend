@@ -44,6 +44,30 @@ async def seed_initial_data():
                     )
                     logger.info("[SEED] Usuario '%s' (%s) creado exitosamente.", username, rol)
 
+            # 1.1 Sembrar Conductores de la flota si aún no están registrados
+            from app.core.seeds.conductores_dataset import CONDUCTORES_DATASET
+            from app.modules.auth.models.usuario import Usuario
+            from sqlalchemy import func
+
+            stmt_cond_count = select(func.count(Usuario.id)).where(Usuario.rol_id == 3)
+            res_cond_count = await db.scalar(stmt_cond_count)
+            if (res_cond_count or 0) <= 1:
+                logger.info("[SEED] Sembrando %d conductores oficiales de la flota...", len(CONDUCTORES_DATASET))
+                for c in CONDUCTORES_DATASET:
+                    user_exists = await user_repository.get_by_username(db, c["rut"])
+                    if not user_exists:
+                        u_obj = Usuario(
+                            nombre=c["nombre"],
+                            apellido=c["apellido"],
+                            username=c["rut"],
+                            password_hash=c["password_hash"],
+                            rol_id=3,
+                            is_active=c["is_active"],
+                        )
+                        db.add(u_obj)
+                await db.commit()
+                logger.info("[SEED] %d conductores sembrados exitosamente.", len(CONDUCTORES_DATASET))
+
             # 2. Sembrar Categorías de Fallas
             cats_sembrar = ["FRENOS", "ELECTRICO", "MOTOR", "CARROCERIA", "CLIMATIZACION", "OTRO"]
             cat_map = {}

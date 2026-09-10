@@ -40,61 +40,14 @@ class SupervisionService:
         solicitudes = await supervision_repository.get_auditoria(
             db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre, skip=skip, limit=limit
         )
-        return [mantencion_service._to_solicitud_dto(s) for s in solicitudes]
+        return [
+            mantencion_service._dict_to_solicitud_dto(s) if isinstance(s, dict) else mantencion_service._to_solicitud_dto(s)
+            for s in solicitudes
+        ]
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:
-        logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller con consultas atómicas optimizadas")
-        
-        # 1. Agregaciones SQL nativas en BD
-        conteos_estado = await supervision_repository.get_conteos_por_estado(db)
-        total_solicitudes = sum(conteos_estado.values())
-        reportadas = conteos_estado.get("REPORTADO", 0)
-        pendientes = conteos_estado.get("PENDIENTE", 0)
-        en_reparacion = conteos_estado.get("EN_REPARACION", 0)
-        pendiente_reasignacion = conteos_estado.get("PENDIENTE_REASIGNACION", 0)
-        finalizadas = conteos_estado.get("FINALIZADO", 0)
-
-        buses_en_taller_count = await supervision_repository.get_total_buses_en_taller(db)
-        total_fallas, total_resueltas = await supervision_repository.get_conteos_fallas(db)
-        fallas_cat_raw = await supervision_repository.get_fallas_por_categoria(db)
-
-        # 2. Consultas atómicas de alertas y buses activos sin carga masiva en memoria
-        alertas = await supervision_repository.get_alertas_activas(db)
-        buses_activos = await supervision_repository.get_buses_activos_taller(db)
-        fallas_bloqueadas_por_repuesto = sum(1 for a in alertas if a.tipo == "REPUESTO_FALTANTE")
-
-        metricas_estado = MetricasEstadoDTO(
-            total_solicitudes=total_solicitudes,
-            reportadas=reportadas,
-            pendientes=pendientes,
-            en_reparacion=en_reparacion,
-            pendiente_reasignacion=pendiente_reasignacion,
-            finalizadas=finalizadas,
-            buses_fisicamente_en_taller=buses_en_taller_count,
-            fallas_bloqueadas_por_repuesto=fallas_bloqueadas_por_repuesto,
-        )
-
-        pct_resolucion = (total_resueltas / total_fallas * 100.0) if total_fallas > 0 else 0.0
-
-        fallas_por_categoria = [
-            CategoriaFrecuenciaDTO(
-                categoria_id=row[0],
-                categoria_nombre=row[1] or "Personalizada / Sin Categoría",
-                total_fallas=row[2],
-            )
-            for row in fallas_cat_raw
-        ]
-        fallas_por_categoria.sort(key=lambda x: x.total_fallas, reverse=True)
-
-        return ResumenTallerDTO(
-            metricas_estado=metricas_estado,
-            porcentaje_resolucion_fallas=round(pct_resolucion, 2),
-            total_fallas_registradas=total_fallas,
-            total_fallas_resueltas=total_resueltas,
-            fallas_por_categoria=fallas_por_categoria,
-            buses_activos_taller=buses_activos,
-            alertas=alertas,
-        )
+        logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller")
+        return await supervision_repository.get_resumen_taller_consolidado(db)
 
     async def get_alertas_taller(self, db: AsyncSession) -> List[AlertaSupervisionDTO]:
         """Retorna exclusivamente las alertas operacionales activas de taller de forma directa."""

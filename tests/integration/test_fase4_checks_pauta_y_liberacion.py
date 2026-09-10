@@ -49,7 +49,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     det1_id = data_sol["detalles"][0]["id"]
     det2_id = data_sol["detalles"][1]["id"]
 
-    # 2. Mecánico reporta falta de repuesto en Falla 2
+    # 2. Mecánico reporta falta de repuesto en Falla 2 — responde DetalleUpdateDTO (Nivel 3)
     res_repuesto = await client.patch(
         f"/api/v1/mantencion/{sol_id}/detalles/{det2_id}/repuesto",
         json={"falta_repuesto": True, "comentario": "Se requiere kit de empaquetaduras y rodamiento"},
@@ -57,18 +57,17 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     )
     assert res_repuesto.status_code == 200
     data_rep = res_repuesto.json()
-    det2 = next(d for d in data_rep["detalles"] if d["id"] == det2_id)
-    assert det2["falta_repuesto"] is True
-    assert det2["comentario_repuesto"] == "Se requiere kit de empaquetaduras y rodamiento"
-    assert data_rep["fallas_con_falta_repuesto"] == 1
+    assert data_rep["detalle_id"] == det2_id
+    assert data_rep["falta_repuesto"] is True
+    assert data_rep["comentario_repuesto"] == "Se requiere kit de empaquetaduras y rodamiento"
 
-    # Mecánico resuelve Falla 1
+    # Mecánico resuelve Falla 1 — responde DetalleUpdateDTO (Nivel 3)
     res_check1 = await client.patch(
         f"/api/v1/mantencion/{sol_id}/detalles/{det1_id}/check?resuelto=true",
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200
-    assert res_check1.json()["fallas_resueltas"] == 1
+    assert res_check1.json()["resuelto"] is True
 
     # 3. Consultar ítems de la pauta preventiva
     res_pauta_items = await client.get("/api/v1/mantencion/pauta/items", headers=auth_headers_mecanico1)

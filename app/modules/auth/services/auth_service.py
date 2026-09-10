@@ -90,9 +90,9 @@ class AuthService:
             rol_id=rol_obj.id,
             is_active=usuario_in.is_active if usuario_in.is_active is not None else True,
         )
+        nuevo_usuario.rol_rel = rol_obj
         await user_repository.add(db, nuevo_usuario)
         await db.commit()
-        await db.refresh(nuevo_usuario)
 
         access_token = create_access_token(subject=nuevo_usuario.id)
         logger.info("[AUTH] Registro exitoso | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
@@ -127,9 +127,9 @@ class AuthService:
             rol_id=rol_obj.id,
             is_active=usuario_in.is_active if usuario_in.is_active is not None else True,
         )
+        nuevo_usuario.rol_rel = rol_obj
         await user_repository.add(db, nuevo_usuario)
         await db.commit()
-        await db.refresh(nuevo_usuario)
 
         logger.info("[AUTH] Usuario administrativo creado | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
         return UsuarioResponseDTO.model_validate(nuevo_usuario)
@@ -148,13 +148,13 @@ class AuthService:
                 "No puedes deshabilitar tu propia cuenta de usuario.", status_code=400
             )
 
-        user = await user_repository.get_by_id(db, user_id=usuario_id)
+        user = await user_repository.desactivar(db, user_or_id=usuario_id)
         if not user:
             raise NotFoundException("El usuario especificado no fue encontrado.")
 
-        await user_repository.desactivar(db, user_or_id=user)
         await db.commit()
-        await db.refresh(user)
+        from app.api.deps import clear_user_cache
+        clear_user_cache()
         return UsuarioResponseDTO.model_validate(user)
 
     async def listar_usuarios(

@@ -1,0 +1,28 @@
+# Entornos virtuales y dependencias locales
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Git y configuración de editor
+.git/
+.gitignore
+.vscode/
+.idea/
+.pytest_cache/
+
+# Secretos y credenciales locales
+credentials/
+*.json
+.env
+.env.dev_local
+.env.dev_lan
+
+# Archivos de pruebas y logs temporales
+tests/
+logs/
+*.log
+scratch/

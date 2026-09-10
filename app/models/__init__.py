@@ -10,6 +10,7 @@ from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolici
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "TallerAsignacionFalla",
     "PautaTallerItem",
     "TallerSolicitudPauta",
+    "TallerSolicitudEvidencia",
     "ReporteNeumatico",
 ]

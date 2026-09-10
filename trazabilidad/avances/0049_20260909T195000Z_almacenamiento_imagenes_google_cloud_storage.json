@@ -1,0 +1,169 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 49,
+  "id": "AV-0049",
+  "timestamp": "2026-09-09T19:50:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "STORAGE-GCS-1",
+    "name": "Almacenamiento de Imagenes en Google Cloud Storage (GCS) y Persistencia de URLs en 1 Solo Request",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementacion del patron Provider de almacenamiento en la nube con Google Cloud Storage (GCS) como servicio interno desacoplado (StorageService) en 1 solo request HTTP sin cuellos de botella: 1) Creacion del paquete app/core/storage con BaseStorageProvider, GCSStorageProvider (utilizando google-cloud-storage con asyncio.to_thread no bloqueante, soporte ADC en Cloud Run y JSON en local), LocalStorageProvider (fallback offline) y StorageService centralizado con validacion de extensiones (.jpg, .jpeg, .png, .webp), tamano maximo (10 MB) y UUIDs criptograficos; 2) Supresion de endpoints intermediarios de upload para erradicar el doble roundtrip HTTP y el riesgo de fotos huerfanas; 3) Unificacion del endpoint POST /api/v1/mantencion/solicitudes para admitir tanto application/json tradicional como multipart/form-data con archivo fotográfico adjunto ('foto'), subiendo automaticamente a GCS y persistiendo la foto_url en 1 solo viaje; 4) Integracion transparente en formulario_neumatico_service.py con almacenamiento a GCS; 5) Configuracion de variables de entorno (STORAGE_PROVIDER, GCS_BUCKET_NAME, GCS_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS); 6) Guia tecnica frontend (GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md); 7) 100% de la suite de pruebas pasando (83/83 tests verdes en 24.42s).",
+  "scope": {
+    "planned": [
+      "Instalar y configurar la SDK oficial google-cloud-storage",
+      "Disenar patron Provider de almacenamiento como servicio interno",
+      "Habilitar POST /mantencion/solicitudes para procesar fotos adjuntas en 1 solo request HTTP",
+      "Refactorizar formulario_neumatico_service.py para usar StorageService",
+      "Configurar variables de entorno en config.py, .env y .env.example",
+      "Elaborar guia de integracion frontend para consumo de formularios con foto"
+    ],
+    "completed": [
+      "Libreria google-cloud-storage>=2.14.0 anadida a requirements.txt e instalada",
+      "Interfaz BaseStorageProvider creada en app/core/storage/base.py",
+      "GCSStorageProvider implementado con soporte para ADC en Cloud Run y JSON en local via asyncio.to_thread",
+      "LocalStorageProvider implementado como fallback seguro en ./uploads/",
+      "StorageService implementado con validaciones estrictas y BusinessRuleException",
+      "POST /mantencion/solicitudes unificado para procesar multipart con foto y JSON tradicional",
+      "formulario_neumatico_service.py refactorizado con inyeccion de storage_service",
+      "Variables de almacenamiento configuradas en config.py, .env y .env.example",
+      "Guia tecnica de integracion frontend creada en trazabilidad/GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md",
+      "100% de la suite de pruebas pasando (83/83 tests verdes en 24.42s)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (el Frontend adaptara el submit de los formularios segun la guia)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "requirements.txt",
+      "action": "modified",
+      "summary": "Anadida dependencia google-cloud-storage>=2.14.0."
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Incorporadas configuraciones STORAGE_PROVIDER, GCS_BUCKET_NAME, GCS_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS, MAX_UPLOAD_SIZE_BYTES y gcs_public_url_base."
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Documentadas variables de configuracion de Google Cloud Storage para despliegues locales y productivos."
+    },
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Configuradas variables de entorno de almacenamiento con modo fallback local para desarrollo activo."
+    },
+    {
+      "path": ".gitignore",
+      "action": "modified",
+      "summary": "Protegido directorio credentials/ y llaves JSON para evitar filtraciones de credenciales de GCP."
+    },
+    {
+      "path": "app/core/storage/base.py",
+      "action": "created",
+      "summary": "Interfaz BaseStorageProvider con metodos abstractos upload_file y delete_file."
+    },
+    {
+      "path": "app/core/storage/gcs_provider.py",
+      "action": "created",
+      "summary": "Proveedor de Google Cloud Storage con soporte ADC, claves JSON y llamadas no bloqueantes via asyncio.to_thread."
+    },
+    {
+      "path": "app/core/storage/local_provider.py",
+      "action": "created",
+      "summary": "Proveedor de almacenamiento local en ./uploads/ como fallback para desarrollo offline."
+    },
+    {
+      "path": "app/core/storage/storage_service.py",
+      "action": "created",
+      "summary": "Servicio singleton centralizado de validacion de archivos (tamano, MIME, extension) y orquestacion de providers."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "create_solicitud adaptado para recibir tanto multipart con foto adjunta como JSON, permitiendo envio en 1 solo request."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud procesa foto opcional delegando a storage_service.upload_image y asignando foto_url."
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Sustituido guardado manual en disco local por integracion transparente con storage_service.upload_image."
+    },
+    {
+      "path": "tests/unit/test_storage_service.py",
+      "action": "created",
+      "summary": "Pruebas unitarias para StorageService, LocalStorageProvider y mock de GCSStorageProvider."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Anadida prueba test_crear_solicitud_con_foto_multipart verificando subida de foto y creacion en 1 solo request."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md",
+      "action": "created",
+      "summary": "Guia de integracion frontend con especificaciones para 1 solo request HTTP y componentes de ejemplo."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-049-1",
+      "title": "Almacenamiento como Servicio Interno en 1 Solo Request HTTP (Sin Endpoints Intermedios)",
+      "rationale": "Exponer un endpoint dedicado de upload (/uploads/imagen) fuerza al frontend a encadenar 2 peticiones HTTP secuenciales (subida + creacion de orden), duplicando la latencia en redes moviles inestables y generando riesgo de fotos huerfanas si la orden falla. Integrar StorageService directamente en los formularios (POST /mantencion/solicitudes y POST /neumaticos/formularioNeumatico) permite completar todo en 1 solo viaje atomico y veloz.",
+      "consequences": "Cero peticiones redundantes para el frontend, eliminacion total de fotos huerfanas y maxima resiliencia en conexiones de taller/choferes."
+    },
+    {
+      "id": "DEC-049-2",
+      "title": "Patron Strategy / Provider para Almacenamiento de Archivos en la Nube",
+      "rationale": "Separar la interfaz BaseStorageProvider de sus implementaciones concretas (GCSStorageProvider y LocalStorageProvider) permite que el backend funcione tanto en desarrollo local sin dependencias externas como en produccion en Google Cloud simplemente alternando la variable STORAGE_PROVIDER en el .env sin tocar una sola linea de codigo.",
+      "consequences": "Alta modularidad, portabilidad para tests automatizados (evitando llamadas de red a GCP en CI/CD) y facilidad para anadir otros proveedores en el futuro si fuese necesario."
+    },
+    {
+      "id": "DEC-049-3",
+      "title": "Uso de Application Default Credentials (ADC) en Produccion y Clave JSON en Local",
+      "rationale": "En entornos administrados de Google Cloud (Cloud Run, GKE, Compute Engine), el uso de ADC vinculado al IAM de la Service Account del servicio es el estandar de maxima seguridad (Google Cloud Security Best Practices), ya que elimina la necesidad de almacenar y rotar archivos de clave JSON en los contenedores. Para desarrollo local se habilita el parametro GOOGLE_APPLICATION_CREDENTIALS opcional.",
+      "consequences": "Cero riesgo de filtracion de llaves en repositorios o imagenes de Docker en produccion, manteniendo compatibilidad total con desarrollo local."
+    },
+    {
+      "id": "DEC-049-4",
+      "title": "Subida no bloqueante con asyncio.to_thread para llamadas SDK de Google Cloud",
+      "rationale": "El SDK google-cloud-storage en Python realiza llamadas HTTP síncronas bloqueantes a la API de Storage. Ejecutar la subida directamente en una corutina asíncrona congelaría el bucle de eventos de FastAPI durante la subida de la imagen. Al envolverla en asyncio.to_thread, la operacion de I/O se traslada a un threadpool de trabajo sin degradar el rendimiento ni aumentar la latencia de otros usuarios.",
+      "consequences": "Mantenimiento de alta concurrencia y cero bloqueo del event loop principal de FastAPI."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_storage_service.py tests/integration/test_mantencion_api.py -v",
+      "result": "passed",
+      "evidence": "14 tests pasados exitosamente verificando validacion de extensiones, tamano maximo, LocalStorageProvider, mock de GCSStorageProvider y creacion de solicitud con foto multipart."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "83 passed, 1 warning in 24.42s (100% de la suite completa del backend pasando sin regresiones)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Compartir la guia de integracion GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md con el equipo de Frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "POST /api/v1/mantencion/solicitudes acepta multipart con foto y JSON tradicional en 1 solo request.",
+    "formulario_neumatico_service.py utiliza storage_service de forma transparente.",
+    "El endpoint separado /uploads fue eliminado para erradicar el cuello de botella."
+  ]
+}

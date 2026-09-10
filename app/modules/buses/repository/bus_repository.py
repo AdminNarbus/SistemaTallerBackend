@@ -89,23 +89,34 @@ class BusRepository:
         """Método de compatibilidad con llamadas existentes."""
         return await self.buscar_n_buses_por_prefijo(db, prefix=term)
 
+    async def update_en_taller_directo(
+        self, db: AsyncSession, bus_id: int, en_taller: bool
+    ) -> Optional[Bus]:
+        """
+        Actualiza directamente el estado en_taller en una sola sentencia UPDATE con RETURNING,
+        evitando consultas SELECT previas o flush intermedio.
+        """
+        from sqlalchemy import update
+        stmt = (
+            update(Bus)
+            .where(Bus.id == bus_id)
+            .values(en_taller=en_taller)
+            .returning(Bus)
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def update_en_taller(
         self, db: AsyncSession, bus_or_id: Any, en_taller: bool
     ) -> Optional[Bus]:
         """
-        Actualiza el estado en_taller del bus con flush atómico en sesión (sin commit).
+        Actualiza el estado en_taller del bus.
         Acepta tanto la entidad Bus cargada como un bus_id numérico.
         """
         if isinstance(bus_or_id, Bus):
-            bus = bus_or_id
-        else:
-            bus = await self.get_by_id(db, int(bus_or_id))
-            if not bus:
-                return None
-
-        bus.en_taller = en_taller
-        await db.flush()
-        return bus
+            bus_or_id.en_taller = en_taller
+            return bus_or_id
+        return await self.update_en_taller_directo(db, int(bus_or_id), en_taller)
 
 
 bus_repository = BusRepository()

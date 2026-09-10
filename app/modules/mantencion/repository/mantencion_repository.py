@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
-from sqlalchemy import select, and_, or_, text
+from sqlalchemy import select, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.orm import selectinload, joinedload, noload
@@ -69,27 +69,40 @@ class MantencionRepository:
 
     async def get_categorias_con_fallas(self, db: AsyncSession) -> List[dict]:
         """
-        Retorna las categorías activas con su falla activa asociada (id, nombre, is_active, falla_id, falla_nombre).
+        Retorna las categorías activas con su primera falla activa asociada (id, nombre, is_active, falla_id, falla_nombre).
+        Optimizado a exactamente 1 sola consulta SQL con LEFT JOIN para minimizar latencia de red.
         """
-        stmt = select(CategoriaFalla).where(CategoriaFalla.is_active == True).order_by(CategoriaFalla.id)
+        stmt = (
+            select(
+                CategoriaFalla.id,
+                CategoriaFalla.nombre,
+                CategoriaFalla.is_active,
+                FallaTaller.id.label("falla_id"),
+                FallaTaller.nombre.label("falla_nombre"),
+            )
+            .outerjoin(
+                FallaTaller,
+                and_(
+                    FallaTaller.categoria_id == CategoriaFalla.id,
+                    FallaTaller.is_active == True,
+                ),
+            )
+            .where(CategoriaFalla.is_active == True)
+            .order_by(CategoriaFalla.id.asc(), FallaTaller.id.asc())
+        )
         res = await db.execute(stmt)
-        categorias = list(res.scalars().all())
-
-        cat_ids = [c.id for c in categorias]
-        fallas_map = await self.find_fallas_activas_by_categorias(db, cat_ids) if cat_ids else {}
-
+        seen_cats = set()
         resultado = []
-        for cat in categorias:
-            falla_info = fallas_map.get(cat.id)
-            f_id = falla_info[0] if falla_info else None
-            f_nom = falla_info[1] if falla_info else None
-            resultado.append({
-                "id": cat.id,
-                "nombre": cat.nombre,
-                "is_active": cat.is_active,
-                "falla_id": f_id,
-                "falla_nombre": f_nom,
-            })
+        for cat_id, cat_nom, cat_act, f_id, f_nom in res.all():
+            if cat_id not in seen_cats:
+                seen_cats.add(cat_id)
+                resultado.append({
+                    "id": cat_id,
+                    "nombre": cat_nom,
+                    "is_active": cat_act,
+                    "falla_id": f_id,
+                    "falla_nombre": f_nom,
+                })
         return resultado
 
     async def get_categoria_by_id(self, db: AsyncSession, categoria_id: int) -> Optional[CategoriaFalla]:
@@ -442,6 +455,74 @@ class MantencionRepository:
         # Fallback ORM para SQLite en entorno de tests
         return await self.get_solicitud_by_id(db, solicitud_id)
 
+    async def get_detalle_operacional(
+        self, db: AsyncSession, solicitud_id: int, detalle_id: int
+    ) -> Optional[TallerSolicitudDetalle]:
+        """
+        Carga puntual de un detalle de falla específico para mutaciones atómicas,
+        con joinedload de su falla y categoría en 1 sola consulta SQL.
+        """
+        stmt = (
+            select(TallerSolicitudDetalle)
+            .options(
+                joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                joinedload(TallerSolicitudDetalle.solicitud),
+            )
+            .where(
+                and_(
+                    TallerSolicitudDetalle.id == detalle_id,
+                    TallerSolicitudDetalle.solicitud_id == solicitud_id,
+                )
+            )
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_solicitud_con_detalles(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> Optional[TallerSolicitud]:
+        """
+        Carga la solicitud únicamente con sus detalles y catálogo de fallas en 1 sola consulta SQL,
+        evitando las 4 consultas extra de mecánicos, comentarios y pauta.
+        Optimizado con joinedload para resolver cabecera y detalles en 1 solo viaje de red.
+        """
+        stmt = (
+            select(TallerSolicitud)
+            .where(TallerSolicitud.id == solicitud_id)
+            .execution_options(populate_existing=True)
+            .options(
+                joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.creador),
+                joinedload(TallerSolicitud.mecanico_cierre),
+                joinedload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                joinedload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                noload(TallerSolicitud.mecanicos),
+                noload(TallerSolicitud.asignaciones_fallas),
+                noload(TallerSolicitud.comentarios),
+                noload(TallerSolicitud.pauta_respuestas),
+            )
+        )
+        res = await db.execute(stmt)
+        return res.unique().scalar_one_or_none()
+
+    async def get_presencias_activas_mecanicos(
+        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: List[int]
+    ) -> Set[int]:
+        """
+        Obtiene en 1 sola consulta SQL el conjunto de IDs de mecánicos que ya tienen presencia activa en la solicitud.
+        """
+        if not mecanicos_ids:
+            return set()
+        stmt = select(TallerSolicitudMecanico.mecanico_id).where(
+            and_(
+                TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                TallerSolicitudMecanico.mecanico_id.in_(mecanicos_ids),
+                TallerSolicitudMecanico.is_activo == True,
+            )
+        )
+        res = await db.execute(stmt)
+        return set(res.scalars().all())
+
     async def get_solicitud_operacional(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
         """
         Carga operativa ligera de la solicitud para mutaciones, sin cargar colecciones pesadas
@@ -453,8 +534,8 @@ class MantencionRepository:
             .execution_options(populate_existing=True)
             .options(
                 joinedload(TallerSolicitud.bus),
+                joinedload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
-                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.asignaciones_fallas),
                 noload(TallerSolicitud.comentarios),
@@ -826,6 +907,164 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def get_pauta_resumen(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> tuple[int, List[dict]]:
+        """
+        Retorna (total_items, respuestas_data) en exactamente 1 sola consulta SQL
+        usando LEFT JOIN entre pauta_taller_items, taller_solicitud_pauta y usuarios.
+        """
+        stmt = (
+            select(
+                PautaTallerItem.id.label("item_id"),
+                PautaTallerItem.categoria.label("item_categoria"),
+                PautaTallerItem.item.label("item_nombre"),
+                PautaTallerItem.orden.label("item_orden"),
+                TallerSolicitudPauta.id.label("id"),
+                TallerSolicitudPauta.solicitud_id.label("solicitud_id"),
+                TallerSolicitudPauta.estado.label("estado"),
+                TallerSolicitudPauta.observacion.label("observacion"),
+                TallerSolicitudPauta.mecanico_id.label("mecanico_id"),
+                TallerSolicitudPauta.fecha_registro.label("fecha_registro"),
+                Usuario.nombre.label("mecanico_nombre"),
+                Usuario.apellido.label("mecanico_apellido"),
+            )
+            .select_from(PautaTallerItem)
+            .outerjoin(
+                TallerSolicitudPauta,
+                and_(
+                    TallerSolicitudPauta.item_id == PautaTallerItem.id,
+                    TallerSolicitudPauta.solicitud_id == solicitud_id,
+                ),
+            )
+            .outerjoin(Usuario, Usuario.id == TallerSolicitudPauta.mecanico_id)
+            .where(PautaTallerItem.is_active == True)
+            .order_by(PautaTallerItem.orden.asc(), PautaTallerItem.id.asc())
+        )
+        res = await db.execute(stmt)
+        rows = res.all()
+
+        total_items = len(rows)
+        respuestas = []
+        for r in rows:
+            if r.id is not None:
+                mec_nom = None
+                if r.mecanico_nombre:
+                    mec_nom = f"{r.mecanico_nombre} {r.mecanico_apellido or ''}".strip()
+                respuestas.append({
+                    "id": r.id,
+                    "solicitud_id": r.solicitud_id,
+                    "item_id": r.item_id,
+                    "item_categoria": r.item_categoria,
+                    "item_nombre": r.item_nombre,
+                    "estado": r.estado,
+                    "observacion": r.observacion,
+                    "mecanico_id": r.mecanico_id,
+                    "mecanico_nombre": mec_nom,
+                    "fecha_registro": r.fecha_registro,
+                })
+        return total_items, respuestas
+
+    async def upsert_pauta_respuestas(
+        self, db: AsyncSession, solicitud_id: int, respuestas: List[dict], mecanico_id: int, now: datetime
+    ) -> None:
+        """
+        Guarda o actualiza en lote las respuestas de la pauta preventiva en 1 sola operación atómica.
+        Usa ON CONFLICT DO UPDATE según el dialecto (PostgreSQL o SQLite).
+        """
+        if not respuestas:
+            return
+
+        values = [
+            {
+                "solicitud_id": solicitud_id,
+                "item_id": r["item_id"],
+                "estado": r["estado"],
+                "observacion": r.get("observacion"),
+                "mecanico_id": mecanico_id,
+                "fecha_registro": now,
+            }
+            for r in respuestas
+        ]
+
+        if db.bind and db.bind.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(TallerSolicitudPauta).values(values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["solicitud_id", "item_id"],
+                set_={
+                    "estado": stmt.excluded.estado,
+                    "observacion": stmt.excluded.observacion,
+                    "mecanico_id": stmt.excluded.mecanico_id,
+                    "fecha_registro": stmt.excluded.fecha_registro,
+                },
+            )
+            await db.execute(stmt)
+        elif db.bind and db.bind.dialect.name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+            stmt = sqlite_insert(TallerSolicitudPauta).values(values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["solicitud_id", "item_id"],
+                set_={
+                    "estado": stmt.excluded.estado,
+                    "observacion": stmt.excluded.observacion,
+                    "mecanico_id": stmt.excluded.mecanico_id,
+                    "fecha_registro": stmt.excluded.fecha_registro,
+                },
+            )
+            await db.execute(stmt)
+        else:
+            for val in values:
+                existing = await db.execute(
+                    select(TallerSolicitudPauta).where(
+                        and_(
+                            TallerSolicitudPauta.solicitud_id == solicitud_id,
+                            TallerSolicitudPauta.item_id == val["item_id"],
+                        )
+                    )
+                )
+                obj = existing.scalar_one_or_none()
+                if obj:
+                    obj.estado = val["estado"]
+                    obj.observacion = val["observacion"]
+                    obj.mecanico_id = val["mecanico_id"]
+                    obj.fecha_registro = val["fecha_registro"]
+                else:
+                    db.add(TallerSolicitudPauta(**val))
+
+    async def get_conteo_pauta_y_mecanico(
+        self, db: AsyncSession, solicitud_id: int, mecanico_id: int
+    ) -> tuple[int, int, Optional[str], bool]:
+        """
+        Retorna (total_pauta, respondidos_pauta, nombre_mecanico, solicitud_existe)
+        en exactamente 1 sola consulta SQL nativa consolidada.
+        """
+        stmt = select(
+            select(func.count(PautaTallerItem.id)).where(PautaTallerItem.is_active == True).scalar_subquery().label("total_pauta"),
+            select(func.count(TallerSolicitudPauta.id)).where(TallerSolicitudPauta.solicitud_id == solicitud_id).scalar_subquery().label("respondidos_pauta"),
+            select(Usuario.nombre).where(Usuario.id == mecanico_id).scalar_subquery().label("u_nombre"),
+            select(Usuario.apellido).where(Usuario.id == mecanico_id).scalar_subquery().label("u_apellido"),
+            select(TallerSolicitud.id).where(TallerSolicitud.id == solicitud_id).scalar_subquery().label("solicitud_id"),
+        )
+        res = await db.execute(stmt)
+        row = res.first()
+        if not row:
+            return 0, 0, None, False
+        total_p = row[0] or 0
+        resp_p = row[1] or 0
+        u_nom = row[2]
+        u_ape = row[3]
+        sol_id = row[4]
+        mec_nombre = f"{u_nom or ''} {u_ape or ''}".strip() or None
+        sol_existe = sol_id is not None
+        return total_p, resp_p, mec_nombre, sol_existe
+
+    async def check_solicitud_exists(self, db: AsyncSession, solicitud_id: int) -> bool:
+        """Verifica existencia de la solicitud mediante una consulta de id ligero."""
+        stmt = select(TallerSolicitud.id).where(TallerSolicitud.id == solicitud_id)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
     async def get_asignaciones_activas(
         self,
         db: AsyncSession,
@@ -924,11 +1163,11 @@ class MantencionRepository:
         db.add(pauta_entry)
 
     async def desactivar_mecanicos_activos(
-        self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime
+        self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime, flush: bool = False
     ) -> List[TallerSolicitudMecanico]:
         """
         Método atómico de persistencia: Busca y desactiva todos los registros de presencia
-        activa de mecánicos para la solicitud indicada.
+        activa de mecánicos para la solicitud indicada. Por defecto no fuerza flush.
         """
         stmt = select(TallerSolicitudMecanico).where(
             and_(
@@ -941,14 +1180,18 @@ class MantencionRepository:
         for mec in mecs:
             mec.is_activo = False
             mec.fecha_desasignacion = fecha_desasignacion
-        await db.flush()
+            if mec.fecha_asignacion:
+                mec.duracion_minutos = _calcular_duracion_minutos(mec.fecha_asignacion, fecha_desasignacion)
+        if flush:
+            await db.flush()
         return mecs
 
     async def desactivar_mecanicos_por_ids(
-        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: Set[int], fecha_desasignacion: datetime
+        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: Set[int], fecha_desasignacion: datetime, flush: bool = False
     ) -> List[TallerSolicitudMecanico]:
         """
         Método atómico de persistencia: Desactiva mecánicos activos específicos por su mecanico_id.
+        Por defecto no fuerza flush.
         """
         if not mecanicos_ids:
             return []
@@ -964,8 +1207,46 @@ class MantencionRepository:
         for mec in mecs:
             mec.is_activo = False
             mec.fecha_desasignacion = fecha_desasignacion
-        await db.flush()
+            if mec.fecha_asignacion:
+                mec.duracion_minutos = _calcular_duracion_minutos(mec.fecha_asignacion, fecha_desasignacion)
+        if flush:
+            await db.flush()
         return mecs
+
+    async def desactivar_todas_asignaciones_activas(
+        self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime, flush: bool = False
+    ) -> List[TallerAsignacionFalla]:
+        """
+        Método atómico de persistencia: Desactiva todas las asignaciones activas de fallas
+        para la solicitud indicada. Por defecto no fuerza flush.
+        """
+        stmt = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res = await db.execute(stmt)
+        asigs = list(res.scalars().all())
+        for a in asigs:
+            a.is_activo = False
+            a.fecha_desasignacion = fecha_desasignacion
+            if a.fecha_asignacion:
+                a.duracion_minutos = _calcular_duracion_minutos(a.fecha_asignacion, fecha_desasignacion)
+        if flush:
+            await db.flush()
+        return asigs
+
+    async def desactivar_cuadrilla_y_asignaciones_completas(
+        self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime
+    ) -> tuple[List[TallerSolicitudMecanico], List[TallerAsignacionFalla]]:
+        """
+        Desactiva en sesión todos los mecánicos activos y todas las asignaciones
+        activas de la solicitud en bloque, sin flushes intermedios antes del commit.
+        """
+        mecs = await self.desactivar_mecanicos_activos(db, solicitud_id, fecha_desasignacion, flush=False)
+        asigs = await self.desactivar_todas_asignaciones_activas(db, solicitud_id, fecha_desasignacion, flush=False)
+        return mecs, asigs
 
     async def flush(self, db: AsyncSession) -> None:
         await db.flush()

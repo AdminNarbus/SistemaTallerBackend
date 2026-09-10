@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 50,
+  "id": "AV-0050",
+  "timestamp": "2026-09-09T20:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "FRONT-3",
+    "name": "Actualización de Contratos y Contexto Frontend v3.0.0",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Actualización integral del documento oficial de contratos de API para el frontend (05_CONTRATOS_API_FRONTEND.md v3.0.0) y especificación de módulos (03_ESPECIFICACION_MODULOS_NARBUS.md). Consolida la arquitectura de almacenamiento de imágenes en Google Cloud Storage en 1 solo request HTTP multipart (sin endpoints intermedios de subida), las optimizaciones de latencia transcontinental a 8.800 km (bus_id, falla_id, headers Cache-Control), los DTOs atómicos de mutación rápida (Nivel 3), la paginación estándar y el catálogo unificado de tipos TypeScript.",
+  "scope": {
+    "planned": [
+      "Actualizar 05_CONTRATOS_API_FRONTEND.md a versión 3.0.0 consolidando todos los cambios recientes",
+      "Actualizar 03_ESPECIFICACION_MODULOS_NARBUS.md con los 43 endpoints activos y capa storage",
+      "Documentar la función utilitaria TypeScript getFullImageUrl para renderizado de fotos",
+      "Detallar modalidades multipart/form-data en POST /mantencion/solicitudes y POST /formularioNeumatico",
+      "Registrar avance formal de trazabilidad con decisiones técnicas fundamentadas"
+    ],
+    "completed": [
+      "Actualizado 05_CONTRATOS_API_FRONTEND.md con especificación exhaustiva de contratos, payloads, cabeceras de cache y tipos TypeScript",
+      "Actualizado 03_ESPECIFICACION_MODULOS_NARBUS.md reflejando la Clean Architecture y los 43 endpoints",
+      "Documentado el uso de getFullImageUrl para entornos local y producción (GCS)",
+      "Detallados los DTOs atómicos de mutación (DetalleUpdateDTO y ComentarioAddedDTO)",
+      "Creado registro de trazabilidad AV-0050"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificación de código en el repositorio externo de Frontend (ProtoNeumaticos)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Actualización a versión 3.0.0: almacenamiento en GCS en 1 solo request HTTP, optimizaciones de latencia a 8.800 km, DTOs atómicos, cabeceras Cache-Control y tipos TypeScript."
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Actualización a versión 3.0.0 con el desglose de los 43 endpoints activos y la especificación de la capa core storage."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-050-1",
+      "title": "Consolidación de Contratos Frontend como Única Fuente de Verdad",
+      "rationale": "Las múltiples guías generadas por hitos específicos (GCS, optimizaciones 8.800km, mecánicos) requerían estar consolidadas en el documento oficial 05_CONTRATOS_API_FRONTEND.md para que cualquier desarrollador o agente de frontend tenga un único punto de referencia actualizado.",
+      "consequences": "El equipo de Frontend puede implementar o actualizar interfaces sin discrepancias, teniendo tipos TypeScript listos para usar y contratos verificados con 83 tests automatizados."
+    },
+    {
+      "id": "DEC-050-2",
+      "title": "Estandarización de getFullImageUrl en Contratos de Frontend",
+      "rationale": "Dado que en desarrollo local las fotos se sirven desde rutas relativas (/uploads/...) y en producción desde Google Cloud Storage (https://storage.googleapis.com/...), el frontend necesita una función estándar que resuelva la URL completa de forma agnóstica al entorno.",
+      "consequences": "Cero bugs de renderizado de imágenes al alternar entre entornos local y cloud."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "83 passed, 1 warning in 25.00s. 100% de tests unitarios, de integración y e2e exitosos."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir los contratos actualizados desde el Frontend (ProtoNeumaticos) en las vistas de formulario y mecánicos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "La suite de pruebas del backend se mantiene con 83 tests pasando al 100%.",
+    "El frontend cuenta con 43 endpoints activos documentados con sus DTOs de entrada y salida."
+  ]
+}

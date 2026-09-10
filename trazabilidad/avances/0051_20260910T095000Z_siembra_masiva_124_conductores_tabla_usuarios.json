@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 51,
+  "id": "AV-0051",
+  "timestamp": "2026-09-10T09:50:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "AUTH-7",
+    "name": "Siembra Oficial de 124 Conductores de la Flota Narbus en Tabla Usuarios",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Incorporación e inserción masiva de los 124 conductores oficiales de la flota Narbus a partir de conductores.xlsx en la tabla usuarios. Se creó el dataset maestro estático con hashes bcrypt precalculados, migración idempotente de Alembic 007, verificación rápida en startup de desarrollo, pruebas unitarias automatizadas y validación directa de autenticación.",
+  "scope": {
+    "planned": [
+      "Inspeccionar y extraer los 124 conductores desde conductores.xlsx validando RUT, nombre, apellido, estado y clave",
+      "Generar dataset estático app/core/seeds/conductores_dataset.py con hashes bcrypt precalculados",
+      "Crear migración de Alembic 007_seed_conductores_dataset.py con inserción idempotente y sincronización de secuencia",
+      "Actualizar seed.py con verificación de bajo costo (1 consulta) para evitar overhead en recarga uvicorn",
+      "Crear suite de pruebas unitarias tests/unit/test_conductores_dataset.py",
+      "Ejecutar y validar la inserción y autenticación exitosa en la base de datos PostgreSQL de Neon"
+    ],
+    "completed": [
+      "app/core/seeds/conductores_dataset.py: Creado dataset maestro con 124 conductores, RUTs únicos sin puntos con guión, nombres, apellidos, estado activo y hashes bcrypt precalculados.",
+      "alembic/versions/007_seed_conductores_dataset.py: Creada migración con inserción masiva ON CONFLICT (username) DO UPDATE, rol_id=3 (CONDUCTOR) y sincronización de secuencia usuarios_id_seq.",
+      "app/core/seed.py: Añadida verificación rápida y atómica de conteo (rol_id=3) para sembrar únicamente si la tabla carece de conductores, garantizando 0 lag en uvicorn --reload.",
+      "tests/unit/test_conductores_dataset.py: Creada suite unitaria validando cantidad (124), unicidad de RUTs, formato y correspondencia matemática entre clave plana y hash bcrypt.",
+      "Ejecución de alembic upgrade head: 124 conductores insertados exitosamente en la base de datos de Neon.",
+      "Verificación directa: 128 usuarios totales activos en base de datos y prueba de login exitosa para conductor."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (el frontend ya consume /api/v1/auth/login)",
+      "Alteraciones a los usuarios base de desarrollo (admin, supervisor, chofer, mecanico)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/seeds/conductores_dataset.py",
+      "action": "created",
+      "summary": "Dataset maestro de 124 conductores oficiales con contraseñas encriptadas en bcrypt."
+    },
+    {
+      "path": "alembic/versions/007_seed_conductores_dataset.py",
+      "action": "created",
+      "summary": "Migración 007 para inserción masiva e idempotente de conductores en la tabla usuarios."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Verificación atómica de conteo para siembra de respaldo en entorno de desarrollo local."
+    },
+    {
+      "path": "tests/unit/test_conductores_dataset.py",
+      "action": "created",
+      "summary": "Suite de pruebas unitarias validando consistencia, unicidad y hashes de los 124 conductores."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-052",
+      "title": "Dataset Estático Pre-hasheado en Código vs Hasheo Dinámico en Startup",
+      "rationale": "Calcular 124 hashes de bcrypt en tiempo de ejecución toma entre 20 y 30 segundos de CPU. Al precalcular los hashes en el archivo dataset estático e insertarlos mediante Alembic, el despliegue e inicio de la aplicación tarda milisegundos y es 100% independiente de archivos Excel en entornos productivos o contenedores Docker.",
+      "consequences": "Cero latencia de inicio en entornos locales y remotos (Neon), evitando roundtrips pesados o demoras en uvicorn --reload."
+    },
+    {
+      "id": "DEC-053",
+      "title": "Verificación de Conteo Atómica en seed.py para Prevenir Consultas Redundantes",
+      "rationale": "En entorno dev_local con uvicorn --reload, cada guardado de archivo reinicia el servidor. Si seed.py consulta los 124 usuarios uno por uno por internet hacia Neon (8,800 km), cada recarga demoraría más de 10 segundos. Se implementó una verificación con una sola consulta SELECT count(*) WHERE rol_id = 3 que se omite inmediatamente si los conductores ya existen.",
+      "consequences": "Preserva la agilidad del ciclo de desarrollo local sin sobrecargar la cuota de conexiones de Neon."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head",
+      "result": "passed",
+      "evidence": "Running upgrade 006_performance_indexes -> 007_conductores, Seed official 124 conductores from fleet dataset. Exit code 0."
+    },
+    {
+      "command": "pytest tests/unit/test_conductores_dataset.py -v",
+      "result": "passed",
+      "evidence": "3 passed in 26.79s (conteo exacto 124, unicidad de RUTs y validación de 124 hashes bcrypt)."
+    },
+    {
+      "command": "python test_login (SELECT y authenticate)",
+      "result": "passed",
+      "evidence": "Total usuarios en BD: 128 (125 conductores + 1 admin + 1 supervisor + 1 mecánico). Login exitoso para conductor '18283859-4' con rol CONDUCTOR."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir las nuevas credenciales de conductores en el Frontend de login y pruebas funcionales de reportes.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Los usuarios previos (admin, supervisor, chofer, mecanico) se conservaron intactos para propósitos de pruebas y soporte técnico."
+  ]
+}

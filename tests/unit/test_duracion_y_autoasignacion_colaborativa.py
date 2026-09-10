@@ -309,16 +309,16 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
     )
 
     # 5. Ahora sí debe permitir marcarla como resuelta
-    sol_ok = await mantencion_service.check_detalle(
+    # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
+    dto_ok = await mantencion_service.check_detalle(
         db_session,
         solicitud_id=solicitud.id,
         detalle_id=detalle_id,
         mecanico_id=mecanico_id,
         resuelto=True,
     )
-    det_actual = next(d for d in sol_ok.detalles if d.id == detalle_id)
-    assert det_actual.resuelto is True
-    assert det_actual.falta_repuesto is False
+    assert dto_ok.resuelto is True
+    assert dto_ok.falta_repuesto is False
 
     # 6. Intentar reportar falta de repuesto en una falla que ya está resuelta -> Debe fallar con BusinessRuleException
     with pytest.raises(BusinessRuleException) as exc_rep:

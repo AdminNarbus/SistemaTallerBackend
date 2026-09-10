@@ -37,6 +37,13 @@ class Settings(BaseSettings):
 
     DATABASE_URL: Optional[str] = None
 
+    # Storage / Cloud Storage Settings (Google Cloud Storage)
+    STORAGE_PROVIDER: str = "local"  # "gcs" o "local"
+    GCS_BUCKET_NAME: Optional[str] = "narbus-taller-media"
+    GCS_PROJECT_ID: Optional[str] = None
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
     # CORS Settings
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
@@ -89,6 +96,11 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == AppEnvironment.PRODUCTION:
             return None
         return "/redoc"
+
+    @property
+    def gcs_public_url_base(self) -> str:
+        bucket = self.GCS_BUCKET_NAME or "narbus-taller-media"
+        return f"https://storage.googleapis.com/{bucket}"
 
     @property
     def sync_database_url(self) -> str:

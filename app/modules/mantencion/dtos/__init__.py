@@ -26,6 +26,9 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     AgregarColaboradorDTO,
     SolicitudDTO,
     SolicitudResumenDTO,
+    SolicitudEvidenciaDTO,
+    DetalleUpdateDTO,
+    ComentarioAddedDTO,
 )
 
 __all__ = [
@@ -56,5 +59,7 @@ __all__ = [
     "AgregarColaboradorDTO",
     "SolicitudDTO",
     "SolicitudResumenDTO",
+    "SolicitudEvidenciaDTO",
+    "DetalleUpdateDTO",
+    "ComentarioAddedDTO",
 ]
-

@@ -9,6 +9,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.core.storage.storage_service import storage_service
 from app.modules.neumaticos.dtos.reporte_neumatico_dto import (
     FormularioNeumaticoResponseDTO,
     FormularioNeumaticoStatusDTO,
@@ -18,14 +19,7 @@ from app.modules.neumaticos.dtos.reporte_neumatico_dto import (
 from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
 from app.modules.neumaticos.repository.neumatico_repository import neumatico_repository
 
-UPLOAD_EVIDENCIAS_DIR = os.path.join(os.getcwd(), "uploads", "evidencias")
-
 logger = logging.getLogger(__name__)
-
-
-def _guardar_archivo_disco(path: str, data: bytes) -> None:
-    with open(path, "wb") as f:
-        f.write(data)
 
 
 class FormularioNeumaticoService:
@@ -81,39 +75,22 @@ class FormularioNeumaticoService:
             dto.tipo_bus,
         )
 
-        # 2. Manejo de evidencia fotográfica (I/O asíncrono no bloqueante)
+        # 2. Manejo de evidencia fotográfica mediante StorageService (GCS o Local)
         evidencia_url: Optional[str] = None
         nombre_original_evidencia = "Sin evidencia adjunta"
 
         if evidencia and evidencia.filename:
             nombre_original_evidencia = evidencia.filename
-            extension = (os.path.splitext(evidencia.filename)[1] or ".jpg").lower()
-
-            extensiones_permitidas = {".jpg", ".jpeg", ".png", ".webp"}
-            if extension not in extensiones_permitidas:
-                raise BusinessRuleException(
-                    f"Tipo de archivo no permitido: '{extension}'. Extensiones válidas: {', '.join(sorted(extensiones_permitidas))}"
-                )
-
-            contenido = await evidencia.read()
-
-            max_tamano_bytes = 10 * 1024 * 1024  # 10 MB
-            if len(contenido) > max_tamano_bytes:
-                raise BusinessRuleException(
-                    f"El archivo supera el tamaño máximo permitido de {max_tamano_bytes // (1024 * 1024)} MB."
-                )
-
-            nombre_archivo_unico = f"{uuid.uuid4()}{extension}"
-            ruta_destino = os.path.join(UPLOAD_EVIDENCIAS_DIR, nombre_archivo_unico)
-
-            os.makedirs(UPLOAD_EVIDENCIAS_DIR, exist_ok=True)
-            await asyncio.to_thread(_guardar_archivo_disco, ruta_destino, contenido)
-
-            evidencia_url = f"/uploads/evidencias/{nombre_archivo_unico}"
+            resultado_upload = await storage_service.upload_image(
+                file=evidencia,
+                folder="evidencias",
+            )
+            evidencia_url = resultado_upload["url"]
             logger.info(
-                "[NEUMATICO] Evidencia fotográfica guardada con éxito | archivo='%s' | tamaño=%s bytes",
-                nombre_archivo_unico,
-                len(contenido),
+                "[NEUMATICO] Evidencia fotográfica guardada con éxito | archivo='%s' | url='%s' | tamaño=%s bytes",
+                resultado_upload["filename"],
+                evidencia_url,
+                resultado_upload["size_bytes"],
             )
 
         # 3. Parseo y validación de ruedas y precio
@@ -166,7 +143,6 @@ class FormularioNeumaticoService:
             # 4.4 Gobierno de Transacción en la capa de Servicio
             try:
                 await db.commit()
-                await db.refresh(reporte)
                 reporte_id = reporte.id
                 bus_id = reporte.bus_id
                 logger.info(

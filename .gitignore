@@ -1,11 +1,17 @@
 # Environment & Secrets
 .env*
 !.env.example
+credentials/
+*.json
+!trazabilidad/**
+!package.json
+!tsconfig.json
 
 
 # Media & User Uploads
 uploads/*
 !uploads/.gitkeep
+conductores.xlsx
 
 # Python & Bytecode
 __pycache__/

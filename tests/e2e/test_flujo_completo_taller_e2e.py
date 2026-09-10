@@ -72,7 +72,8 @@ async def test_flujo_completo_taller_e2e(
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200
-    assert res_check1.json()["detalles"][0]["resuelto"] is True
+    # check retorna DetalleUpdateDTO (Nivel 3)
+    assert res_check1.json()["resuelto"] is True
 
     res_com1 = await client.post(
         f"/api/v1/mantencion/{sol_id}/comentarios",

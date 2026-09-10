@@ -1,3 +1,4 @@
+import io
 import pytest
 
 
@@ -59,22 +60,27 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     assert mis_trabajos_res.status_code == 200
     assert any(m["id"] == sol_id for m in mis_trabajos_res.json())
 
-    # 5. Check de falla resuelta
+    # 5. Check de falla resuelta — responde DetalleUpdateDTO (Nivel 3)
     check_res = await client.patch(
         f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check?resuelto=true",
         headers=auth_headers_mecanico1,
     )
     assert check_res.status_code == 200
-    assert check_res.json()["detalles"][0]["resuelto"] is True
+    check_data = check_res.json()
+    assert check_data["resuelto"] is True
+    assert check_data["detalle_id"] == detalle_id
 
-    # 6. Agregar comentario a la bitácora
+    # 6. Agregar comentario a la bitácora — responde ComentarioAddedDTO (Nivel 3)
     coment_res = await client.post(
         f"/api/v1/mantencion/{sol_id}/comentarios",
         json={"tipo": "GENERAL", "comentario": "Manguera reemplazada correctamente"},
         headers=auth_headers_mecanico1,
     )
     assert coment_res.status_code == 200
-    assert len(coment_res.json()["comentarios"]) >= 2
+    coment_data = coment_res.json()
+    assert coment_data["tipo"] == "GENERAL"
+    assert coment_data["comentario"] == "Manguera reemplazada correctamente"
+    assert "comentario_id" in coment_data
 
     # 7. Finalizar la solicitud
     fin_res = await client.post(
@@ -254,4 +260,95 @@ async def test_paginacion_pendientes_y_mis_trabajos(client, auth_headers_mecanic
     data_trabajos = res_trabajos.json()
     assert isinstance(data_trabajos, list)
     assert len(data_trabajos) <= 1
+
+
+@pytest.mark.asyncio
+async def test_crear_solicitud_con_foto_multipart(client, auth_headers_conductor, seed_test_data):
+    """Verifica que POST /solicitudes admita multipart/form-data con archivo fotográfico en 1 solo request (retrocompatibilidad)."""
+    fake_jpg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"narbus_foto_solicitud"
+    data = {
+        "n_bus": "330",
+        "descripcion_general": "Falla reportada con foto adjunta en 1 solo request",
+    }
+    files = {
+        "foto": ("falla_motor.jpg", io.BytesIO(fake_jpg), "image/jpeg")
+    }
+
+    res = await client.post(
+        "/api/v1/mantencion/solicitudes",
+        data=data,
+        files=files,
+        headers=auth_headers_conductor,
+    )
+    assert res.status_code == 201
+    res_data = res.json()
+    assert res_data["n_bus"] == "330"
+    assert res_data["foto_url"] is not None
+    assert ("uploads/solicitudes" in res_data["foto_url"] or "storage.googleapis.com" in res_data["foto_url"])
+    assert "evidencias" in res_data
+    assert len(res_data["evidencias"]) == 1
+    assert res_data["evidencias"][0]["url"] == res_data["foto_url"]
+    assert res_data["evidencias"][0]["original_filename"] == "falla_motor.jpg"
+
+
+@pytest.mark.asyncio
+async def test_crear_solicitud_con_multiples_fotos_multipart(client, auth_headers_conductor, seed_test_data):
+    """Verifica que un conductor pueda enviar múltiples imágenes de evidencia en una sola solicitud."""
+    fake_jpg1 = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"foto_1_rueda"
+    fake_jpg2 = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"foto_2_freno"
+    fake_jpg3 = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"foto_3_motor"
+
+    data = {
+        "n_bus": "339",
+        "descripcion_general": "Múltiples averías detectadas en ruta",
+    }
+    # En multipart HTTP se pueden enviar múltiples campos con el mismo nombre ('fotos')
+    files = [
+        ("fotos", ("evidencia_rueda.jpg", io.BytesIO(fake_jpg1), "image/jpeg")),
+        ("fotos", ("evidencia_freno.jpg", io.BytesIO(fake_jpg2), "image/jpeg")),
+        ("fotos", ("evidencia_motor.jpg", io.BytesIO(fake_jpg3), "image/jpeg")),
+    ]
+
+    res = await client.post(
+        "/api/v1/mantencion/solicitudes",
+        data=data,
+        files=files,
+        headers=auth_headers_conductor,
+    )
+    assert res.status_code == 201
+    res_data = res.json()
+    assert res_data["n_bus"] == "339"
+    # foto_url principal asignada a la primera foto
+    assert res_data["foto_url"] is not None
+    assert len(res_data["evidencias"]) == 3
+    assert res_data["foto_url"] == res_data["evidencias"][0]["url"]
+
+    filenames = [ev["original_filename"] for ev in res_data["evidencias"]]
+    assert "evidencia_rueda.jpg" in filenames
+    assert "evidencia_freno.jpg" in filenames
+    assert "evidencia_motor.jpg" in filenames
+
+
+@pytest.mark.asyncio
+async def test_crear_solicitud_con_fotos_urls_json(client, auth_headers_conductor, seed_test_data):
+    """Verifica creación de solicitud vía JSON estándar con múltiples URLs en fotos_urls."""
+    payload = {
+        "n_bus": "339",
+        "descripcion_general": "Reporte con múltiples URLs ya subidas",
+        "fotos_urls": [
+            "https://storage.googleapis.com/narbus-taller-media/solicitudes/img1.jpg",
+            "https://storage.googleapis.com/narbus-taller-media/solicitudes/img2.jpg",
+        ],
+    }
+    res = await client.post(
+        "/api/v1/mantencion/solicitudes",
+        json=payload,
+        headers=auth_headers_conductor,
+    )
+    assert res.status_code == 201
+    res_data = res.json()
+    assert res_data["foto_url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img1.jpg"
+    assert len(res_data["evidencias"]) == 2
+    assert res_data["evidencias"][0]["url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img1.jpg"
+    assert res_data["evidencias"][1]["url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img2.jpg"
 

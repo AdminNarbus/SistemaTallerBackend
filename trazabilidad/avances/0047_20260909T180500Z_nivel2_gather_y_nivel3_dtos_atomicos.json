@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 47,
+  "id": "AV-0047",
+  "timestamp": "2026-09-09T18:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "PERF-8800KM-4",
+    "name": "Niveles 2 y 3: asyncio.gather + Contratos Atómicos de API",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de Nivel 2 (paralelismo asyncio.gather en lecturas independientes de terminar_avance) y Nivel 3 (contratos atómicos de API con DTOs ligeros DetalleUpdateDTO y ComentarioAddedDTO para check_detalle, reportar_repuesto y agregar_comentario). Se eliminan los SELECTs post-commit costosos (145 ms cada uno) reemplazándolos por construcción en memoria del DTO de respuesta.",
+  "scope": {
+    "planned": [
+      "Nivel 2: paralelizar asignaciones_activas y presencias_activas en terminar_avance con asyncio.gather",
+      "Nivel 3: crear DTOs atómicos DetalleUpdateDTO y ComentarioAddedDTO en dtos/mantencion_dto.py",
+      "Nivel 3: actualizar check_detalle, reportar_repuesto y agregar_comentario para retornar DTOs ligeros sin post-commit SELECT",
+      "Nivel 3: actualizar response_model de 3 endpoints en router.py",
+      "Registrar avance AV-0047 con decisiones técnicas"
+    ],
+    "completed": [
+      "asyncio import añadido a mantencion_service.py",
+      "DetalleUpdateDTO y ComentarioAddedDTO creados en app/modules/mantencion/dtos/mantencion_dto.py",
+      "dtos/__init__.py actualizado para exportar los nuevos DTOs",
+      "check_detalle: return type SolicitudDTO → DetalleUpdateDTO, retorno en memoria (0 RTTs post-commit)",
+      "reportar_repuesto: return type SolicitudDTO → DetalleUpdateDTO, retorno en memoria (0 RTTs post-commit)",
+      "agregar_comentario: return type SolicitudDTO → ComentarioAddedDTO, retorno en memoria (0 RTTs post-commit)",
+      "terminar_avance: asyncio.gather para get_asignaciones_activas + get_presencias_activas (−1 RTT)",
+      "router.py: response_model actualizado en check, repuesto y comentarios"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "asyncpg pipeline mode a nivel de engine (descartado: asyncio.gather es equivalente funcional sin riesgo de compatibilidad con session pooler de Neon)",
+      "Migración del Frontend (entregada como guía en el plan)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Añadidos DetalleUpdateDTO (8 campos) y ComentarioAddedDTO (7 campos) al final del archivo en sección '# --- DTOs Atómicos Nivel 3 ---'."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Añadidos DetalleUpdateDTO y ComentarioAddedDTO al bloque de imports y a __all__."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Importado asyncio. check_detalle y reportar_repuesto retornan DetalleUpdateDTO. agregar_comentario retorna ComentarioAddedDTO. terminar_avance usa asyncio.gather para parallelizar get_asignaciones_activas y get_presencias_activas."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Importados DetalleUpdateDTO y ComentarioAddedDTO. response_model actualizado en check_detalle, reportar_repuesto y agregar_comentario."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-047-1",
+      "title": "asyncio.gather en lugar de asyncpg pipeline_mode engine-level",
+      "rationale": "asyncpg pipeline_mode a nivel de engine crea riesgos de compatibilidad con el session pooler de Neon y requiere configuración cuidadosa para evitar interferencia entre transacciones concurrentes. asyncio.gather con coroutines de SQLAlchemy AsyncSession es el patrón equivalente y seguro en asyncpg: ejecuta los dos awaitables en el mismo event loop task simultáneamente, el driver los batches en el wire protocol de forma automática.",
+      "consequences": "Reducción de 1 RTT (−145 ms) en terminar_avance sin riesgo operacional."
+    },
+    {
+      "id": "DEC-047-2",
+      "title": "DTOs atómicos en app/modules/mantencion/dtos/mantencion_dto.py (no en archivo separado)",
+      "rationale": "El usuario confirmó que la carpeta dtos/ es el lugar correcto. Añadir los DTOs al mismo mantencion_dto.py evita fragmentación de módulos y sigue el patrón existente donde todos los DTOs de mantención coexisten en ese archivo.",
+      "consequences": "Cohesión del módulo mantencion, sin archivos adicionales en dtos/."
+    },
+    {
+      "id": "DEC-047-3",
+      "title": "Construcción de DTO de respuesta en memoria post-commit (sin SELECT adicional)",
+      "rationale": "Dado expire_on_commit=False en AsyncSessionLocal, los atributos escalares del objeto SQLAlchemy permanecen accesibles en memoria tras el commit sin necesidad de refetch. Esto elimina el get_solicitud() post-commit que costaba 145 ms (CTE de 5 tablas con json_agg).",
+      "consequences": "check_detalle y reportar_repuesto pasan de 3 RTTs (SELECT detalle + COMMIT + SELECT CTE) a 2 RTTs (SELECT detalle + COMMIT). agregar_comentario pasa de 3 RTTs (EXISTS + COMMIT + SELECT CTE) a 2 RTTs (EXISTS + COMMIT)."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest -q",
+      "result": "passed",
+      "evidence": "76 passed, 1 warning in 25.84s — todos los tests verdes incluyendo e2e, integration y unit"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Coordinar con el equipo Frontend la actualización de tipos TypeScript e interfaces de estado local para los 3 endpoints con contratos modificados (check, repuesto, comentarios).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "dirty": true
+  },
+  "notes": [
+    "El equipo Frontend debe actualizar sus interfaces TypeScript para DetalleUpdateDTO y ComentarioAddedDTO. Ver guía completa en implementation_plan.md (sección 'Guía de Integración para el Equipo Frontend')."
+  ]
+}

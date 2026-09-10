@@ -126,6 +126,20 @@ class SolicitudComentarioDTO(BaseModel):
     fecha_registro: datetime
 
 
+class SolicitudEvidenciaDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    solicitud_id: int
+    detalle_id: Optional[int] = None
+    usuario_id: Optional[int] = None
+    url: str
+    original_filename: Optional[str] = None
+    size_bytes: Optional[int] = None
+    content_type: Optional[str] = None
+    fecha_creacion: datetime
+
+
 # --- Solicitud Principales DTOs ---
 class SolicitudCreateDTO(BaseModel):
     n_bus: Optional[str] = None
@@ -133,6 +147,7 @@ class SolicitudCreateDTO(BaseModel):
     bus_patente: Optional[str] = None
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
+    fotos_urls: Optional[List[str]] = None
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
 
     @model_validator(mode="after")
@@ -266,6 +281,7 @@ class SolicitudDTO(BaseModel):
     historial_mecanicos: List[SolicitudMecanicoDTO] = []
     comentarios: List[SolicitudComentarioDTO] = []
     pauta_respuestas: List[PautaRespuestaDTO] = []
+    evidencias: List[SolicitudEvidenciaDTO] = []
 
 
 class SolicitudResumenDTO(SolicitudDTO):
@@ -277,5 +293,33 @@ class SolicitudResumenDTO(SolicitudDTO):
     pass
 
 
+# --- DTOs Atómicos Nivel 3 ---
+
+class DetalleUpdateDTO(BaseModel):
+    """
+    Respuesta ligera para check_detalle y reportar_repuesto.
+    Permite al Frontend actualizar el estado de una falla específica
+    sin refetch de toda la solicitud. Retorno en memoria tras el commit (0 RTTs adicionales).
+    """
+    detalle_id: int
+    solicitud_id: int
+    resuelto: bool
+    falta_repuesto: bool
+    mecanico_resolvio_id: Optional[int] = None
+    mecanico_resolvio_nombre: Optional[str] = None
+    comentario_repuesto: Optional[str] = None
+    fecha_resolucion: Optional[datetime] = None
 
 
+class ComentarioAddedDTO(BaseModel):
+    """
+    Respuesta ligera para agregar_comentario.
+    Permite al Frontend añadir el comentario al estado local sin refetch de la solicitud.
+    """
+    comentario_id: int
+    solicitud_id: int
+    usuario_id: int
+    usuario_nombre: Optional[str] = None
+    tipo: str
+    comentario: str
+    fecha_registro: datetime

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 52,
+  "id": "AV-0052",
+  "timestamp": "2026-09-10T10:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-1",
+    "name": "Soporte Múltiples Evidencias en Solicitudes de Taller (3NF)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del soporte de múltiples imágenes de evidencia para solicitudes de taller de choferes bajo arquitectura 3NF limpia: 1) Creación de la tabla relacional `taller_solicitud_evidencias` mediante migración Alembic 008 (down_revision '007_conductores') con FKs a solicitudes, detalles y usuarios; 2) Creación del modelo ORM TallerSolicitudEvidencia y vinculación con TallerSolicitud (evidencias con lazy='selectin' y cascade='all, delete-orphan'); 3) Definición de SolicitudEvidenciaDTO y actualización de SolicitudCreateDTO (fotos_urls) y SolicitudDTO (evidencias y foto_url retrocompatible); 4) Actualización del endpoint POST /api/v1/mantencion/solicitudes para capturar arreglos de fotos vía multipart ('fotos', 'fotos[]', 'evidencias') o archivo individual ('foto'); 5) Actualización de mantencion_service.create_solicitud para procesar subidas concurrentes con StorageService, asociar evidencias a la solicitud y construir DTOs sin lazy load post-commit; 6) Actualización completa de la guía frontend en GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md con ejemplos TypeScript y React; 7) 100% de la suite de pruebas pasando (88/88 tests verdes).",
+  "scope": {
+    "planned": [
+      "Crear tabla taller_solicitud_evidencias y migración 008",
+      "Modelar TallerSolicitudEvidencia y vincular a TallerSolicitud",
+      "Definir SolicitudEvidenciaDTO y actualizar esquemas de solicitud",
+      "Adaptar POST /mantencion/solicitudes para recibir múltiples archivos",
+      "Actualizar mantencion_service para procesar múltiples imágenes y poblar evidencias",
+      "Documentar integración frontend en GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md",
+      "Agregar tests unitarios y de integración para múltiples fotos"
+    ],
+    "completed": [
+      "Crear tabla taller_solicitud_evidencias y migración 008",
+      "Modelar TallerSolicitudEvidencia y vincular a TallerSolicitud",
+      "Definir SolicitudEvidenciaDTO y actualizar esquemas de solicitud",
+      "Adaptar POST /mantencion/solicitudes para recibir múltiples archivos",
+      "Actualizar mantencion_service para procesar múltiples imágenes y poblar evidencias",
+      "Documentar integración frontend en GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md",
+      "Agregar tests unitarios y de integración para múltiples fotos"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones en el repositorio del frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/008_create_taller_solicitud_evidencias.py",
+      "action": "created",
+      "summary": "Migración Alembic para crear tabla taller_solicitud_evidencias con índices y claves foráneas."
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud_evidencia.py",
+      "action": "created",
+      "summary": "Modelo ORM TallerSolicitudEvidencia con relación a TallerSolicitud, TallerSolicitudDetalle y Usuario."
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Vincular relación 1 a N 'evidencias' con lazy='selectin' y cascade='all, delete-orphan'."
+    },
+    {
+      "path": "app/modules/mantencion/models/__init__.py",
+      "action": "modified",
+      "summary": "Exportar TallerSolicitudEvidencia."
+    },
+    {
+      "path": "app/models/__init__.py",
+      "action": "modified",
+      "summary": "Registrar TallerSolicitudEvidencia en el índice general de modelos ORM."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Crear SolicitudEvidenciaDTO y actualizar SolicitudCreateDTO (fotos_urls) y SolicitudDTO (evidencias)."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportar SolicitudEvidenciaDTO."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud adaptado para procesar fotos múltiples o foto individual, persistir evidencias en taller_solicitud_evidencias y mapear SolicitudEvidenciaDTO."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Endpoint POST /solicitudes adaptado para extraer colecciones de archivos de fotos en multipart/form-data."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Nuevas pruebas test_crear_solicitud_con_multiples_fotos_multipart y test_crear_solicitud_con_fotos_urls_json, además de validación de retrocompatibilidad."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md",
+      "action": "modified",
+      "summary": "Documentación técnica para frontend con guía de consumo para múltiples evidencias fotográficas y ejemplos React/TS."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-053",
+      "title": "Diseño Relacional en Tercera Forma Normal (3NF) para Evidencias Fotográficas",
+      "rationale": "Almacenar un arreglo de strings o un campo JSONB en la fila de taller_solicitudes viola la 1NF y 3NF, impide registrar metadatos de auditoría (tamaño, tipo MIME, usuario que subió la foto, timestamp) y dificulta el borrado atómico de imágenes en Cloud Storage. Una tabla relacional dedicada 'taller_solicitud_evidencias' garantiza integridad referencial, auditoría granular y la posibilidad de asociar fotos tanto a la solicitud general como a fallas específicas.",
+      "consequences": "Base de datos normalizada, soporte para fotos a nivel de falla o de solicitud, borrado limpio en cascada y escalabilidad empresarial."
+    },
+    {
+      "id": "DEC-054",
+      "title": "Garantía de Retrocompatibilidad Total con el campo foto_url",
+      "rationale": "Para evitar romper clientes existentes o componentes del Frontend que actualmente leen o envían 'foto_url' y 'foto', la primera imagen subida se asigna automáticamente como 'foto_url' (foto principal), a la vez que se entrega la lista completa en 'evidencias'.",
+      "consequences": "Cero breaking changes para el Frontend existente y adopción inmediata de múltiples fotos en nuevas pantallas."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\alembic upgrade head",
+      "result": "passed",
+      "evidence": "Running upgrade 007_conductores -> 008_solicitud_evidencias ejecutado limpiamente en PostgreSQL."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py -q",
+      "result": "passed",
+      "evidence": "10/10 tests pasados verificando subida de 1 foto, 3 fotos y fotos_urls JSON."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q",
+      "result": "passed",
+      "evidence": "88/88 tests pasados en 51.17s sin fallos ni regresiones."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las siguientes funcionalidades o mejoras solicitadas en el roadmap de BackendTallerNarbus.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-consultas-latencia-8800km",
+    "dirty": true
+  },
+  "notes": [
+    "La guía técnica para frontend fue actualizada en trazabilidad/GUIA_FRONTEND_ALMACENAMIENTO_IMAGENES_GCS.md."
+  ]
+}

@@ -122,20 +122,17 @@ class BusService:
         motivo: Optional[str] = None,
     ) -> BusResponseDTO:
         """
-        Actualiza el estado en_taller de un bus (movimiento físico a taller).
-        Gobierna la transacción (commit y refresh).
+        Actualiza el estado en_taller de un bus (movimiento físico a taller) en 1 solo viaje de red atómico.
         """
-        bus = await bus_repository.get_by_id(db, bus_id)
+        bus = await bus_repository.update_en_taller_directo(db, bus_id=bus_id, en_taller=en_taller)
         if not bus:
             logger.warning("[BUSES] Bus no encontrado para actualizar en_taller | id=%s", bus_id)
             raise NotFoundException(f"Bus con ID {bus_id} no encontrado")
 
-        await bus_repository.update_en_taller(db, bus_or_id=bus, en_taller=en_taller)
         await db.commit()
-        await db.refresh(bus)
 
         logger.info(
-            "[BUSES] Estado en_taller actualizado | bus_id=%s, en_taller=%s, motivo='%s'",
+            "[BUSES] Estado en_taller actualizado atómicamente | bus_id=%s, en_taller=%s, motivo='%s'",
             bus_id,
             en_taller,
             motivo or "",

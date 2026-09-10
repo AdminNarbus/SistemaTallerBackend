@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
     from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
     from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
+    from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 
 
 class TallerSolicitud(Base):
@@ -82,6 +83,9 @@ class TallerSolicitud(Base):
     )
     pauta_respuestas: Mapped[List["TallerSolicitudPauta"]] = relationship(
         "TallerSolicitudPauta", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
+    )
+    evidencias: Mapped[List["TallerSolicitudEvidencia"]] = relationship(
+        "TallerSolicitudEvidencia", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
     )
 
 

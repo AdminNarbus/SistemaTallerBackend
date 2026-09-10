@@ -1,6 +1,9 @@
+import json
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -18,6 +21,7 @@ from app.modules.mantencion.dtos import (
     SolicitudDTO,
     SolicitudResumenDTO,
     SolicitudCreateDTO,
+    SolicitudDetalleCreateDTO,
     TomarTrabajoDTO,
     LiberarTurnoDTO,
     FinalizarSolicitudDTO,
@@ -32,6 +36,8 @@ from app.modules.mantencion.dtos import (
     PautaBatchUpdateDTO,
     LiberarSolicitudDTO,
     AgregarFallaDTO,
+    DetalleUpdateDTO,
+    ComentarioAddedDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,17 +77,80 @@ async def get_fallas(
 
 @router.post("/solicitudes", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
 async def create_solicitud(
-    dto: SolicitudCreateDTO,
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_conductor_or_admin),
     db: AsyncSession = SessionDep,
 ):
+    """
+    Crea una nueva solicitud de mantención de taller.
+    Soporta dos modalidades de consumo en 1 solo request HTTP:
+    1. application/json: Envío estándar de SolicitudCreateDTO con foto_url (opcional).
+    2. multipart/form-data: Envío directo del formulario y el archivo fotográfico adjunto ('foto'),
+       subiendo automáticamente la imagen a Google Cloud Storage mediante el servicio interno sin requerir endpoints previos.
+    """
+    content_type = request.headers.get("content-type", "").lower()
+    foto_file = None
+    fotos_files = []
+
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            n_bus = form.get("n_bus")
+            bus_id_val = form.get("bus_id")
+            bus_id = int(bus_id_val) if bus_id_val is not None and str(bus_id_val).isdigit() else None
+            bus_patente = form.get("bus_patente")
+            descripcion_general = form.get("descripcion_general")
+            foto_url = form.get("foto_url")
+
+            # Extraer archivos adjuntos (soporte individual 'foto'/'evidencia' y múltiple 'fotos'/'fotos[]'/'evidencias')
+            for key in ["fotos", "fotos[]", "evidencias", "evidencias[]", "foto", "evidencia"]:
+                items = form.getlist(key)
+                for item in items:
+                    if hasattr(item, "filename") and item.filename and item not in fotos_files:
+                        fotos_files.append(item)
+
+            if fotos_files:
+                foto_file = fotos_files[0]
+
+            detalles_raw = form.get("detalles")
+            detalles = None
+            if detalles_raw:
+                if isinstance(detalles_raw, str):
+                    try:
+                        detalles_list = json.loads(detalles_raw)
+                        detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_list]
+                    except Exception as e:
+                        logger.warning("[MANTENCION] Error al parsear detalles JSON en multipart: %s", e)
+                elif isinstance(detalles_raw, list):
+                    detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_raw]
+
+            dto = SolicitudCreateDTO(
+                n_bus=n_bus,
+                bus_id=bus_id,
+                bus_patente=bus_patente,
+                descripcion_general=descripcion_general,
+                foto_url=foto_url,
+                detalles=detalles,
+            )
+        else:
+            body = await request.json()
+            dto = SolicitudCreateDTO(**body)
+    except ValidationError as ve:
+        raise RequestValidationError(ve.errors())
+
     logger.info(
-        "[MANTENCION] Creando solicitud de mantención | conductor_id=%s | n_bus='%s'",
+        "[MANTENCION] Creando solicitud de mantención | conductor_id=%s | n_bus='%s' | cant_fotos_adjuntas=%s",
         current_user.id,
         dto.n_bus,
+        len(fotos_files),
     )
     return await mantencion_service.create_solicitud(
-        db, dto, creador_id=current_user.id, creador_nombre=current_user.nombre_completo
+        db,
+        dto,
+        creador_id=current_user.id,
+        creador_nombre=current_user.nombre_completo,
+        foto=foto_file,
+        fotos=fotos_files,
     )
 
 
@@ -170,7 +239,11 @@ async def autoasignar_fallas(
         dto.detalles_ids,
     )
     return await mantencion_service.autoasignar_fallas(
-        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+        db,
+        solicitud_id=id,
+        dto=dto,
+        mecanico_id=current_user.id,
+        mecanico_nombre=current_user.nombre_completo,
     )
 
 
@@ -214,7 +287,11 @@ async def terminar_avance(
         dto.comentario,
     )
     return await mantencion_service.terminar_avance(
-        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+        db,
+        solicitud_id=id,
+        dto=dto,
+        mecanico_id=current_user.id,
+        mecanico_nombre=current_user.nombre_completo,
     )
 
 
@@ -249,7 +326,13 @@ async def desasignar_mecanico(
         id,
         comentario,
     )
-    return await mantencion_service.desasignar_mecanico(db, solicitud_id=id, mecanico_id=current_user.id, comentario=comentario)
+    return await mantencion_service.desasignar_mecanico(
+        db,
+        solicitud_id=id,
+        mecanico_id=current_user.id,
+        comentario=comentario,
+        mecanico_nombre=current_user.nombre_completo,
+    )
 
 
 @router.post("/{id}/liberar-turno", response_model=SolicitudDTO)
@@ -265,7 +348,13 @@ async def liberar_turno(
         current_user.id,
         id,
     )
-    return await mantencion_service.liberar_turno(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
+    return await mantencion_service.liberar_turno(
+        db,
+        solicitud_id=id,
+        usuario_id=current_user.id,
+        dto=dto,
+        usuario_nombre=current_user.nombre_completo,
+    )
 
 
 @router.post("/{id}/detalles", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
@@ -287,7 +376,7 @@ async def agregar_falla(
     )
 
 
-@router.patch("/{id}/detalles/{detalle_id}/check", response_model=SolicitudDTO)
+@router.patch("/{id}/detalles/{detalle_id}/check", response_model=DetalleUpdateDTO)
 async def check_detalle(
     id: int,
     detalle_id: int,
@@ -304,11 +393,16 @@ async def check_detalle(
         current_user.id,
     )
     return await mantencion_service.check_detalle(
-        db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id, resuelto=resuelto
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        mecanico_id=current_user.id,
+        resuelto=resuelto,
+        mecanico_nombre=current_user.nombre_completo,
     )
 
 
-@router.patch("/{id}/detalles/{detalle_id}/repuesto", response_model=SolicitudDTO)
+@router.patch("/{id}/detalles/{detalle_id}/repuesto", response_model=DetalleUpdateDTO)
 async def reportar_repuesto(
     id: int,
     detalle_id: int,
@@ -329,6 +423,7 @@ async def reportar_repuesto(
         detalle_id=detalle_id,
         dto=dto,
         mecanico_id=current_user.id,
+        mecanico_nombre=current_user.nombre_completo,
     )
 
 
@@ -349,7 +444,7 @@ async def agregar_colaborador(
     return await mantencion_service.agregar_colaborador(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
 
 
-@router.post("/{id}/comentarios", response_model=SolicitudDTO)
+@router.post("/{id}/comentarios", response_model=ComentarioAddedDTO)
 async def agregar_comentario(
     id: int,
     dto: ComentarioCreateDTO,
@@ -362,7 +457,13 @@ async def agregar_comentario(
         id,
         current_user.id,
     )
-    return await mantencion_service.agregar_comentario(db, solicitud_id=id, usuario_id=current_user.id, dto=dto)
+    return await mantencion_service.agregar_comentario(
+        db,
+        solicitud_id=id,
+        usuario_id=current_user.id,
+        dto=dto,
+        usuario_nombre=current_user.nombre_completo,
+    )
 
 
 @router.post("/{id}/finalizar", response_model=SolicitudDTO)
@@ -379,7 +480,11 @@ async def finalizar_solicitud(
         current_user.id,
     )
     return await mantencion_service.finalizar_solicitud(
-        db, solicitud_id=id, mecanico_cierre_id=current_user.id, dto=dto
+        db,
+        solicitud_id=id,
+        mecanico_cierre_id=current_user.id,
+        dto=dto,
+        mecanico_cierre_nom=current_user.nombre_completo,
     )
 
 
@@ -397,5 +502,9 @@ async def liberar_solicitud(
         current_user.id,
     )
     return await mantencion_service.liberar_solicitud(
-        db, solicitud_id=id, dto=dto, mecanico_id=current_user.id
+        db,
+        solicitud_id=id,
+        dto=dto,
+        mecanico_id=current_user.id,
+        mecanico_nombre=current_user.nombre_completo,
     )

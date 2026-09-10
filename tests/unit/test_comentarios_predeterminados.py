@@ -65,7 +65,12 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     assert "Revisión general en fosa" in com_inicio.comentario
 
     # 3. Check detalle: Mecánico 1 resuelve falla 1
-    sol_check1 = await mantencion_service.check_detalle(db_session, solicitud.id, det1_id, mecanico1_id, True)
+    # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
+    dto_check1 = await mantencion_service.check_detalle(db_session, solicitud.id, det1_id, mecanico1_id, True)
+    assert dto_check1.detalle_id == det1_id
+    assert dto_check1.resuelto is True
+    # Para verificar el comentario de bitácora, obtenemos la solicitud completa
+    sol_check1 = await mantencion_service.get_solicitud(db_session, solicitud.id)
     com_check = sol_check1.comentarios[-1]
     assert com_check.tipo == "RESOLUCION"
     assert mecanico1_nom in com_check.comentario
@@ -74,7 +79,10 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 4. Reportar falta de repuesto en falla 2
     dto_rep = ReportarRepuestoDTO(falta_repuesto=True, comentario="Esperando pedido de foco")
-    sol_rep = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep, mecanico1_id)
+    # reportar_repuesto retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
+    dto_rep_result = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep, mecanico1_id)
+    assert dto_rep_result.falta_repuesto is True
+    sol_rep = await mantencion_service.get_solicitud(db_session, solicitud.id)
     com_rep = sol_rep.comentarios[-1]
     assert com_rep.tipo == "FALTA_REPUESTO"
     assert mecanico1_nom in com_rep.comentario
@@ -84,7 +92,9 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 5. Reportar repuesto disponible para desbloquear
     dto_rep_ok = ReportarRepuestoDTO(falta_repuesto=False, comentario="Llegó repuesto a pañol")
-    sol_rep_ok = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep_ok, mecanico1_id)
+    dto_rep_ok_result = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep_ok, mecanico1_id)
+    assert dto_rep_ok_result.falta_repuesto is False
+    sol_rep_ok = await mantencion_service.get_solicitud(db_session, solicitud.id)
     com_rep_ok = sol_rep_ok.comentarios[-1]
     assert com_rep_ok.tipo == "REPUESTO_DISPONIBLE"
     assert "REPUESTO DISPONIBLE" in com_rep_ok.comentario
@@ -124,7 +134,10 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     assert "Corte de turno mediodía" in com_avance.comentario
 
     # 9. Resolver falla 2 y completar pauta preventiva
-    sol_check2 = await mantencion_service.check_detalle(db_session, solicitud.id, det2_id, mecanico2_id, True)
+    # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
+    dto_check2 = await mantencion_service.check_detalle(db_session, solicitud.id, det2_id, mecanico2_id, True)
+    assert dto_check2.resuelto is True
+    sol_check2 = await mantencion_service.get_solicitud(db_session, solicitud.id)
     assert sol_check2.comentarios[-1].tipo == "RESOLUCION"
 
     items_pauta = await mantencion_service.get_pauta_items(db_session)

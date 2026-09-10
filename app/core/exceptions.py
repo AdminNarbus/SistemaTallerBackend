@@ -9,10 +9,13 @@ Uso en repositorios/servicios:
 Los handlers se registran en app/main.py vía app.add_exception_handler().
 """
 import logging
+import re
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,33 @@ def _error_body(code: str, message: str, detail=None) -> dict:
     }
 
 
+def _apply_cors_headers(request: Request, response: JSONResponse) -> JSONResponse:
+    """Garantiza que las respuestas de excepción conserven los encabezados CORS, evitando que el navegador
+    enmascare un error HTTP (especialmente 500 en ServerErrorMiddleware) como un bloqueo CORS.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return response
+
+    allowed = False
+    cleaned_origin = str(origin).rstrip("/")
+    allowed_origins = [str(o).rstrip("/") for o in settings.BACKEND_CORS_ORIGINS]
+
+    if cleaned_origin in allowed_origins:
+        allowed = True
+    elif settings.effective_cors_origin_regex and re.match(settings.effective_cors_origin_regex, origin):
+        allowed = True
+
+    if allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Vary"] = "Origin"
+
+    return response
+
+
 # ─────────────────────────────────────────────────────────
 # Handlers globales
 # ─────────────────────────────────────────────────────────
@@ -104,11 +134,12 @@ async def narbus_exception_handler(request: Request, exc: NarbusException) -> JS
     if exc.status_code == 401:
         headers["WWW-Authenticate"] = "Bearer"
 
-    return JSONResponse(
+    response = JSONResponse(
         status_code=exc.status_code,
         content=_error_body(exc.error_code, exc.message, exc.detail),
         headers=headers or None,
     )
+    return _apply_cors_headers(request, response)
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -127,11 +158,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         exc.status_code,
         exc.detail,
     )
-    return JSONResponse(
+    response = JSONResponse(
         status_code=exc.status_code,
         content=_error_body("HTTP_ERROR", str(exc.detail) if exc.detail else "Error HTTP"),
         headers=headers or None,
     )
+    return _apply_cors_headers(request, response)
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -143,7 +175,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         {"field": list(e["loc"]), "msg": e["msg"]}
         for e in exc.errors()
     ]
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=_error_body(
             "VALIDATION_ERROR",
@@ -151,13 +183,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             errors,
         ),
     )
+    return _apply_cors_headers(request, response)
 
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handler de último recurso: captura cualquier excepción no prevista,
     registra el traceback completo en el logger y devuelve un 500 seguro
-    sin exponer detalles internos al cliente.
+    sin exponer detalles internos al cliente, preservando headers CORS.
     """
     logger.exception(
         "[UNHANDLED ERROR] %s %s -> %s: %s",
@@ -166,10 +199,11 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         type(exc).__name__,
         exc,
     )
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=_error_body(
             "INTERNAL_ERROR",
             "Error interno del servidor. Por favor, intente más tarde.",
         ),
     )
+    return _apply_cors_headers(request, response)

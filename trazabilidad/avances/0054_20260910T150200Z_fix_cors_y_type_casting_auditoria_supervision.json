@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 54,
+  "id": "AV-0054",
+  "timestamp": "2026-09-10T15:02:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUP-AUDIT-CORS",
+    "name": "Fix CORS y Type Casting en Auditoría de Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección del error de bloqueo CORS enmascarado por fallo 500 en endpoint /api/v1/supervision/auditoria/buses-taller. Se identificó y resolvió el error de inferencia de tipo en parámetros nulos de asyncpg (AmbiguousParameterError) en la CTE de auditoría de supervisión, y se garantizó la propagación de encabezados CORS en los exception handlers globales ante cualquier error no controlado.",
+  "scope": {
+    "planned": [
+      "Diagnosticar causa del bloqueo de política CORS en llamada desde http://localhost:5173 hacia /api/v1/supervision/auditoria/buses-taller",
+      "Corregir fallo SQL en query CTE base_filtered para PostgreSQL/asyncpg",
+      "Asegurar inclusión de encabezados CORS en respuestas de excepción manejadas por ServerErrorMiddleware"
+    ],
+    "completed": [
+      "Se aplicó CAST explícito (:param AS VARCHAR) a los parámetros nulos opcionales en el WHERE de base_filtered en supervision_repository.py, resolviendo asyncpg.exceptions.AmbiguousParameterError",
+      "Se implementó _apply_cors_headers en app/core/exceptions.py para garantizar que narbus_exception_handler, http_exception_handler, validation_exception_handler y generic_exception_handler conserven encabezados Access-Control-Allow-Origin ante cualquier fallo",
+      "Verificación de 88/88 pruebas unitarias, de integración y e2e pasando satisfactoriamente",
+      "Prueba de integración en vivo contra el servidor activo retornando 200 OK con 40KB de datos y headers CORS correctos"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en lógica de frontend o repositorio de UI"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Casteo explícito de parámetros opcionales (:n_bus, :n_bus_pattern, :estado, :mecanico_nombre, :mec_pattern) a VARCHAR en la cláusula WHERE de la consulta CTE de auditoría."
+    },
+    {
+      "path": "app/core/exceptions.py",
+      "action": "modified",
+      "summary": "Incorporación de _apply_cors_headers para asegurar que las respuestas de excepción (incluyendo el 500 de generic_exception_handler) retornen Access-Control-Allow-Origin al cliente."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-054-01",
+      "title": "Casteo explícito en SQL nativo para prepared statements de asyncpg",
+      "rationale": "En PostgreSQL con asyncpg, las cláusulas de la forma '(:param IS NULL OR col = :param)' fallan con AmbiguousParameterError cuando el parámetro se envía como None (NULL), ya que PostgreSQL no puede deducir el OID de tipo del parámetro. Al usar CAST(:param AS VARCHAR), se proporciona la firma de tipo necesaria sin perder la optimización de un único roundtrip.",
+      "consequences": "La consulta de auditoría se ejecuta de forma fiable con cualquier combinación de filtros nulos o presentes."
+    },
+    {
+      "id": "DEC-054-02",
+      "title": "Garantía de headers CORS en exception handlers de FastAPI",
+      "rationale": "ServerErrorMiddleware en Starlette/FastAPI opera en la capa más externa y despacha respuestas 500 directamente fuera de CORSMiddleware. Si ocurre un fallo no capturado, la respuesta llega al navegador sin cabeceras CORS y el navegador reporta un falso positivo de bloqueo CORS en lugar del error de negocio o HTTP real.",
+      "consequences": "El cliente frontend siempre recibe el código de estado y cuerpo JSON estructurado del error, facilitando el diagnóstico y evitando bloqueos silenciosos en la consola del navegador."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\python.exe (consulta HTTP con Origin y Token de supervisor)",
+      "result": "passed",
+      "evidence": "HTTP 200 OK con access-control-allow-origin: http://localhost:5173 y 40647 bytes retornados con lista de buses en taller."
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/",
+      "result": "passed",
+      "evidence": "88 passed, 1 warning en 51.85s."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Validar flujo en el frontend supervisor local.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Uvicorn autorecargó las modificaciones en tiempo real."
+  ]
+}

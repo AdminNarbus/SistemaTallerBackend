@@ -448,18 +448,18 @@ class SupervisionRepository:
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
                     FROM taller_solicitudes s
-                    WHERE (:n_bus IS NULL OR s.n_bus ILIKE :n_bus_pattern)
-                      AND (:estado IS NULL OR s.estado = :estado)
-                      AND (:mecanico_nombre IS NULL OR EXISTS (
+                    WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
+                      AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                      AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
                           SELECT 1 FROM taller_solicitud_mecanicos sm
                           JOIN usuarios um ON um.id = sm.mecanico_id
                           WHERE sm.solicitud_id = s.id
-                            AND (um.nombre ILIKE :mec_pattern OR um.apellido ILIKE :mec_pattern OR um.username ILIKE :mec_pattern OR CONCAT(um.nombre, ' ', um.apellido) ILIKE :mec_pattern)
+                            AND (um.nombre ILIKE CAST(:mec_pattern AS VARCHAR) OR um.apellido ILIKE CAST(:mec_pattern AS VARCHAR) OR um.username ILIKE CAST(:mec_pattern AS VARCHAR) OR CONCAT(um.nombre, ' ', um.apellido) ILIKE CAST(:mec_pattern AS VARCHAR))
                       ) OR EXISTS (
                           SELECT 1 FROM taller_solicitud_detalles sd
                           JOIN usuarios ur ON ur.id = sd.mecanico_resolvio_id
                           WHERE sd.solicitud_id = s.id
-                            AND (ur.nombre ILIKE :mec_pattern OR ur.apellido ILIKE :mec_pattern OR ur.username ILIKE :mec_pattern OR CONCAT(ur.nombre, ' ', ur.apellido) ILIKE :mec_pattern)
+                            AND (ur.nombre ILIKE CAST(:mec_pattern AS VARCHAR) OR ur.apellido ILIKE CAST(:mec_pattern AS VARCHAR) OR ur.username ILIKE CAST(:mec_pattern AS VARCHAR) OR CONCAT(ur.nombre, ' ', ur.apellido) ILIKE CAST(:mec_pattern AS VARCHAR))
                       ))
                     ORDER BY s.fecha_creacion DESC
                     LIMIT :limit OFFSET :skip

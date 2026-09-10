@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 53,
+  "id": "AV-0053",
+  "timestamp": "2026-09-10T12:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "FAS-6",
+    "name": "Control de Versiones Git y Despliegue en la Nube",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del pipeline de Integración y Despliegue Continuo (CI/CD) en Google Cloud sincronizado nativamente con Git: 1) Cierre e integración formal de la rama 'feature/optimizacion-consultas-latencia-8800km' a 'develop' mediante GitFlow con todas las 88 pruebas automatizadas pasando; 2) Creación del archivo 'cloudbuild.yaml' con pasos de extracción de caché Docker, compilación etiquetada ($COMMIT_SHA y latest), publicación en Artifact Registry y despliegue a Google Cloud Run; 3) Creación del script ejecutable 'docker-entrypoint.sh' para ejecutar automáticamente 'alembic upgrade head' antes del arranque de Uvicorn; 4) Actualización de 'Dockerfile' y '.env.example' para soportar variables de producción y Secret Manager; 5) Redacción de la guía operativa paso a paso 'trazabilidad/GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md'.",
+  "scope": {
+    "planned": [
+      "Cerrar la rama de características e integrarla a develop mediante GitFlow",
+      "Diseñar y crear cloudbuild.yaml para Cloud Build y Cloud Run",
+      "Crear docker-entrypoint.sh para migraciones automáticas Alembic al arrancar el contenedor",
+      "Actualizar Dockerfile con entrypoint y permisos de ejecución",
+      "Actualizar .env.example con configuración de producción y Secret Manager",
+      "Documentar el procedimiento operativo en GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md",
+      "Actualizar trazabilidad de estado del proyecto y plan de implementación"
+    ],
+    "completed": [
+      "Cerrar la rama de características e integrarla a develop mediante GitFlow",
+      "Diseñar y crear cloudbuild.yaml para Cloud Build y Cloud Run",
+      "Crear docker-entrypoint.sh para migraciones automáticas Alembic al arrancar el contenedor",
+      "Actualizar Dockerfile con entrypoint y permisos de ejecución",
+      "Actualizar .env.example con configuración de producción y Secret Manager",
+      "Documentar el procedimiento operativo en GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md",
+      "Actualizar trazabilidad de estado del proyecto y plan de implementación"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Creación de recursos en la consola de Google Cloud (requiere acceso web del usuario a console.cloud.google.com)",
+      "Pipeline de frontend (repositorio independiente)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "cloudbuild.yaml",
+      "action": "created",
+      "summary": "Definición declarativa de pipeline Cloud Build: cache pull, build, push a Artifact Registry y deploy a Cloud Run."
+    },
+    {
+      "path": "docker-entrypoint.sh",
+      "action": "created",
+      "summary": "Script de entrada que ejecuta 'alembic upgrade head' de forma idempotente y levanta Uvicorn con $PORT dinámico."
+    },
+    {
+      "path": "Dockerfile",
+      "action": "modified",
+      "summary": "Incorporación de docker-entrypoint.sh como ENTRYPOINT con permisos ejecutables."
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Inclusión de parámetros de producción: JWT, Secret Manager y RUN_MIGRATIONS."
+    },
+    {
+      "path": "trazabilidad/GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md",
+      "action": "created",
+      "summary": "Guía operativa detallada para conectar Git a Cloud Build, crear triggers y configurar Secret Manager."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización del estado del proyecto incorporando el módulo de CI/CD Google Cloud."
+    },
+    {
+      "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md",
+      "action": "modified",
+      "summary": "Cierre de la Fase 6 en el plan de implementación backend."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-053",
+      "title": "Despliegue Serverless con Google Cloud Run + Artifact Registry vía Cloud Build Git Trigger",
+      "rationale": "El usuario solicitó que el despliegue no dependa de GitHub Actions sino que esté orquestado directamente desde Google Cloud sincronizado con Git. Cloud Build Triggers ofrece integración nativa con repositorios GitHub mediante Webhooks de Google, garantizando compilación en infraestructura Google Cloud, almacenamiento seguro de artefactos en Artifact Registry y despliegue directo a Cloud Run sin exponer credenciales de GCP en servicios externos.",
+      "consequences": "Mayor seguridad operacional (zero secrets en GitHub), costos optimizados (escala a cero con min-instances=0 en Cloud Run) y trazabilidad completa de compilación y despliegue dentro del ecosistema Google Cloud."
+    },
+    {
+      "id": "DEC-054",
+      "title": "Auto-Migración de Base de Datos en Contenedor mediante docker-entrypoint.sh",
+      "rationale": "Al ejecutar 'alembic upgrade head' en el entrypoint del contenedor antes de iniciar Uvicorn, se asegura que cualquier revisión nueva desplegada en Cloud Run tenga la base de datos sincronizada antes de recibir tráfico de usuarios, previniendo errores de esquema en tiempo de ejecución de manera totalmente autónoma.",
+      "consequences": "Despliegues sin intervención manual en la base de datos; Uvicorn solo comienza a escuchar cuando las migraciones han sido exitosamente confirmadas en Neon."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "88 passed, 1 warning in 52.33s"
+    },
+    {
+      "command": "git status",
+      "result": "passed",
+      "evidence": "Rama develop limpia tras merge controlado de feature/optimizacion-consultas-latencia-8800km"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Conectar el repositorio Git en la consola de Google Cloud Build siguiendo GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md y activar el trigger en develop.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "head",
+    "dirty": false
+  },
+  "notes": [
+    "cloudbuild.yaml está optimizado con cache Docker (--cache-from) para reducir los tiempos de despliegue a menos de un minuto.",
+    "El contenedor soporta la variable RUN_MIGRATIONS=false si en algún momento se requiere deshabilitar las migraciones automáticas."
+  ]
+}

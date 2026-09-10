@@ -25,11 +25,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar el código de la aplicación y migraciones
 COPY . .
 
-# Asegurar la existencia del directorio de uploads local (fallback)
-RUN mkdir -p uploads/solicitudes uploads/evidencias
+# Asegurar la existencia de directorios y permisos de ejecución del entrypoint
+RUN mkdir -p uploads/solicitudes uploads/evidencias && \
+    chmod +x /app/docker-entrypoint.sh
 
 # Exponer el puerto por defecto (Cloud Run inyecta la variable $PORT)
 EXPOSE 8000
 
-# Comando de inicio compatible con Google Cloud Run ($PORT dinámico)
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Punto de entrada para migraciones automáticas y arranque del servicio
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["uvicorn"]

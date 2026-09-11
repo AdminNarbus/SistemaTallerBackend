@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     GCS_PROJECT_ID: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     GCS_SIGNED_URL_EXPIRATION_MINUTES: int = 60  # Duración de validez de Signed URLs
+    GCS_SERVICE_ACCOUNT_EMAIL: Optional[str] = None  # Service account email para firma de blobs con ADC
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
     # CORS Settings

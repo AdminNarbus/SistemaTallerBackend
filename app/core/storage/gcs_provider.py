@@ -3,7 +3,9 @@ import datetime
 import logging
 import os
 import time
+import urllib.request
 from typing import BinaryIO, Dict, Optional, Tuple, Union
+from google.auth.credentials import Signing
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
 
@@ -48,6 +50,39 @@ def _sync_delete_blob(
     return False
 
 
+def _resolve_service_account_email(credentials) -> Optional[str]:
+    """
+    Resuelve la dirección de correo de la Service Account utilizada por el proceso.
+    Prioridad:
+    1. Variable explícita GCS_SERVICE_ACCOUNT_EMAIL configurada en settings / entorno.
+    2. Atributo service_account_email de credentials (si no es 'default' y contiene '@').
+    3. Servidor de metadatos interno de Google Cloud (Cloud Run / Compute Engine).
+    """
+    configured_email = getattr(settings, "GCS_SERVICE_ACCOUNT_EMAIL", None)
+    if configured_email:
+        return configured_email
+
+    cred_email = getattr(credentials, "service_account_email", None)
+    if cred_email and cred_email != "default" and "@" in str(cred_email):
+        return cred_email
+
+    # Consultar el servidor de metadatos interno de Cloud Run
+    try:
+        req = urllib.request.Request(
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
+            headers={"Metadata-Flavor": "Google"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            meta_email = resp.read().decode("utf-8").strip()
+            if meta_email and "@" in meta_email:
+                logger.info("[STORAGE_GCS] Service Account email resuelto desde metadata server: '%s'", meta_email)
+                return meta_email
+    except Exception as me:
+        logger.debug("[STORAGE_GCS] No se pudo consultar metadata server de GCP: %s", me)
+
+    return cred_email
+
+
 def _sync_generate_signed_url(
     client: storage.Client,
     bucket_name: str,
@@ -56,42 +91,39 @@ def _sync_generate_signed_url(
 ) -> str:
     """
     Genera una Signed URL v4 para acceso seguro temporal a un blob privado.
-    Compatible tanto con Service Account JSON (desarrollo/claves)
-    como con Application Default Credentials en Cloud Run.
+    Compatible tanto con Service Account JSON (desarrollo/claves con Signing)
+    como con Application Default Credentials en Cloud Run (IAM signBlob).
     """
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     expires_delta = datetime.timedelta(minutes=expiration_minutes)
+    credentials = client._credentials
 
-    try:
-        # Intento 1: Firma con clave privada local (Service Account JSON)
+    # Caso 1: Credenciales con clave privada local (Service Account JSON implementa Signing)
+    if isinstance(credentials, Signing):
         return blob.generate_signed_url(
             version="v4",
             expiration=expires_delta,
             method="GET",
         )
-    except AttributeError:
-        # Intento 2: Cloud Run / ADC sin clave privada local
-        # Utiliza el signBlob API de IAM pasando el correo de la Service Account y token de acceso
-        credentials = client._credentials
-        sa_email = getattr(credentials, "service_account_email", None)
-        if not sa_email or sa_email == "default":
-            try:
-                sa_email = client.get_service_account_email()
-            except Exception:
-                pass
 
-        if hasattr(credentials, "valid") and not credentials.valid:
-            from google.auth.transport import requests as auth_requests
-            credentials.refresh(auth_requests.Request())
+    # Caso 2: Cloud Run / ADC sin clave privada local.
+    # Refrescar credenciales si es necesario para asegurar token de acceso vigente
+    from google.auth.transport import requests as auth_requests
+    auth_req = auth_requests.Request()
+    if not hasattr(credentials, "valid") or not credentials.valid:
+        credentials.refresh(auth_req)
 
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=expires_delta,
-            method="GET",
-            service_account_email=sa_email,
-            access_token=getattr(credentials, "token", None),
-        )
+    sa_email = _resolve_service_account_email(credentials)
+    token = getattr(credentials, "token", None)
+
+    return blob.generate_signed_url(
+        version="v4",
+        expiration=expires_delta,
+        method="GET",
+        service_account_email=sa_email,
+        access_token=token,
+    )
 
 
 class GCSStorageProvider(BaseStorageProvider):
@@ -239,10 +271,11 @@ class GCSStorageProvider(BaseStorageProvider):
             _SIGNED_URL_CACHE[blob_name] = (now + cache_ttl, signed_url)
             return signed_url
         except Exception as e:
-            logger.warning(
+            logger.error(
                 "[STORAGE_GCS] No se pudo generar Signed URL para '%s': %s. Retornando URL estándar.",
                 blob_name,
                 e,
+                exc_info=True,
             )
             return f"https://storage.googleapis.com/{self.bucket_name}/{blob_name}"
 

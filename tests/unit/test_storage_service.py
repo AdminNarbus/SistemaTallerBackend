@@ -198,3 +198,35 @@ def test_get_url_gcs_provider_and_cache():
         assert url3 == url1
         assert mock_blob.generate_signed_url.call_count == 1
 
+
+def test_resolve_service_account_email():
+    """Verifica la resolución del email de Service Account para firma de URLs en Cloud Run."""
+    from app.core.storage.gcs_provider import _resolve_service_account_email
+    from app.core.config import settings
+
+    # Caso 1: Vía settings
+    original = settings.GCS_SERVICE_ACCOUNT_EMAIL
+    try:
+        settings.GCS_SERVICE_ACCOUNT_EMAIL = "custom-sa@project.iam.gserviceaccount.com"
+        assert _resolve_service_account_email(None) == "custom-sa@project.iam.gserviceaccount.com"
+    finally:
+        settings.GCS_SERVICE_ACCOUNT_EMAIL = original
+
+    # Caso 2: Vía credentials object
+    mock_cred = MagicMock()
+    mock_cred.service_account_email = "sa-cred@developer.gserviceaccount.com"
+    assert _resolve_service_account_email(mock_cred) == "sa-cred@developer.gserviceaccount.com"
+
+    # Caso 3: Vía metadata server mock
+    mock_cred_default = MagicMock()
+    mock_cred_default.service_account_email = "default"
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"dummy-service-account@developer.gserviceaccount.com\n"
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        email = _resolve_service_account_email(mock_cred_default)
+        assert email == "dummy-service-account@developer.gserviceaccount.com"
+
+

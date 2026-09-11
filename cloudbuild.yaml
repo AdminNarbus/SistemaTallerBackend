@@ -63,7 +63,7 @@ steps:
       - '--memory=${_MEMORY}'
       - '--cpu=${_CPU}'
       - '--timeout=300'
-      - '--set-env-vars=ENVIRONMENT=production,STORAGE_PROVIDER=gcs,GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCP_PROJECT_ID=$PROJECT_ID'
+      - '--set-env-vars=ENVIRONMENT=production,STORAGE_PROVIDER=local,UPLOAD_DIR=/app/uploads'
       - '--set-secrets=DATABASE_URL=${_SECRET_DATABASE_URL}:latest,SECRET_KEY=${_SECRET_KEY}:latest'
     id: 'deploy-cloud-run'
     waitFor: ['push-image']

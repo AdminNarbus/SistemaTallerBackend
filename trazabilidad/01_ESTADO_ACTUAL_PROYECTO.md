@@ -87,5 +87,8 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
     - **Módulo 4:** Ciclo de mantención completo (20 endpoints: creación, toma de orden, adición de averías, asignación de colaboradores, autoasignación, checklist preventivo, término de avance, entrega de turno a `PENDIENTE_REASIGNACION`, retoma, finalización y liberación de bus con historial inmutable).
     - **Módulo 5:** Dashboard analítico de supervisión, KPIs y auditoría con consulta CTE consolidada y filtros dinámicos.
     - **Módulo 6:** Manejo centralizado de excepciones (401 sin token, 401 token corrupto, 403 roles no autorizados, 404 bajo esquema `NarbusException`, 422 `ValidationError` con esquemas DTO).
-  - **Resultado Global:** 56 de 56 aserciones aprobadas al 100% en 3.70 segundos contra el contenedor Docker.
-
+- **Almacenamiento por Volumen Montado en Cloud Run y LocalProvider Unificado (AV-0057):**
+  - **Arquitectura de Volumen Montado (Sin SDK en Runtime):** Cloud Run monta el bucket de almacenamiento de imágenes directamente en `/app/uploads` en modo Lectura/Escritura (Read/Write). Se fijó `STORAGE_PROVIDER=local` como estándar único y `UPLOAD_DIR=/app/uploads` (en local `./uploads/`).
+  - **LocalStorageProvider Homogéneo:** Escribe los binarios de manera directa y no bloqueante en el disco/volumen, sirviendo archivos estáticos mediante FastAPI `StaticFiles` montado en `/uploads`.
+  - **Rutas Relativas Estandarizadas:** Las imágenes se persisten y responden con rutas relativas estandarizadas (`/uploads/solicitudes/<uuid>.jpg`), eliminando dependencias de URLs externas de Google Cloud y garantizando compatibilidad retroactiva transparente.
+  - **100% de la Suite de Pruebas Aprobada:** 90 de 90 tests aprobados en 97.98s.

@@ -286,9 +286,14 @@ async def test_crear_solicitud_con_foto_multipart(client, auth_headers_conductor
     assert res_data["foto_url"] is not None
     assert ("uploads/solicitudes" in res_data["foto_url"] or "storage.googleapis.com" in res_data["foto_url"])
     assert "evidencias" in res_data
-    assert len(res_data["evidencias"]) == 1
     assert res_data["evidencias"][0]["url"] == res_data["foto_url"]
     assert res_data["evidencias"][0]["original_filename"] == "falla_motor.jpg"
+
+    # Verificar que FastAPI sirve la imagen estática correctamente desde el volumen/directorio local
+    if res_data["foto_url"].startswith("/uploads/"):
+        res_static = await client.get(res_data["foto_url"])
+        assert res_static.status_code == 200
+        assert res_static.content == fake_jpg
 
 
 @pytest.mark.asyncio

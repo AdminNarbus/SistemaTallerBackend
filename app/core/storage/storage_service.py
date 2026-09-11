@@ -56,7 +56,10 @@ class StorageService:
                     )
                     self._provider = LocalStorageProvider()
             else:
-                logger.info("[STORAGE_SERVICE] Usando LocalStorageProvider (modo local /uploads)")
+                logger.info(
+                    "[STORAGE_SERVICE] Usando LocalStorageProvider (directorio: '%s', soporte volumen Cloud Run / local)",
+                    getattr(settings, "UPLOAD_DIR", "uploads"),
+                )
                 self._provider = LocalStorageProvider()
 
         return self._provider

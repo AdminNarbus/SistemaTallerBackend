@@ -28,9 +28,13 @@ setup_logging(environment=settings.ENVIRONMENT.value)
 logger = logging.getLogger(__name__)
 
 
-# Asegurar la existencia del directorio local para uploads/evidencias
-UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
+# Asegurar la existencia del directorio de almacenamiento (volumen montado en Cloud Run o disco local)
+UPLOAD_DIR = settings.upload_absolute_path
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "solicitudes"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "neumaticos"), exist_ok=True)
+logger.info("[STARTUP] Directorio de almacenamiento de imágenes listo: '%s'", UPLOAD_DIR)
 
 
 async def _neon_keepalive_loop():

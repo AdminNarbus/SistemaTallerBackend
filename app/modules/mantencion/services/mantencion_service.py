@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -406,6 +406,39 @@ class MantencionService:
             return self._dict_to_solicitud_dto(sol)
         return self._to_solicitud_dto(sol)
 
+    def _parse_evidencias_dtos(self, evidencias_raw: Any) -> List[SolicitudEvidenciaDTO]:
+        """Parsea la lista de evidencias (dict o JSON) y genera las Signed URLs correspondientes."""
+        if not evidencias_raw:
+            return []
+        if isinstance(evidencias_raw, str):
+            try:
+                evidencias_raw = json.loads(evidencias_raw)
+            except Exception:
+                return []
+        if not isinstance(evidencias_raw, list):
+            return []
+
+        dtos: List[SolicitudEvidenciaDTO] = []
+        for ev in evidencias_raw:
+            if not isinstance(ev, dict):
+                continue
+            raw_url = ev.get("url") or ""
+            signed_url = storage_service.get_url(raw_url) or raw_url
+            dtos.append(
+                SolicitudEvidenciaDTO(
+                    id=ev.get("id") or 0,
+                    solicitud_id=ev.get("solicitud_id") or 0,
+                    detalle_id=ev.get("detalle_id"),
+                    usuario_id=ev.get("usuario_id"),
+                    url=signed_url,
+                    original_filename=ev.get("original_filename"),
+                    size_bytes=ev.get("size_bytes"),
+                    content_type=ev.get("content_type"),
+                    fecha_creacion=ev.get("fecha_creacion"),
+                )
+            )
+        return dtos
+
     def _dict_to_solicitud_dto(self, r: dict) -> SolicitudDTO:
         """Convierte una fila de detalle de alta velocidad (1 sola consulta SQL CTE) a SolicitudDTO."""
         detalles_raw = r.get("detalles_json") or []
@@ -423,6 +456,7 @@ class MantencionService:
         pauta_respuestas_raw = r.get("pauta_respuestas_json") or []
         if isinstance(pauta_respuestas_raw, str):
             pauta_respuestas_raw = json.loads(pauta_respuestas_raw)
+        evidencias_dtos = self._parse_evidencias_dtos(r.get("evidencias_json"))
 
         tot = len(detalles_raw)
         resueltos = sum(1 for d in detalles_raw if d.get("resuelto"))
@@ -462,6 +496,7 @@ class MantencionService:
             historial_mecanicos=historial_mecanicos_raw,
             comentarios=comentarios_raw,
             pauta_respuestas=pauta_respuestas_raw,
+            evidencias=evidencias_dtos,
         )
 
     def _dict_to_solicitud_resumen_dto(self, r: dict) -> SolicitudResumenDTO:
@@ -472,6 +507,7 @@ class MantencionService:
         mecanicos_raw = r.get("mecanicos_json") or []
         if isinstance(mecanicos_raw, str):
             mecanicos_raw = json.loads(mecanicos_raw)
+        evidencias_dtos = self._parse_evidencias_dtos(r.get("evidencias_json"))
 
         tot = len(detalles_raw)
         resueltos = sum(1 for d in detalles_raw if d.get("resuelto"))
@@ -502,6 +538,7 @@ class MantencionService:
             historial_mecanicos=[],
             comentarios=[],
             pauta_respuestas=[],
+            evidencias=evidencias_dtos,
         )
 
     async def list_pendientes(

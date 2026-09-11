@@ -100,3 +100,11 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Paridad y Retrocompatibilidad Local:** En entornos locales offline (`STORAGE_PROVIDER=local`), las imágenes se resuelven a `/uploads/...` y las URLs legadas de GCS se normalizan automáticamente a rutas locales.
   - **Guía de Frontend y Cero Complejidad de Cliente:** Publicada `trazabilidad/GUIA_FRONTEND_IMAGENES_SIGNED_URLS.md`, garantizando que el frontend consuma las URLs firmadas directamente en `<img src={foto_url} />` sin necesidad de SDKs de Google ni cabeceras especiales.
   - **100% de la Suite de Pruebas Aprobada:** 92 de 92 tests aprobados en 74.72s.
+- **Corrección de Scopes de Autenticación IAM signBlob en Cloud Run (AV-0059):**
+  - **Diagnóstico de Causa Raíz:** Se identificó que `google-cloud-storage` inicializaba Application Default Credentials (ADC) acotadas a `devstorage.*`, provocando el error `ACCESS_TOKEN_SCOPE_INSUFFICIENT` (HTTP 403) al invocar `iamcredentials.googleapis.com` en Cloud Run para firmar el blob de forma delegada.
+  - **Configuración de Scope Global:** Incorporación de `ClientOptions(scopes=['https://www.googleapis.com/auth/cloud-platform', ...])` y función auxiliar `_get_iam_access_token` consultando el metadata server de GCP para asegurar permisos de firma delegada.
+- **Agregación SQL CTE de Múltiples Evidencias con Signed URLs (AV-0060):**
+  - **Inclusión de `evidencias_agg` en CTEs de Alto Rendimiento:** Se integró la agregación de `taller_solicitud_evidencias` a las consultas optimizadas de 1 solo roundtrip en `MantencionRepository` (`get_solicitud_dto_by_id`, `list_pendientes`, `list_mis_trabajos`).
+  - **Firma Dinámica en Capa de Servicio:** `MantencionService._parse_evidencias_dtos` transforma los registros agregados a `SolicitudEvidenciaDTO` resolviendo Signed URLs v4 mediante `storage_service.get_url(...)` aprovechando la caché en memoria con TTL de 55 minutos.
+  - **Soporte Completo de Galería en Frontend:** Los listados y vistas de detalle entregan el arreglo `evidencias: [...]` completo con URLs firmadas válidas listas para su consumo en el frontend.
+

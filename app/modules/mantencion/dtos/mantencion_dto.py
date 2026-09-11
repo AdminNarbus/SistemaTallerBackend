@@ -137,7 +137,7 @@ class SolicitudEvidenciaDTO(BaseModel):
     original_filename: Optional[str] = None
     size_bytes: Optional[int] = None
     content_type: Optional[str] = None
-    fecha_creacion: datetime
+    fecha_creacion: Optional[datetime] = None
 
 
 # --- Solicitud Principales DTOs ---

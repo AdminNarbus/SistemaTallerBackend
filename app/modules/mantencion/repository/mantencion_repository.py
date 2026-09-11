@@ -245,6 +245,7 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.item),
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.mecanico),
+                selectinload(TallerSolicitud.evidencias),
             )
         )
         res = await db.execute(stmt)
@@ -266,6 +267,26 @@ class MantencionRepository:
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
                     FROM taller_solicitudes s
                     WHERE s.id = :solicitud_id
+                ),
+                evidencias_agg AS (
+                    SELECT 
+                        e.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', e.id,
+                                'solicitud_id', e.solicitud_id,
+                                'detalle_id', e.detalle_id,
+                                'usuario_id', e.usuario_id,
+                                'url', e.url,
+                                'original_filename', e.original_filename,
+                                'size_bytes', e.size_bytes,
+                                'content_type', e.content_type,
+                                'fecha_creacion', e.fecha_creacion
+                            ) ORDER BY e.id ASC
+                        ) as evidencias_json
+                    FROM taller_solicitud_evidencias e
+                    JOIN filtered_solicitud fs ON fs.id = e.solicitud_id
+                    GROUP BY e.solicitud_id
                 ),
                 detalles_agg AS (
                     SELECT 
@@ -438,7 +459,8 @@ class MantencionRepository:
                     COALESCE(ma.mecanicos_activos_json, '[]'::json) as mecanicos_json,
                     COALESCE(ma.historial_mecanicos_json, '[]'::json) as historial_mecanicos_json,
                     COALESCE(ca.comentarios_json, '[]'::json) as comentarios_json,
-                    COALESCE(pa.pauta_json, '[]'::json) as pauta_respuestas_json
+                    COALESCE(pa.pauta_json, '[]'::json) as pauta_respuestas_json,
+                    COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
                 FROM filtered_solicitud fs
                 LEFT JOIN buses b ON b.id = fs.bus_id
                 LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
@@ -446,7 +468,8 @@ class MantencionRepository:
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
                 LEFT JOIN comentarios_agg ca ON ca.solicitud_id = fs.id
-                LEFT JOIN pauta_agg pa ON pa.solicitud_id = fs.id;
+                LEFT JOIN pauta_agg pa ON pa.solicitud_id = fs.id
+                LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id;
             """)
             res = await db.execute(sql, {"solicitud_id": solicitud_id})
             row = res.mappings().first()
@@ -638,6 +661,26 @@ class MantencionRepository:
                     ) sub
                     JOIN usuarios um ON um.id = sub.mecanico_id
                     GROUP BY sub.solicitud_id
+                ),
+                evidencias_agg AS (
+                    SELECT 
+                        e.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', e.id,
+                                'solicitud_id', e.solicitud_id,
+                                'detalle_id', e.detalle_id,
+                                'usuario_id', e.usuario_id,
+                                'url', e.url,
+                                'original_filename', e.original_filename,
+                                'size_bytes', e.size_bytes,
+                                'content_type', e.content_type,
+                                'fecha_creacion', e.fecha_creacion
+                            ) ORDER BY e.id ASC
+                        ) as evidencias_json
+                    FROM taller_solicitud_evidencias e
+                    JOIN filtered_solicitudes fs ON fs.id = e.solicitud_id
+                    GROUP BY e.solicitud_id
                 )
                 SELECT 
                     fs.id,
@@ -656,13 +699,15 @@ class MantencionRepository:
                     fs.fecha_creacion,
                     fs.fecha_cierre,
                     COALESCE(da.detalles_json, '[]'::json) as detalles_json,
-                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json
+                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json,
+                    COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
                 FROM filtered_solicitudes fs
                 LEFT JOIN buses b ON b.id = fs.bus_id
                 LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
                 LEFT JOIN usuarios mc ON mc.id = fs.mecanico_cierre_id
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
+                LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
                 ORDER BY fs.id DESC, fs.fecha_creacion DESC
             """)
             res = await db.execute(sql, {"limit": limit or 50, "skip": skip or 0})
@@ -680,6 +725,7 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.evidencias),
                 noload(TallerSolicitud.comentarios),
                 noload(TallerSolicitud.pauta_respuestas),
             )
@@ -784,6 +830,26 @@ class MantencionRepository:
                     ) sub
                     JOIN usuarios um ON um.id = sub.mecanico_id
                     GROUP BY sub.solicitud_id
+                ),
+                evidencias_agg AS (
+                    SELECT 
+                        e.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', e.id,
+                                'solicitud_id', e.solicitud_id,
+                                'detalle_id', e.detalle_id,
+                                'usuario_id', e.usuario_id,
+                                'url', e.url,
+                                'original_filename', e.original_filename,
+                                'size_bytes', e.size_bytes,
+                                'content_type', e.content_type,
+                                'fecha_creacion', e.fecha_creacion
+                            ) ORDER BY e.id ASC
+                        ) as evidencias_json
+                    FROM taller_solicitud_evidencias e
+                    JOIN filtered_solicitudes fs ON fs.id = e.solicitud_id
+                    GROUP BY e.solicitud_id
                 )
                 SELECT 
                     fs.id,
@@ -802,13 +868,15 @@ class MantencionRepository:
                     fs.fecha_creacion,
                     fs.fecha_cierre,
                     COALESCE(da.detalles_json, '[]'::json) as detalles_json,
-                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json
+                    COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json,
+                    COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
                 FROM filtered_solicitudes fs
                 LEFT JOIN buses b ON b.id = fs.bus_id
                 LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
                 LEFT JOIN usuarios mc ON mc.id = fs.mecanico_cierre_id
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
+                LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
                 ORDER BY fs.fecha_creacion DESC
             """)
             res = await db.execute(sql, {"mecanico_id": mecanico_id, "limit": limit or 50, "skip": skip or 0})
@@ -848,6 +916,7 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.evidencias),
                 noload(TallerSolicitud.comentarios),
                 noload(TallerSolicitud.pauta_respuestas),
             )
@@ -874,6 +943,7 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.evidencias),
             )
         )
         res = await db.execute(stmt)

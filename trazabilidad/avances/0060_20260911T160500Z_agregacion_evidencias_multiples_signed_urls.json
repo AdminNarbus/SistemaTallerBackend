@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 60,
+  "id": "AV-0060",
+  "timestamp": "2026-09-11T16:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "EVID-MULT-1",
+    "name": "Agregación SQL CTE de Múltiples Evidencias con Signed URLs",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Inclusión de agregación SQL de evidencias (evidencias_agg CTE) en MantencionRepository y resolución automática de Signed URLs v4 en MantencionService. Esto garantiza que todos los endpoints de consulta (/api/v1/mantencion/{id}, /pendientes y /mis-trabajos) entreguen el arreglo completo de evidencias fotográficas (1:N) con URLs firmadas seguras de Google Cloud Storage, permitiendo al frontend visualizar la galería completa de imágenes.",
+  "scope": {
+    "planned": [
+      "Agregar CTE evidencias_agg a get_solicitud_dto_by_id en MantencionRepository",
+      "Agregar CTE evidencias_agg a list_pendientes y list_mis_trabajos en MantencionRepository",
+      "Agregar selectinload(TallerSolicitud.evidencias) en consultas ORM/SQLite de MantencionRepository",
+      "Implementar _parse_evidencias_dtos en MantencionService con firma dinámica de URLs vía storage_service.get_url",
+      "Mapear evidencias en _dict_to_solicitud_dto y _dict_to_solicitud_resumen_dto",
+      "Hacer fecha_creacion opcional en SolicitudEvidenciaDTO para tolerancia a serialización JSON",
+      "Verificar suite completa de pruebas unitarias e integración"
+    ],
+    "completed": [
+      "Agregar CTE evidencias_agg a get_solicitud_dto_by_id en MantencionRepository",
+      "Agregar CTE evidencias_agg a list_pendientes y list_mis_trabajos en MantencionRepository",
+      "Agregar selectinload(TallerSolicitud.evidencias) en consultas ORM/SQLite de MantencionRepository",
+      "Implementar _parse_evidencias_dtos en MantencionService con firma dinámica de URLs vía storage_service.get_url",
+      "Mapear evidencias en _dict_to_solicitud_dto y _dict_to_solicitud_resumen_dto",
+      "Hacer fecha_creacion opcional en SolicitudEvidenciaDTO para tolerancia a serialización JSON",
+      "Verificar suite completa de pruebas unitarias e integración"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "fecha_creacion definida como Optional[datetime] = None en SolicitudEvidenciaDTO para robustez en conversiones de payloads y consultas agregadas."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Incorporado CTE evidencias_agg en get_solicitud_dto_by_id, list_pendientes y list_mis_trabajos, agregando json_build_object de la tabla taller_solicitud_evidencias y selectinload de evidencias en fallbacks ORM."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Añadida función _parse_evidencias_dtos para transformar JSON/dicts de evidencias a SolicitudEvidenciaDTO firmando cada URL mediante storage_service.get_url con cache en memoria, mapeado a SolicitudDTO y SolicitudResumenDTO."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0063",
+      "title": "Agregación SQL CTE de evidencias y firma dinámica en memoria a nivel servicio",
+      "rationale": "Las consultas de alto rendimiento del backend agregan relaciones complejas en un solo roundtrip a Neon PostgreSQL mediante CTEs y json_agg. Las evidencias estaban omitidas en dichas consultas CTE rápidas, provocando que se devolviera 'evidencias: []' a pesar de existir registros en taller_solicitud_evidencias. Al incorporarlas en la CTE y resolver sus Signed URLs en MantencionService (aprovechando la caché de URLs firmadas con TTL de 55 minutos), se mantiene latencia mínima de 1 roundtrip SQL sin peticiones redundantes a la API de IAM/GCS.",
+      "consequences": "El frontend recibe tanto el campo legacy foto_url firmado como el nuevo array evidencias con todas las fotos firmadas listas para ser desplegadas en galerías o carruseles."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_storage_service.py tests/unit/test_mantencion_service.py",
+      "result": "passed",
+      "evidence": "14 passed in 1.84s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar cambios a producción en Cloud Run mediante GitFlow (develop -> main) y verificar consumo desde el frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Compatible con el formulario multifoto del frontend y con retrocompatibilidad para solicitudes antiguas que solo tengan foto_url."
+  ]
+}

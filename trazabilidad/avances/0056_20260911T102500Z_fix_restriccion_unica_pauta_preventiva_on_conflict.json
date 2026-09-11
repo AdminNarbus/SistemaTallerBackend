@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 56,
+  "id": "AV-0056",
+  "timestamp": "2026-09-11T10:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-1",
+    "name": "Módulo Mantención y Pauta Preventiva",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Resolución del error HTTP 500 en endpoint POST /api/v1/mantencion/{id}/pauta: 1) Diagnóstico de la excepción 'InvalidColumnReferenceError: there is no unique or exclusion constraint matching the ON CONFLICT specification' en Neon PostgreSQL al invocar 'upsert_pauta_respuestas'; 2) Creación y aplicación de la migración de base de datos Alembic 009 ('009_unique_solicitud_pauta') que añade la restricción única 'uq_solicitud_pauta_item' sobre (solicitud_id, item_id) en la tabla 'taller_solicitud_pauta'; 3) Reconstrucción y reinicio del contenedor Docker 'backend-taller-narbus' con la nueva migración; 4) Verificación exitosa de peticiones reales POST a las solicitudes 1 y 45 retornando HTTP 200 OK con payload completo; 5) Aprobación del 100% de la suite automatizada (88/88 passed).",
+  "scope": {
+    "planned": [
+      "Diagnosticar la causa raíz del error 500 en POST /api/v1/mantencion/{id}/pauta",
+      "Crear migración Alembic 009 para agregar la restricción única faltante",
+      "Aplicar migración en base de datos Neon mediante alembic upgrade head",
+      "Reconstruir imagen Docker y reiniciar contenedor backend",
+      "Verificar peticiones reales al endpoint y suite de pruebas automatizadas"
+    ],
+    "completed": [
+      "Diagnosticar la causa raíz del error 500 en POST /api/v1/mantencion/{id}/pauta",
+      "Crear migración Alembic 009 para agregar la restricción única faltante",
+      "Aplicar migración en base de datos Neon mediante alembic upgrade head",
+      "Reconstruir imagen Docker y reiniciar contenedor backend",
+      "Verificar peticiones reales al endpoint y suite de pruebas automatizadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (manejado en repositorio separado)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/009_add_unique_constraint_solicitud_pauta.py",
+      "action": "created",
+      "summary": "Migración Alembic 009 para agregar la restricción UNIQUE 'uq_solicitud_pauta_item' sobre (solicitud_id, item_id) en la tabla taller_solicitud_pauta."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-057",
+      "title": "Restricción única formal en base de datos para inserción atómica ON CONFLICT DO UPDATE",
+      "rationale": "PostgreSQL requiere de forma estricta un índice único o restricción UNIQUE para ejecutar cláusulas ON CONFLICT (...) DO UPDATE. Dado que la tabla 'taller_solicitud_pauta' en Neon carecía de esta restricción en el motor, el repositorio lanzaba InvalidColumnReferenceError al intentar guardar respuestas de pauta. Se aplicó la migración 009 para garantizar integridad relacional 3NF y soporte nativo de upsert atómico.",
+      "consequences": "Las actualizaciones y guardados de pauta preventiva son 100% atómicos, previenen duplicidades de un mismo ítem por solicitud y ejecutan en una sola consulta sin bloqueos."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\alembic upgrade head",
+      "result": "passed",
+      "evidence": "Running upgrade 008_solicitud_evidencias -> 009_unique_solicitud_pauta"
+    },
+    {
+      "command": "docker logs backend-taller-narbus",
+      "result": "passed",
+      "evidence": "Contenedor iniciado correctamente, migraciones completadas exitosamente y Uvicorn escuchando en puerto 8000"
+    },
+    {
+      "command": "POST http://localhost:8000/api/v1/mantencion/45/pauta",
+      "result": "passed",
+      "evidence": "HTTP 200 OK con payload {\"total_items\":11,\"respondidos\":1,\"pendientes\":10,\"completado\":false}"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "88 passed, 1 warning in 138.49s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar y sincronizar rama develop hacia main en el nuevo repositorio GitHub.",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "branch": "develop",
+    "commit": "head",
+    "dirty": false
+  },
+  "notes": [
+    "La verificación se ejecutó tanto en la solicitud 1 como en la solicitud 45 con respuestas reales."
+  ]
+}

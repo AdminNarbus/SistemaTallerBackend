@@ -352,8 +352,9 @@ async def test_crear_solicitud_con_fotos_urls_json(client, auth_headers_conducto
     )
     assert res.status_code == 201
     res_data = res.json()
-    assert res_data["foto_url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img1.jpg"
+    # En entorno local de pruebas (STORAGE_PROVIDER=local), get_url normaliza URLs de GCS al path local /uploads/...
+    assert res_data["foto_url"] == "/uploads/solicitudes/img1.jpg"
     assert len(res_data["evidencias"]) == 2
-    assert res_data["evidencias"][0]["url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img1.jpg"
-    assert res_data["evidencias"][1]["url"] == "https://storage.googleapis.com/narbus-taller-media/solicitudes/img2.jpg"
+    assert res_data["evidencias"][0]["url"] == "/uploads/solicitudes/img1.jpg"
+    assert res_data["evidencias"][1]["url"] == "/uploads/solicitudes/img2.jpg"
 

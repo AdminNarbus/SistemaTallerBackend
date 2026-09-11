@@ -339,7 +339,7 @@ class MantencionService:
                     solicitud_id=ev.solicitud_id,
                     detalle_id=ev.detalle_id,
                     usuario_id=ev.usuario_id,
-                    url=ev.url,
+                    url=storage_service.get_url(ev.url) or ev.url,
                     original_filename=ev.original_filename,
                     size_bytes=ev.size_bytes,
                     content_type=ev.content_type,
@@ -358,7 +358,7 @@ class MantencionService:
             mecanico_cierre_nombre=mecanico_cierre_nombre,
             estado=sol.estado,
             descripcion_general=sol.descripcion_general,
-            foto_url=sol.foto_url,
+            foto_url=storage_service.get_url(sol.foto_url),
             motivo_incompleto_checklist=getattr(sol, "motivo_incompleto_checklist", None),
             motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
             fecha_creacion=sol.fecha_creacion,
@@ -448,7 +448,7 @@ class MantencionService:
             mecanico_cierre_nombre=r.get("mecanico_cierre_nombre"),
             estado=r["estado"],
             descripcion_general=r.get("descripcion_general"),
-            foto_url=r.get("foto_url"),
+            foto_url=storage_service.get_url(r.get("foto_url")),
             motivo_incompleto_checklist=r.get("motivo_incompleto_checklist"),
             motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
             fecha_creacion=r["fecha_creacion"],
@@ -488,7 +488,7 @@ class MantencionService:
             mecanico_cierre_nombre=r.get("mecanico_cierre_nombre"),
             estado=r["estado"],
             descripcion_general=r.get("descripcion_general"),
-            foto_url=r.get("foto_url"),
+            foto_url=storage_service.get_url(r.get("foto_url")),
             motivo_incompleto_checklist=r.get("motivo_incompleto_checklist"),
             motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
             fecha_creacion=r["fecha_creacion"],
@@ -564,17 +564,19 @@ class MantencionService:
             upload_res = await storage_service.upload_image(file=f, folder="solicitudes")
             uploaded_evidencias.append(upload_res)
             logger.info(
-                "[MANTENCION] Evidencia de solicitud subida | url='%s' | tamano=%s bytes",
-                upload_res["url"],
-                upload_res["size_bytes"],
+                "[MANTENCION] Evidencia de solicitud subida | path='%s' | url='%s' | tamano=%s bytes",
+                upload_res.get("path"),
+                upload_res.get("url"),
+                upload_res.get("size_bytes"),
             )
 
         # Si el cliente envió fotos_urls predefinidas vía JSON
         if dto.fotos_urls:
             for u in dto.fotos_urls:
-                if u and not any(e["url"] == u for e in uploaded_evidencias):
+                if u and not any(e.get("path") == u or e.get("url") == u for e in uploaded_evidencias):
                     uploaded_evidencias.append({
-                        "url": u,
+                        "path": u,
+                        "url": storage_service.get_url(u) or u,
                         "original_filename": None,
                         "size_bytes": None,
                         "content_type": None,
@@ -582,10 +584,11 @@ class MantencionService:
 
         # Asignar foto principal para retrocompatibilidad con frontend que lee foto_url
         if uploaded_evidencias and not dto.foto_url:
-            dto.foto_url = uploaded_evidencias[0]["url"]
-        elif dto.foto_url and not any(e["url"] == dto.foto_url for e in uploaded_evidencias):
+            dto.foto_url = uploaded_evidencias[0].get("path") or uploaded_evidencias[0]["url"]
+        elif dto.foto_url and not any(e.get("path") == dto.foto_url or e.get("url") == dto.foto_url for e in uploaded_evidencias):
             uploaded_evidencias.insert(0, {
-                "url": dto.foto_url,
+                "path": dto.foto_url,
+                "url": storage_service.get_url(dto.foto_url) or dto.foto_url,
                 "original_filename": None,
                 "size_bytes": None,
                 "content_type": None,
@@ -629,9 +632,10 @@ class MantencionService:
 
         evidencias_a_procesar: List[TallerSolicitudEvidencia] = []
         for ev_data in uploaded_evidencias:
+            db_path = ev_data.get("path") or ev_data["url"]
             ev_obj = TallerSolicitudEvidencia(
                 usuario_id=creador_id,
-                url=ev_data["url"],
+                url=db_path,
                 original_filename=ev_data.get("original_filename"),
                 size_bytes=ev_data.get("size_bytes"),
                 content_type=ev_data.get("content_type"),
@@ -746,7 +750,7 @@ class MantencionService:
                 solicitud_id=solicitud.id,
                 detalle_id=ev.detalle_id,
                 usuario_id=ev.usuario_id,
-                url=ev.url,
+                url=storage_service.get_url(ev.url) or ev.url,
                 original_filename=ev.original_filename,
                 size_bytes=ev.size_bytes,
                 content_type=ev.content_type,
@@ -766,7 +770,7 @@ class MantencionService:
             mecanico_cierre_nombre=None,
             estado=solicitud.estado,
             descripcion_general=solicitud.descripcion_general,
-            foto_url=solicitud.foto_url,
+            foto_url=storage_service.get_url(solicitud.foto_url),
             motivo_incompleto_checklist=None,
             motivo_cierre_parcial=None,
             fecha_creacion=solicitud.fecha_creacion,

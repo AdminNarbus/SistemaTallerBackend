@@ -77,6 +77,7 @@ class FormularioNeumaticoService:
 
         # 2. Manejo de evidencia fotográfica mediante StorageService (GCS o Local)
         evidencia_url: Optional[str] = None
+        evidencia_path: Optional[str] = None
         nombre_original_evidencia = "Sin evidencia adjunta"
 
         if evidencia and evidencia.filename:
@@ -85,10 +86,11 @@ class FormularioNeumaticoService:
                 file=evidencia,
                 folder="evidencias",
             )
+            evidencia_path = resultado_upload.get("path") or resultado_upload["url"]
             evidencia_url = resultado_upload["url"]
             logger.info(
-                "[NEUMATICO] Evidencia fotográfica guardada con éxito | archivo='%s' | url='%s' | tamaño=%s bytes",
-                resultado_upload["filename"],
+                "[NEUMATICO] Evidencia fotográfica guardada con éxito | path='%s' | url='%s' | tamaño=%s bytes",
+                evidencia_path,
                 evidencia_url,
                 resultado_upload["size_bytes"],
             )
@@ -133,7 +135,7 @@ class FormularioNeumaticoService:
                 motivo=dto.motivo,
                 precio=precio_float,
                 marca_fuego=dto.marca_fuego,
-                evidencia_url=evidencia_url,
+                evidencia_url=evidencia_path,
                 fecha_subida=datetime.now(timezone.utc),
             )
 
@@ -204,7 +206,10 @@ class FormularioNeumaticoService:
         reporte = await neumatico_repository.get_by_id(db, reporte_id)
         if not reporte:
             raise NotFoundException(f"Reporte de neumático {reporte_id} no encontrado")
-        return ReporteNeumaticoResponseDTO.model_validate(reporte)
+        dto = ReporteNeumaticoResponseDTO.model_validate(reporte)
+        if dto.evidencia_url:
+            dto.evidencia_url = storage_service.get_url(dto.evidencia_url) or dto.evidencia_url
+        return dto
 
 
 formulario_neumatico_service = FormularioNeumaticoService()

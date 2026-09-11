@@ -118,24 +118,42 @@ class StorageService:
         # 5. Generación de nombre único
         unique_filename = f"{uuid.uuid4()}{extension}"
 
-        # 6. Subida al proveedor activo
-        public_url = await self.provider.upload_file(
+        # 6. Subida al proveedor activo (retorna el path canónico o URL base)
+        stored_path = await self.provider.upload_file(
             file_content=content,
             filename=unique_filename,
             content_type=content_type,
             folder=folder,
         )
 
+        # 7. Resolución de la URL accesible (Signed URL en GCS o ruta relativa en local)
+        accessible_url = self.provider.get_url(stored_path)
+
         return {
-            "url": public_url,
+            "url": accessible_url,
+            "path": stored_path,
             "filename": unique_filename,
             "original_filename": original_filename,
             "size_bytes": tamano_bytes,
             "content_type": content_type,
         }
 
+    def get_url(
+        self,
+        file_path_or_url: Optional[str],
+        expiration_minutes: Optional[int] = None,
+    ) -> Optional[str]:
+        """
+        Genera la URL lista para ser consumida por el cliente frontend:
+        - En GCS: Genera una Signed URL v4 con validez temporal (60 min).
+        - En Local: Retorna la ruta relativa estándar /uploads/...
+        """
+        if not file_path_or_url:
+            return None
+        return self.provider.get_url(file_path_or_url, expiration_minutes=expiration_minutes)
+
     async def delete_file(self, file_url: str) -> bool:
-        """Elimina un archivo a partir de su URL pública."""
+        """Elimina un archivo a partir de su URL o path canónico."""
         if not file_url:
             return False
         return await self.provider.delete_file(file_url)
@@ -143,3 +161,4 @@ class StorageService:
 
 # Instancia singleton accesible globalmente
 storage_service = StorageService()
+

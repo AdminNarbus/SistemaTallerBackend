@@ -89,3 +89,20 @@ class LocalStorageProvider(BaseStorageProvider):
         full_path = os.path.join(self.base_directory, relative_path)
         return await asyncio.to_thread(_delete_file_from_disk, full_path)
 
+    def get_url(self, file_path_or_url: str, expiration_minutes: int = 60) -> str:
+        """En entorno local, normaliza rutas canónicas o URLs a /uploads/<path>."""
+        if not file_path_or_url:
+            return ""
+        clean = file_path_or_url.strip()
+        if clean.startswith("/uploads/"):
+            return clean
+        if clean.startswith("http://") or clean.startswith("https://"):
+            if "storage.googleapis.com/" in clean:
+                parts = clean.split("storage.googleapis.com/", 1)[1].strip("/\\").split("/", 1)
+                rel = parts[1] if len(parts) > 1 else parts[0]
+                return f"/uploads/{rel}"
+            return clean
+        clean_rel = clean.lstrip("/\\")
+        return f"/uploads/{clean_rel}"
+
+

@@ -43,3 +43,19 @@ class BaseStorageProvider(ABC):
             bool: True si se eliminó con éxito, False en caso contrario.
         """
         pass
+
+    @abstractmethod
+    def get_url(self, file_path_or_url: str, expiration_minutes: int = 60) -> str:
+        """
+        Genera o resuelve la URL accesible (pública, relativa o firmada temporal)
+        para un recurso dado su path canónico o URL previa.
+        
+        Args:
+            file_path_or_url: Ruta relativa (ej. 'solicitudes/uuid.jpg') o URL almacenada.
+            expiration_minutes: Minutos de vigencia si es una URL firmada (default 60 min).
+            
+        Returns:
+            str: URL lista para ser consumida por el cliente frontend.
+        """
+        pass
+

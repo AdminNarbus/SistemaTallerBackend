@@ -37,12 +37,13 @@ class Settings(BaseSettings):
 
     DATABASE_URL: Optional[str] = None
 
-    # Storage / Cloud Storage Settings (Volumen montado en Cloud Run o Local)
-    STORAGE_PROVIDER: str = "local"  # "local" (estándar en dev y Cloud Run con volumen) o "gcs"
-    UPLOAD_DIR: str = "uploads"  # Ruta relativa o absoluta (/app/uploads en Cloud Run)
+    # Storage / Cloud Storage Settings (Bucket Privado con Signed URLs o Local)
+    STORAGE_PROVIDER: str = "local"  # "local" (desarrollo local offline) o "gcs" (Cloud Run producción con Signed URLs)
+    UPLOAD_DIR: str = "uploads"  # Ruta local de almacenamiento fallback
     GCS_BUCKET_NAME: Optional[str] = "narbus-taller-media"
     GCS_PROJECT_ID: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    GCS_SIGNED_URL_EXPIRATION_MINUTES: int = 60  # Duración de validez de Signed URLs
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
     # CORS Settings

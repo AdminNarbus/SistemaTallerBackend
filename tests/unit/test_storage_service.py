@@ -83,6 +83,9 @@ async def test_upload_image_gcs_provider_mock(dummy_image_file):
         mock_client = MagicMock()
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
+        mock_blob.generate_signed_url.return_value = (
+            "https://storage.googleapis.com/narbus-taller-media/neumaticos/signed.jpg?X-Goog-Signature=123"
+        )
 
         mock_storage_client_cls.return_value = mock_client
         mock_client.bucket.return_value = mock_bucket
@@ -94,12 +97,15 @@ async def test_upload_image_gcs_provider_mock(dummy_image_file):
         result = await service.upload_image(file=dummy_image_file, folder="neumaticos")
 
         assert result["url"].startswith("https://storage.googleapis.com/narbus-taller-media/neumaticos/")
+        assert "X-Goog-Signature" in result["url"]
+        assert result["path"].startswith("neumaticos/")
         assert result["original_filename"] == "foto_bus_101.jpg"
 
         # Verificar llamadas al SDK de GCP
         mock_client.bucket.assert_called_with("narbus-taller-media")
-        mock_bucket.blob.assert_called_once()
+        assert mock_bucket.blob.call_count >= 1
         mock_blob.upload_from_string.assert_called_once()
+        mock_blob.generate_signed_url.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -137,4 +143,58 @@ async def test_delete_file_legacy_gcs_url(tmp_path):
 
     assert deleted is True
     assert not test_file.exists()
+
+
+def test_get_url_local_provider(tmp_path):
+    """Verifica la resolución de URLs en el proveedor local con rutas relativas y legacy URLs."""
+    local_provider = LocalStorageProvider(base_directory=str(tmp_path))
+    service = StorageService(provider=local_provider)
+
+    # Caso 1: Ruta canónica relativa
+    assert service.get_url("solicitudes/foto1.jpg") == "/uploads/solicitudes/foto1.jpg"
+
+    # Caso 2: Ruta ya formateada con /uploads/
+    assert service.get_url("/uploads/solicitudes/foto2.jpg") == "/uploads/solicitudes/foto2.jpg"
+
+    # Caso 3: URL antigua de Google Cloud Storage
+    legacy_gcs = "https://storage.googleapis.com/mi-bucket/solicitudes/foto3.jpg"
+    assert service.get_url(legacy_gcs) == "/uploads/solicitudes/foto3.jpg"
+
+    # Caso 4: None o vacío retorna None
+    assert service.get_url(None) is None
+    assert service.get_url("") is None
+
+
+def test_get_url_gcs_provider_and_cache():
+    """Verifica la generación de Signed URLs v4 y el funcionamiento de la memoria caché TTL."""
+    with patch("google.cloud.storage.Client") as mock_storage_client_cls:
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_blob.generate_signed_url.return_value = (
+            "https://storage.googleapis.com/narbus-taller-media/solicitudes/test.jpg?X-Goog-Signature=abc"
+        )
+
+        mock_storage_client_cls.return_value = mock_client
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+
+        gcs_provider = GCSStorageProvider(bucket_name="narbus-taller-media", project_id="narbus-prod")
+        service = StorageService(provider=gcs_provider)
+
+        # 1. Primera llamada: debe invocar generate_signed_url
+        url1 = service.get_url("solicitudes/test.jpg", expiration_minutes=60)
+        assert "X-Goog-Signature=abc" in url1
+        assert mock_blob.generate_signed_url.call_count == 1
+
+        # 2. Segunda llamada con la misma ruta: debe responder desde la caché interna
+        url2 = service.get_url("solicitudes/test.jpg", expiration_minutes=60)
+        assert url2 == url1
+        assert mock_blob.generate_signed_url.call_count == 1  # No se incrementó
+
+        # 3. Llamada con URL legada de GCS: debe extraer la ruta del blob y reutilizar la caché
+        legacy_url = "https://storage.googleapis.com/narbus-taller-media/solicitudes/test.jpg"
+        url3 = service.get_url(legacy_url, expiration_minutes=60)
+        assert url3 == url1
+        assert mock_blob.generate_signed_url.call_count == 1
 

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 58,
+  "id": "AV-0058",
+  "timestamp": "2026-09-11T13:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "GCS-PRIV-1",
+    "name": "Almacenamiento Privado GCS con Signed URLs v4 y Caching en Memoria",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de arquitectura de almacenamiento seguro y privado en Google Cloud Storage mediante URLs firmadas v4 con caché en memoria (TTL 55 min). Los archivos se almacenan en un bucket privado sin acceso público, persistiendo en la base de datos rutas canónicas relativas y resolviendo dinámicamente URLs firmadas para el frontend en todas las respuestas de solicitudes, evidencias y reportes de neumáticos. Se mantiene paridad total y retrocompatibilidad con el entorno local offline.",
+  "scope": {
+    "planned": [
+      "Extender BaseStorageProvider con get_url(file_path_or_url, expiration_minutes)",
+      "Implementar generación de Signed URLs v4 en GCSStorageProvider con soporte para ADC/signBlob y Service Account JSON",
+      "Incorporar caché en memoria con TTL de 55 min para evitar sobrecoste de llamadas IAM al listar solicitudes",
+      "Actualizar mantencion_service y formulario_neumatico_service para guardar rutas canónicas y exponer URLs firmadas dinámicas",
+      "Preservar paridad y retrocompatibilidad offline en LocalStorageProvider (/uploads/...)",
+      "Configurar cloudbuild.yaml con STORAGE_PROVIDER=gcs y bucket narbus-taller-uploads-bucket",
+      "Crear guía de integración para el frontend (GUIA_FRONTEND_IMAGENES_SIGNED_URLS.md)",
+      "Actualizar y expandir suite de pruebas unitarias e integración (100% pasando, 92 tests)"
+    ],
+    "completed": [
+      "Extender BaseStorageProvider con get_url(file_path_or_url, expiration_minutes)",
+      "Implementar generación de Signed URLs v4 en GCSStorageProvider con soporte para ADC/signBlob y Service Account JSON",
+      "Incorporar caché en memoria con TTL de 55 min para evitar sobrecoste de llamadas IAM al listar solicitudes",
+      "Actualizar mantencion_service y formulario_neumatico_service para guardar rutas canónicas y exponer URLs firmadas dinámicas",
+      "Preservar paridad y retrocompatibilidad offline en LocalStorageProvider (/uploads/...)",
+      "Configurar cloudbuild.yaml con STORAGE_PROVIDER=gcs y bucket narbus-taller-uploads-bucket",
+      "Crear guía de integración para el frontend (GUIA_FRONTEND_IMAGENES_SIGNED_URLS.md)",
+      "Actualizar y expandir suite de pruebas unitarias e integración (100% pasando, 92 tests)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de código en el frontend (se documentó en trazabilidad/GUIA_FRONTEND_IMAGENES_SIGNED_URLS.md)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Agregada configuración GCS_SIGNED_URL_EXPIRATION_MINUTES (por defecto 60 minutos)."
+    },
+    {
+      "path": "app/core/storage/base.py",
+      "action": "modified",
+      "summary": "Definido método abstracto get_url(file_path_or_url, expiration_minutes) en BaseStorageProvider."
+    },
+    {
+      "path": "app/core/storage/local_provider.py",
+      "action": "modified",
+      "summary": "Implementado get_url en LocalStorageProvider retornando /uploads/... y normalizando URLs legadas de GCS."
+    },
+    {
+      "path": "app/core/storage/gcs_provider.py",
+      "action": "modified",
+      "summary": "Refactorizado GCSStorageProvider: subida privada sin make_public, firma v4 con soporte ADC/IAM signBlob y caché en memoria TTL 55m."
+    },
+    {
+      "path": "app/core/storage/storage_service.py",
+      "action": "modified",
+      "summary": "Actualizado upload_image para retornar tanto 'path' canónico como 'url' firmada/local, y expuesto get_url(file_path_or_url)."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Persistencia de rutas canónicas en BD y envoltura de foto_url y evidencias[].url con storage_service.get_url(...) en todos los DTOs."
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Persistencia de evidencia_path canónico en ReporteNeumatico y resolución dinámica de URL firmada al consultar por ID."
+    },
+    {
+      "path": "cloudbuild.yaml",
+      "action": "modified",
+      "summary": "Configuradas variables de entorno STORAGE_PROVIDER=gcs, GCS_BUCKET_NAME=narbus-taller-uploads-bucket y GCS_SIGNED_URL_EXPIRATION_MINUTES=60."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_IMAGENES_SIGNED_URLS.md",
+      "action": "created",
+      "summary": "Guía técnica completa para que el frontend consuma URLs firmadas de manera directa y transparente."
+    },
+    {
+      "path": "tests/unit/test_storage_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias para subida GCS con firma v4, resolución de URLs en local provider y caché en memoria."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Actualizada aserción de creación con fotos_urls para reflejar la resolución del provider local."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-058-01",
+      "title": "Bucket 100% Privado con URLs Firmadas v4 en vez de Bucket Público o Volúmenes gcsfuse",
+      "rationale": "Las fotografías de siniestros, fallas mecánicas y estados de buses constituyen información privada y sensible de la flota Narbus. Al mismo tiempo, montar Cloud Storage como volumen gcsfuse genera penalizaciones severas de rendimiento y latencia en Cloud Run al servir archivos estáticos a través de Python. Las Signed URLs v4 delegan la descarga directamente a la infraestructura global de Google Storage con validez temporal acotada.",
+      "consequences": "Seguridad estricta garantizada, cero carga de streaming de bytes en el contenedor de Cloud Run y descarga de alta velocidad para clientes web y móviles."
+    },
+    {
+      "id": "DEC-058-02",
+      "title": "Persistencia de Rutas Canónicas Relativas en BD con Resolución Dinámica al Consultar",
+      "rationale": "Si se almacenan URLs firmadas completas directamente en la base de datos, los registros quedarían inservibles una vez transcurrido el tiempo de expiración (60 min). Guardar rutas canónicas (ej. 'solicitudes/uuid.jpg') permite que la base de datos sea agnóstica a la infraestructura y genere firmas frescas cada vez que un cliente consulta.",
+      "consequences": "Inmunidad a la expiración de URLs en la base de datos y flexibilidad total para cambiar nombres de bucket, proveedores o tiempos de expiración sin migraciones de datos."
+    },
+    {
+      "id": "DEC-058-03",
+      "title": "Caché en Memoria con TTL de 55 Minutos para Signed URLs en el Backend",
+      "rationale": "En Cloud Run con ADC, firmar un blob requiere una llamada de red a la API de IAM ('projects/-/serviceAccounts/{email}:signBlob'). Generar firmas para un listado de 50 solicitudes podría generar 50 llamadas HTTP a IAM. La caché en memoria por nombre de blob reutiliza la firma durante 55 minutos (antes de los 60 min de vencimiento).",
+      "consequences": "Tiempo de respuesta ultra veloz (< 1 ms por imagen en caché) sin consumo redundante de cuota IAM."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_storage_service.py -v",
+      "result": "passed",
+      "evidence": "10 passed in 1.44s: Validación de subida GCS v4, firma, caché en memoria y resolución de URLs locales."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "92 passed in 74.72s: 100% de la suite de pruebas unitarias, integración y e2e pasando sin regresiones."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Realizar commit en la rama feature/gcs-private-signed-urls, fusionar a develop mediante GitFlow y desplegar a producción en main cuando el usuario lo solicite.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/gcs-private-signed-urls",
+    "commit": "fd08092",
+    "dirty": true
+  },
+  "notes": [
+    "Para el Service Account de Cloud Run en Google Cloud Console, asegurar que cuente con roles/storage.objectAdmin y roles/iam.serviceAccountTokenCreator sobre sí mismo para la firma de blobs.",
+    "El frontend no requiere cambios de librerías ni SDKs; consume el campo foto_url y evidencias[].url directamente en etiquetas <img>."
+  ]
+}

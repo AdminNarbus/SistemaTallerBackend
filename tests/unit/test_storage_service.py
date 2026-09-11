@@ -100,3 +100,41 @@ async def test_upload_image_gcs_provider_mock(dummy_image_file):
         mock_client.bucket.assert_called_with("narbus-taller-media")
         mock_bucket.blob.assert_called_once()
         mock_blob.upload_from_string.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_upload_image_solicitudes_folder(tmp_path, dummy_image_file):
+    """Verifica la subida de imágenes a la carpeta 'solicitudes' tal como requiere el flujo de conductores."""
+    local_provider = LocalStorageProvider(base_directory=str(tmp_path))
+    service = StorageService(provider=local_provider)
+
+    result = await service.upload_image(file=dummy_image_file, folder="solicitudes")
+
+    assert result["url"].startswith("/uploads/solicitudes/")
+    assert result["url"].endswith(".jpg")
+    
+    filename = result["filename"]
+    saved_path = tmp_path / "solicitudes" / filename
+    assert saved_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_file_legacy_gcs_url(tmp_path):
+    """Verifica que delete_file elimine el archivo físico incluso si se recibe una URL antigua de GCS."""
+    local_provider = LocalStorageProvider(base_directory=str(tmp_path))
+    service = StorageService(provider=local_provider)
+
+    # Crear archivo simulado en el directorio local montado
+    target_dir = tmp_path / "solicitudes"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    test_file = target_dir / "foto_legacy_123.jpg"
+    test_file.write_bytes(b"contenido_de_prueba")
+    assert test_file.exists()
+
+    # URL antigua de GCS
+    legacy_url = "https://storage.googleapis.com/narbus-taller-media/solicitudes/foto_legacy_123.jpg"
+    deleted = await service.delete_file(legacy_url)
+
+    assert deleted is True
+    assert not test_file.exists()
+

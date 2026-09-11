@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 57,
+  "id": "AV-0057",
+  "timestamp": "2026-09-11T12:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "STORAGE-VOLUMEN",
+    "name": "Almacenamiento por Volumen Montado en Cloud Run y LocalProvider",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Adaptación integral del manejo de imágenes en el Backend para operar de forma homogénea sobre el sistema de archivos local y el volumen montado en Cloud Run: 1) Incorporación de UPLOAD_DIR (por defecto 'uploads' en local y '/app/uploads' en Cloud Run) y upload_absolute_path en Settings; 2) Configuración de STORAGE_PROVIDER='local' como estándar absoluto para desarrollo y producción, prescindiendo del SDK de Google Cloud Storage en tiempo de ejecución; 3) Refactorización de LocalStorageProvider para resolver dinámicamente UPLOAD_DIR, soportar escritura no bloqueante de bytes y streams (shutil.copyfileobj), creación automática recursiva de carpetas y eliminación retrocompatible de URLs legacy de GCS; 4) Inicialización en app/main.py de los subdirectorios clave ('solicitudes', 'evidencias', 'neumaticos') en el punto de montaje y exposición estática vía FastAPI StaticFiles en /uploads; 5) Actualización de cloudbuild.yaml para inyectar STORAGE_PROVIDER=local y UPLOAD_DIR=/app/uploads sin variables innecesarias del SDK de GCS; 6) Verificación exitosa del guardado, retorno de rutas relativas limpias (/uploads/solicitudes/<uuid>.jpg), consumo HTTP 200 directo de imágenes estáticas y 100% de la suite de pruebas automatizadas aprobada (90/90 passed en 97.98s).",
+  "scope": {
+    "planned": [
+      "Configurar UPLOAD_DIR en Settings y fijar STORAGE_PROVIDER=local por defecto",
+      "Adaptar LocalStorageProvider para resolver UPLOAD_DIR y admitir escritura/eliminación robusta",
+      "Garantizar creación de subdirectorios 'solicitudes', 'evidencias' y 'neumaticos' en main.py",
+      "Actualizar cloudbuild.yaml para pasar STORAGE_PROVIDER=local y UPLOAD_DIR=/app/uploads a Cloud Run",
+      "Actualizar .env.production y .env.example con la nueva arquitectura",
+      "Añadir pruebas unitarias e integración de almacenamiento local y entrega estática",
+      "Ejecutar y validar el 100% de la suite de pruebas del backend"
+    ],
+    "completed": [
+      "Configurar UPLOAD_DIR en Settings y fijar STORAGE_PROVIDER=local por defecto",
+      "Adaptar LocalStorageProvider para resolver UPLOAD_DIR y admitir escritura/eliminación robusta",
+      "Garantizar creación de subdirectorios 'solicitudes', 'evidencias' y 'neumaticos' en main.py",
+      "Actualizar cloudbuild.yaml para pasar STORAGE_PROVIDER=local y UPLOAD_DIR=/app/uploads a Cloud Run",
+      "Actualizar .env.production y .env.example con la nueva arquitectura",
+      "Añadir pruebas unitarias e integración de almacenamiento local y entrega estática",
+      "Ejecutar y validar el 100% de la suite de pruebas del backend"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Configuración manual en consola de GCP (Cloud Run Storage Volume Mount R/W) realizada por el usuario",
+      "Actualización del Frontend en repositorio independiente"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Incorporación de UPLOAD_DIR y propiedad upload_absolute_path en Settings; STORAGE_PROVIDER fijado en 'local' por defecto."
+    },
+    {
+      "path": "app/core/storage/base.py",
+      "action": "modified",
+      "summary": "Actualización de type hints en BaseStorageProvider para admitir Union[bytes, BinaryIO]."
+    },
+    {
+      "path": "app/core/storage/local_provider.py",
+      "action": "modified",
+      "summary": "Adaptación para resolver base_directory desde settings.UPLOAD_DIR, soporte de escritura con bytes/shutil.copyfileobj, y borrado con soporte de URLs relativas y legacy de GCS."
+    },
+    {
+      "path": "app/core/storage/storage_service.py",
+      "action": "modified",
+      "summary": "Actualización de logs e inicialización transparente de LocalStorageProvider."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Resolución absoluta de UPLOAD_DIR, creación al inicio de subcarpetas 'solicitudes', 'evidencias', 'neumaticos' y montaje de StaticFiles en /uploads."
+    },
+    {
+      "path": "cloudbuild.yaml",
+      "action": "modified",
+      "summary": "Actualización de variables en deploy de Cloud Run: STORAGE_PROVIDER=local y UPLOAD_DIR=/app/uploads, prescindiendo de SDK GCS."
+    },
+    {
+      "path": ".env.production",
+      "action": "modified",
+      "summary": "Actualizado para STORAGE_PROVIDER=local y UPLOAD_DIR=/app/uploads."
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Documentación actualizada sobre almacenamiento por volumen montado en Cloud Run y local."
+    },
+    {
+      "path": "tests/unit/test_storage_service.py",
+      "action": "modified",
+      "summary": "Pruebas añadidas para subida a carpeta 'solicitudes' y borrado de URLs legacy de GCS."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Aserción añadida para verificar que la imagen subida es servida vía GET /uploads/... con HTTP 200."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-058",
+      "title": "Adopción de volumen montado en Cloud Run (gcsfuse) con LocalStorageProvider unificado",
+      "rationale": "Montar el bucket de Cloud Storage directamente en /app/uploads dentro del contenedor de Cloud Run permite que el backend utilice el sistema de archivos estándar de Linux en lugar de lidiar con clientes SDK, tokens de autenticación IAM en cada subida o latencias adicionales de red. La sincronización hacia el bucket la gestiona Cloud Run de forma transparente a nivel de infraestructura.",
+      "consequences": "Paridad 100% entre el entorno de desarrollo local y producción en Cloud Run, eliminación de URLs públicas externas complejas (storage.googleapis.com), simplificación de rutas a '/uploads/<carpeta>/<archivo>' y total retrocompatibilidad con el cliente frontend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_storage_service.py -v",
+      "result": "passed",
+      "evidence": "8 passed in 0.76s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py -k \"solicitud\" -v",
+      "result": "passed",
+      "evidence": "6 passed in 6.50s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py -k \"test_crear_solicitud_con_foto_multipart\" -v",
+      "result": "passed",
+      "evidence": "1 passed in 1.24s (verificó retorno de URL /uploads/solicitudes/... y GET HTTP 200 de imagen estática)"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "90 passed, 1 warning in 97.98s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar rama de característica a develop siguiendo GitFlow.",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "branch": "feature/cloud-run-volume-storage",
+    "commit": "head",
+    "dirty": false
+  },
+  "notes": [
+    "Se confirmó que la entrega de archivos estáticos vía FastAPI StaticFiles opera sin problemas para todas las rutas generadas."
+  ]
+}

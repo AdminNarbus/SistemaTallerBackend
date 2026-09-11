@@ -37,8 +37,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: Optional[str] = None
 
-    # Storage / Cloud Storage Settings (Google Cloud Storage)
-    STORAGE_PROVIDER: str = "local"  # "gcs" o "local"
+    # Storage / Cloud Storage Settings (Volumen montado en Cloud Run o Local)
+    STORAGE_PROVIDER: str = "local"  # "local" (estándar en dev y Cloud Run con volumen) o "gcs"
+    UPLOAD_DIR: str = "uploads"  # Ruta relativa o absoluta (/app/uploads en Cloud Run)
     GCS_BUCKET_NAME: Optional[str] = "narbus-taller-media"
     GCS_PROJECT_ID: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
@@ -118,6 +119,10 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == AppEnvironment.PRODUCTION:
             return None
         return "/redoc"
+
+    @property
+    def upload_absolute_path(self) -> str:
+        return os.path.abspath(self.UPLOAD_DIR)
 
     @property
     def gcs_public_url_base(self) -> str:

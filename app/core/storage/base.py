@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import BinaryIO, Union
 
 
 class BaseStorageProvider(ABC):
@@ -11,7 +12,7 @@ class BaseStorageProvider(ABC):
     @abstractmethod
     async def upload_file(
         self,
-        file_content: bytes,
+        file_content: Union[bytes, BinaryIO],
         filename: str,
         content_type: str,
         folder: str = "evidencias",

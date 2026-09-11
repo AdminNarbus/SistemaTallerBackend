@@ -75,3 +75,17 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Compilación Optimizada con Caché:** Extracción de capas previas de Artifact Registry con `--cache-from` para acelerar el ciclo de construcción Docker.
   - **Auto-Migración Idempotente en Contenedor:** `docker-entrypoint.sh` ejecuta `alembic upgrade head` previo al arranque de Uvicorn, garantizando actualización de esquema 3NF sin intervención manual.
   - **Serverless y Secretos Seguros:** Despliegue en Cloud Run con inyección de credenciales sensibles desde Secret Manager (`DATABASE_URL`, `SECRET_KEY`), autoescalado de 0 a 10 instancias y soporte de almacenamiento en GCS.
+- **Verificación Integral en Docker, Endpoints y Flujos de Negocio (AV-0055):**
+  - **Compilación de Imagen Oficial:** Generación limpia de `backend-taller-narbus:test` sobre runtime Python 3.12-slim con dependencias completadas en `requirements.txt` (`httpx`, `bcrypt`, `PyJWT`) y sanitización de saltos de línea Windows (`\r\n` a `\n`) mediante `.gitattributes` y regla `sed` en `Dockerfile`.
+  - **Nivel 2 de Verificación Interna (Linux Container):** Ejecución de la suite completa de 88 pruebas unitarias, de integración y E2E dentro del contenedor Docker con PostgreSQL simulado, aprobando el 100% de los tests (`88 passed in 101.47s`).
+  - **Entorno Orquestado en Vivo (`docker-compose.test.yml`):** Levantamiento simultáneo de base de datos PostgreSQL 16 (`narbus-db-test`) y la API FastAPI (`narbus-api-test` en puerto 8000), con aplicación automática de las 8 migraciones de Alembic y siembra de 124 conductores en el arranque.
+  - **Verificación HTTP Exhaustiva de 42 Endpoints:** Ejecución de `scripts/run_docker_verification.py` realizando peticiones HTTP reales contra el contenedor en vivo:
+    - **Módulo 0:** Health checks (`/`, `/health`, `/health/db` conectado a PostgreSQL).
+    - **Módulo 1:** Autenticación JWT completa (login chofer, mecánico, supervisor, admin, registro, `/me`, listado de usuarios).
+    - **Módulo 2:** Catálogo de flota y búsqueda de buses por patente y número interno, más cambio de estado de taller.
+    - **Módulo 3:** Inspección de neumáticos con payload multipart/form-data y evidencia binaria fotográfica.
+    - **Módulo 4:** Ciclo de mantención completo (20 endpoints: creación, toma de orden, adición de averías, asignación de colaboradores, autoasignación, checklist preventivo, término de avance, entrega de turno a `PENDIENTE_REASIGNACION`, retoma, finalización y liberación de bus con historial inmutable).
+    - **Módulo 5:** Dashboard analítico de supervisión, KPIs y auditoría con consulta CTE consolidada y filtros dinámicos.
+    - **Módulo 6:** Manejo centralizado de excepciones (401 sin token, 401 token corrupto, 403 roles no autorizados, 404 bajo esquema `NarbusException`, 422 `ValidationError` con esquemas DTO).
+  - **Resultado Global:** 56 de 56 aserciones aprobadas al 100% en 3.70 segundos contra el contenedor Docker.
+

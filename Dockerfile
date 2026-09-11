@@ -27,6 +27,7 @@ COPY . .
 
 # Asegurar la existencia de directorios y permisos de ejecución del entrypoint
 RUN mkdir -p uploads/solicitudes uploads/evidencias && \
+    sed -i 's/\r$//' /app/docker-entrypoint.sh && \
     chmod +x /app/docker-entrypoint.sh
 
 # Exponer el puerto por defecto (Cloud Run inyecta la variable $PORT)

@@ -557,7 +557,7 @@ class MantencionRepository:
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
                     FROM taller_solicitudes s
                     WHERE s.estado IN ('REPORTADO', 'PENDIENTE', 'PENDIENTE_REASIGNACION')
-                    ORDER BY s.fecha_creacion ASC
+                    ORDER BY s.id DESC, s.fecha_creacion DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 asigs_por_detalle AS (
@@ -663,7 +663,7 @@ class MantencionRepository:
                 LEFT JOIN usuarios mc ON mc.id = fs.mecanico_cierre_id
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
-                ORDER BY fs.fecha_creacion ASC
+                ORDER BY fs.id DESC, fs.fecha_creacion DESC
             """)
             res = await db.execute(sql, {"limit": limit or 50, "skip": skip or 0})
             return [dict(r) for r in res.mappings().all()]
@@ -672,7 +672,7 @@ class MantencionRepository:
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]))
-            .order_by(TallerSolicitud.fecha_creacion.asc())
+            .order_by(TallerSolicitud.id.desc(), TallerSolicitud.fecha_creacion.desc())
             .options(
                 joinedload(TallerSolicitud.bus),
                 joinedload(TallerSolicitud.creador),

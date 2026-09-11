@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 55,
+  "id": "AV-0055",
+  "timestamp": "2026-09-11T01:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "DOCKER-VALIDATION",
+    "name": "Verificación Integral de Docker, Endpoints y Flujos Operacionales",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Compilación exitosa de la imagen oficial Docker en Python 3.12-slim, superación del 100% de la suite interna (88/88 tests unitarios, de integración y e2e en Linux), despliegue orquestado con docker-compose.test.yml (FastAPI + PostgreSQL 16 con migraciones automáticas) y comprobación HTTP exhaustiva de 42 endpoints y 5 flujos operacionales con 56/56 aserciones aprobadas.",
+  "scope": {
+    "planned": [
+      "Comprobar compilación limpia de la imagen Docker de backend",
+      "Garantizar compatibilidad de scripts shell en contenedores Linux desde entorno de desarrollo Windows (CRLF vs LF)",
+      "Ejecutar suite completa de tests dentro del contenedor Docker",
+      "Desplegar entorno de integración efímero con PostgreSQL 16 y aplicar migraciones Alembic",
+      "Comprobar cada endpoint y flujo operacional de negocio en vivo contra Docker",
+      "Verificar manejo centralizado de excepciones (401, 403, 404 NarbusException, 422 ValidationError) en Docker"
+    ],
+    "completed": [
+      "Se actualizó Dockerfile con sanitización sed para saltos de línea y se creó .gitattributes para forzar eol=lf en scripts shell",
+      "Se completaron las dependencias esenciales en requirements.txt agregando httpx, bcrypt y PyJWT",
+      "Compilación exitosa de la imagen backend-taller-narbus:test",
+      "Nivel 2 de verificación aprobado: 88 de 88 pruebas unitarias, de integración y E2E aprobadas en Linux en 101.47s",
+      "Despliegue de docker-compose.test.yml conectando FastAPI con PostgreSQL 16, ejecutando migraciones 001 a 008 y siembra de 124 conductores en el arranque",
+      "Implementación y ejecución del script scripts/run_docker_verification.py validando 42 endpoints HTTP con 56 aserciones aprobadas al 100% en 3.70s",
+      "Validación de los 5 flujos de negocio: Autenticación multi-rol, Catálogo y cambio de estado de Buses, Reportes de Neumáticos multipart con imagen PNG, Ciclo integral de Mantención (20 endpoints desde creación hasta liberación de bus e historial inmutable) y Supervisión analítica con CTE",
+      "Limpieza completa y liberación de recursos y volúmenes tras finalizar las pruebas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones en el código fuente de frontend (repositorio separado)",
+      "Despliegue a infraestructura de nube de producción (tarea cubierta en hito de CI/CD)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "Dockerfile",
+      "action": "modified",
+      "summary": "Incorporación de 'sed -i s/\r$//' para normalizar docker-entrypoint.sh a saltos de línea LF ante builds desde hosts Windows."
+    },
+    {
+      "path": "requirements.txt",
+      "action": "modified",
+      "summary": "Adición de dependencias faltantes httpx>=0.27.0, bcrypt>=4.0.0 y PyJWT>=2.8.0 requeridas en tiempo de ejecución de contenedor."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Documentación viva actualizada con el hito AV-0055 de verificación integral en Docker y reporte de endpoints."
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Plantilla integral de variables de entorno documentada con descripciones exhaustivas de cada parámetro y política de orígenes CORS."
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Flexibilización de BACKEND_CORS_ORIGINS para soportar strings separados por comas y listas JSON sin errores de parseo en pydantic-settings."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Actualización del ordenamiento predeterminado de list_pendientes a DESC (s.id DESC, s.fecha_creacion DESC) en CTE nativa y fallback ORM para priorizar las OTs más recientes."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-055-01",
+      "title": "Sanitización automática de scripts shell en el Dockerfile",
+      "rationale": "En estaciones de trabajo con sistema operativo Windows, Git puede clonar scripts de shell con saltos de línea CRLF (\r\n), provocando el error '/bin/sh^M: bad interpreter' al intentar ejecutar el entrypoint en contenedores basados en Linux (Debian/Alpine). Se aplicó una doble defensa: regla .gitattributes (*.sh text eol=lf) y sanitización con sed dentro de la capa Docker.",
+      "consequences": "La imagen Docker compila y corre de forma 100% determinística y agnóstica del sistema operativo anfitrión (Windows, macOS o Linux)."
+    },
+    {
+      "id": "DEC-055-02",
+      "title": "Inclusión explícita de dependencias core en requirements.txt",
+      "rationale": "Librerías como httpx (usada por TestClient y verificaciones asíncronas), bcrypt y PyJWT estaban presentes en los entornos virtuales locales pero omitidas del requirements.txt del repositorio. Su ausencia provocaba ModuleNotFoundError en la imagen slim de Docker.",
+      "consequences": "El archivo requirements.txt refleja con fidelidad el grafo de dependencias de producción y pruebas del backend."
+    },
+    {
+      "id": "DEC-055-03",
+      "title": "Verificación de dos niveles (Unit/Integration interna + Live Endpoints HTTP)",
+      "rationale": "Para garantizar que no existan discrepancias entre el entorno local y el contenedor, se ejecutó tanto la suite completa de pytest con PostgreSQL simulado dentro de la imagen, como un verificador HTTP real sobre el contenedor corriendo con PostgreSQL 16 y migraciones reales.",
+      "consequences": "Certeza absoluta de que la aplicación compila, levanta la base de datos, ejecuta migraciones y responde correctamente ante clientes HTTP reales."
+    }
+  ],
+  "verification": [
+    {
+      "command": "docker build -t backend-taller-narbus:test .",
+      "result": "passed",
+      "evidence": "Imagen oficial construida limpiamente sin advertencias críticas en Python 3.12-slim."
+    },
+    {
+      "command": "docker run --rm -v tests:/app/tests backend-taller-narbus:test pytest -v",
+      "result": "passed",
+      "evidence": "88 passed, 1 warning en 101.47s dentro del contenedor Linux."
+    },
+    {
+      "command": "python -u scripts/run_docker_verification.py --base-url http://127.0.0.1:8000",
+      "result": "passed",
+      "evidence": "56/56 aserciones exitosas, 0 fallos, 42 endpoints HTTP comprobados en 3.70s."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integración a develop siguiendo GitFlow y preparación para despliegue Cloud Run.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/docker-testing-and-validation",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Los contenedores efímeros de prueba fueron apagados y removidos limpiamente al finalizar la verificación."
+  ]
+}

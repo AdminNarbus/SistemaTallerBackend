@@ -55,6 +55,22 @@ class Settings(BaseSettings):
 
     CORS_ORIGIN_REGEX: Optional[str] = None
 
+    @field_validator("PROJECT_NAME", "VERSION", mode="before")
+    @classmethod
+    def clean_quoted_strings(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip("\"'").strip()
+        return v
+
+    @field_validator("API_V1_STR", mode="before")
+    @classmethod
+    def clean_api_v1_str(cls, v: str) -> str:
+        if isinstance(v, str):
+            v = v.strip("\"'").strip()
+            if not v.startswith("/"):
+                v = f"/{v}"
+        return v
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

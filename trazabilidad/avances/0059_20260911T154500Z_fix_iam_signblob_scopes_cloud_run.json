@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 59,
+  "id": "AV-0059",
+  "timestamp": "2026-09-11T15:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "GCS-PRIV-2",
+    "name": "Corrección de Scopes de Autenticación IAM signBlob en Cloud Run",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Resolución del fallo ACCESS_TOKEN_SCOPE_INSUFFICIENT (HTTP 403 en signBytes / signBlob) en Google Cloud Run al generar Signed URLs v4 para Google Cloud Storage. Se configuró ClientOptions con el alcance 'https://www.googleapis.com/auth/cloud-platform' y se implementó la función auxiliar _get_iam_access_token para garantizar que las credenciales ADC de Cloud Run contengan el scope global necesario para invocar la API IAM Credentials.",
+  "scope": {
+    "planned": [
+      "Diagnosticar causa raíz del error HTTP 403 devuelto por IAM signBytes en Cloud Run",
+      "Configurar scope cloud-platform en la inicialización de storage.Client vía ClientOptions",
+      "Implementar _get_iam_access_token con consulta a metadata server y fallback a credenciales refrescadas con scope cloud-platform",
+      "Validar suite de pruebas unitarias de almacenamiento (11 de 11 pasando)"
+    ],
+    "completed": [
+      "Diagnosticar causa raíz del error HTTP 403 devuelto por IAM signBytes en Cloud Run",
+      "Configurar scope cloud-platform en la inicialización de storage.Client vía ClientOptions",
+      "Implementar _get_iam_access_token con consulta a metadata server y fallback a credenciales refrescadas con scope cloud-platform",
+      "Validar suite de pruebas unitarias de almacenamiento (11 de 11 pasando)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/core/storage/gcs_provider.py",
+      "action": "modified",
+      "summary": "Incorporado ClientOptions(scopes=['https://www.googleapis.com/auth/cloud-platform', ...]) en la inicialización del cliente GCS e implementada función _get_iam_access_token para resolver tokens con scope suficiente para IAM signBlob."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0062",
+      "title": "Configuración explícita del scope cloud-platform para llamadas IAM signBlob desde Cloud Run",
+      "rationale": "Por defecto, google-cloud-storage inicializa Application Default Credentials limitando los scopes OAuth2 exclusivamente a 'devstorage.*'. Al invocar internamente la API iamcredentials.googleapis.com para firmar el blob de forma delegada, Google IAM rechaza la solicitud con ACCESS_TOKEN_SCOPE_INSUFFICIENT (HTTP 403). Al solicitar el scope 'https://www.googleapis.com/auth/cloud-platform', el token emitido por el metadata server cuenta con privilegios válidos tanto para operaciones de Storage como para la firma criptográfica en IAM.",
+      "consequences": "Las Signed URLs v4 se generan exitosamente en Cloud Run sin requerir claves privadas JSON en disco y sin caer al fallback de URL estándar no firmada."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_storage_service.py",
+      "result": "passed",
+      "evidence": "11 passed in 0.40s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar a main y desplegar en Cloud Run para verificar que el frontend renderice las fotos firmadas.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "No se exponen credenciales ni correos sensibles en código ni historial de Git.",
+    "El flujo es totalmente compatible con entornos locales offline mediante LocalStorageProvider."
+  ]
+}

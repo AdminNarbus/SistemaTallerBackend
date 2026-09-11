@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import logging
 import os
 import time
@@ -83,6 +84,38 @@ def _resolve_service_account_email(credentials) -> Optional[str]:
     return cred_email
 
 
+def _get_iam_access_token(credentials) -> Optional[str]:
+    """
+    Obtiene un access token OAuth2 que incluya el scope necesario para llamar a la API
+    de IAM Credentials (IAM signBlob) desde Cloud Run: 'https://www.googleapis.com/auth/cloud-platform'.
+    Si el token por defecto sólo tiene scopes de Cloud Storage ('devstorage.*'),
+    la API de IAM rechaza la firma con error ACCESS_TOKEN_SCOPE_INSUFFICIENT.
+    """
+    # 1. Intentar consultar directamente el metadata server de Cloud Run con el scope cloud-platform
+    try:
+        url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=https://www.googleapis.com/auth/cloud-platform"
+        req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            token = data.get("access_token")
+            if token:
+                logger.debug("[STORAGE_GCS] Token con scope 'cloud-platform' obtenido desde metadata server.")
+                return token
+    except Exception as me:
+        logger.debug("[STORAGE_GCS] No se pudo obtener token con scope desde metadata server: %s", me)
+
+    # 2. Si credentials es de Compute Engine / ADC, configurar scopes antes de refrescar
+    if hasattr(credentials, "_scopes"):
+        credentials._scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
+    from google.auth.transport import requests as auth_requests
+    auth_req = auth_requests.Request()
+    if not hasattr(credentials, "valid") or not credentials.valid:
+        credentials.refresh(auth_req)
+
+    return getattr(credentials, "token", None)
+
+
 def _sync_generate_signed_url(
     client: storage.Client,
     bucket_name: str,
@@ -108,14 +141,9 @@ def _sync_generate_signed_url(
         )
 
     # Caso 2: Cloud Run / ADC sin clave privada local.
-    # Refrescar credenciales si es necesario para asegurar token de acceso vigente
-    from google.auth.transport import requests as auth_requests
-    auth_req = auth_requests.Request()
-    if not hasattr(credentials, "valid") or not credentials.valid:
-        credentials.refresh(auth_req)
-
+    # Obtener token con scope requerido para IAM signBlob ('cloud-platform')
+    token = _get_iam_access_token(credentials)
     sa_email = _resolve_service_account_email(credentials)
-    token = getattr(credentials, "token", None)
 
     return blob.generate_signed_url(
         version="v4",
@@ -152,19 +180,26 @@ class GCSStorageProvider(BaseStorageProvider):
 
         # Inicialización del cliente de Google Cloud Storage
         try:
+            from google.api_core.client_options import ClientOptions
+            gcs_scopes = [
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/devstorage.full_control",
+            ]
+            client_options = ClientOptions(scopes=gcs_scopes)
+
             if credentials_file and os.path.exists(credentials_file):
                 logger.info(
                     "[STORAGE_GCS] Inicializando cliente con archivo de credenciales: '%s'",
                     credentials_file,
                 )
                 self.client = storage.Client.from_service_account_json(
-                    credentials_file, project=project_id
+                    credentials_file, project=project_id, client_options=client_options
                 )
             else:
                 logger.info(
                     "[STORAGE_GCS] Inicializando cliente con Application Default Credentials (ADC)..."
                 )
-                self.client = storage.Client(project=project_id)
+                self.client = storage.Client(project=project_id, client_options=client_options)
         except Exception as e:
             logger.error(
                 "[STORAGE_GCS] Error al inicializar cliente de Google Cloud Storage: %s",

@@ -10,6 +10,7 @@ Los handlers se registran en app/main.py vía app.add_exception_handler().
 """
 import logging
 import re
+from typing import Any, Dict, Optional
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -31,7 +32,7 @@ class NarbusException(Exception):
     status_code: int = 500
     error_code: str = "INTERNAL_ERROR"
 
-    def __init__(self, message: str, detail=None):
+    def __init__(self, message: str, detail: Optional[Any] = None):
         self.message = message
         self.detail = detail
         super().__init__(message)
@@ -54,7 +55,7 @@ class BusinessRuleException(NarbusException):
     status_code = 422
     error_code = "BUSINESS_RULE_VIOLATION"
 
-    def __init__(self, message: str, detail=None, status_code: int = None):
+    def __init__(self, message: str, detail: Optional[Any] = None, status_code: Optional[int] = None):
         super().__init__(message, detail)
         if status_code is not None:
             self.status_code = status_code
@@ -76,7 +77,7 @@ class AuthenticationException(NarbusException):
 # Formato de respuesta de error unificado
 # ─────────────────────────────────────────────────────────
 
-def _error_body(code: str, message: str, detail=None) -> dict:
+def _error_body(code: str, message: str, detail: Optional[Any] = None) -> Dict[str, Any]:
     """Construye el cuerpo JSON de error estandarizado para toda la API."""
     return {
         "error": {
@@ -176,7 +177,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         for e in exc.errors()
     ]
     response = JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", status.HTTP_422_UNPROCESSABLE_ENTITY),
         content=_error_body(
             "VALIDATION_ERROR",
             "Error de validación en los datos enviados.",
@@ -207,3 +208,18 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         ),
     )
     return _apply_cors_headers(request, response)
+
+
+__all__ = [
+    "NarbusException",
+    "NotFoundException",
+    "ConflictException",
+    "BusinessRuleException",
+    "PermissionException",
+    "AuthenticationException",
+    "narbus_exception_handler",
+    "http_exception_handler",
+    "validation_exception_handler",
+    "generic_exception_handler",
+]
+

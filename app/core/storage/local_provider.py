@@ -3,6 +3,8 @@ import logging
 import os
 import shutil
 from typing import BinaryIO, Optional, Union
+
+from app.core.config import settings
 from app.core.storage.base import BaseStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,20 @@ def _delete_file_from_disk(full_path: str) -> bool:
         return False
 
 
+def _extract_relative_upload_path(file_url: str) -> Optional[str]:
+    """Extrae el path relativo normalizado para almacenamiento local desde una URL o ruta previa."""
+    if not file_url:
+        return None
+    if "/uploads/" in file_url:
+        return file_url.split("/uploads/", 1)[1].strip("/\\")
+    if "storage.googleapis.com/" in file_url:
+        parts = file_url.split("storage.googleapis.com/", 1)[1].strip("/\\").split("/", 1)
+        return parts[1] if len(parts) > 1 else parts[0]
+    if not file_url.startswith("http://") and not file_url.startswith("https://"):
+        return file_url.strip("/\\")
+    return None
+
+
 class LocalStorageProvider(BaseStorageProvider):
     """
     Proveedor de almacenamiento local en disco y volúmenes Cloud Run.
@@ -39,10 +55,8 @@ class LocalStorageProvider(BaseStorageProvider):
     """
 
     def __init__(self, base_directory: Optional[str] = None):
-        if base_directory is None:
-            from app.core.config import settings
-            base_directory = getattr(settings, "UPLOAD_DIR", "uploads")
-        self.base_directory = os.path.abspath(base_directory)
+        target_dir = base_directory or getattr(settings, "UPLOAD_DIR", "uploads")
+        self.base_directory = os.path.abspath(target_dir)
         os.makedirs(self.base_directory, exist_ok=True)
 
     async def upload_file(
@@ -70,19 +84,7 @@ class LocalStorageProvider(BaseStorageProvider):
         return relative_url
 
     async def delete_file(self, file_url: str) -> bool:
-        if not file_url:
-            return False
-
-        relative_path: Optional[str] = None
-        if "/uploads/" in file_url:
-            relative_path = file_url.split("/uploads/", 1)[1].strip("/\\")
-        elif "storage.googleapis.com/" in file_url:
-            # Compatibilidad retroactiva con URLs previas de Google Cloud Storage
-            parts = file_url.split("storage.googleapis.com/", 1)[1].strip("/\\").split("/", 1)
-            relative_path = parts[1] if len(parts) > 1 else parts[0]
-        elif not file_url.startswith("http://") and not file_url.startswith("https://"):
-            relative_path = file_url.strip("/\\")
-
+        relative_path = _extract_relative_upload_path(file_url)
         if not relative_path:
             return False
 
@@ -106,3 +108,4 @@ class LocalStorageProvider(BaseStorageProvider):
         return f"/uploads/{clean_rel}"
 
 
+__all__ = ["LocalStorageProvider"]

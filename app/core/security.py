@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Union
+from typing import Optional, Union
+
 import bcrypt
 import jwt
 
@@ -12,7 +13,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(
             plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
-    except Exception:
+    except (ValueError, TypeError):
         return False
 
 
@@ -24,11 +25,9 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(
-    subject: Union[str, int, Any], expires_delta: Optional[timedelta] = None
+    subject: Union[str, int], expires_delta: Optional[timedelta] = None
 ) -> str:
-    """
-    Crea un token JWT firmado de acceso para el usuario.
-    """
+    """Crea un token JWT firmado de acceso para el usuario."""
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -41,3 +40,11 @@ def create_access_token(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     return encoded_jwt
+
+
+__all__ = [
+    "verify_password",
+    "get_password_hash",
+    "create_access_token",
+]
+

@@ -1,14 +1,25 @@
+import json
 import os
 from enum import Enum
-from typing import List, Union, Optional
+from typing import Final, List, Optional, Union
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24  # 24 horas por defecto
+DEFAULT_MAX_UPLOAD_SIZE_BYTES: Final[int] = 10 * 1024 * 1024  # 10 MB
+DEFAULT_SIGNED_URL_EXPIRATION_MINUTES: Final[int] = 60
 
 
 class AppEnvironment(str, Enum):
     DEV_LOCAL = "dev_local"
     DEV_LAN = "dev_lan"
     PRODUCTION = "production"
+
+
+class StorageProviderType(str, Enum):
+    LOCAL = "local"
+    GCS = "gcs"
 
 
 class Settings(BaseSettings):
@@ -26,7 +37,7 @@ class Settings(BaseSettings):
     # JWT Security Settings
     SECRET_KEY: str = "narbus_secret_key_taller_2026_super_secure_jwt_token_change_in_prod"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas por defecto
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
 
     # PostgreSQL Database Settings
     POSTGRES_SERVER: str = "localhost"
@@ -38,14 +49,14 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
 
     # Storage / Cloud Storage Settings (Bucket Privado con Signed URLs o Local)
-    STORAGE_PROVIDER: str = "local"  # "local" (desarrollo local offline) o "gcs" (Cloud Run producción con Signed URLs)
+    STORAGE_PROVIDER: Union[StorageProviderType, str] = StorageProviderType.LOCAL  # "local" o "gcs"
     UPLOAD_DIR: str = "uploads"  # Ruta local de almacenamiento fallback
     GCS_BUCKET_NAME: Optional[str] = "narbus-taller-media"
     GCS_PROJECT_ID: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
-    GCS_SIGNED_URL_EXPIRATION_MINUTES: int = 60  # Duración de validez de Signed URLs
+    GCS_SIGNED_URL_EXPIRATION_MINUTES: int = DEFAULT_SIGNED_URL_EXPIRATION_MINUTES  # Duración de validez de Signed URLs
     GCS_SERVICE_ACCOUNT_EMAIL: Optional[str] = None  # Service account email para firma de blobs con ADC
-    MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+    MAX_UPLOAD_SIZE_BYTES: int = DEFAULT_MAX_UPLOAD_SIZE_BYTES
 
     # CORS Settings
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
@@ -79,15 +90,14 @@ class Settings(BaseSettings):
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
-                import json
                 try:
                     return json.loads(v)
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     pass
             return [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, (list, set, tuple)):
             return list(v)
-        raise ValueError(v)
+        raise ValueError(f"Formato no válido para orígenes CORS: {v}")
 
     @property
     def server_host(self) -> str:
@@ -165,3 +175,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+__all__ = [
+    "AppEnvironment",
+    "StorageProviderType",
+    "Settings",
+    "settings",
+    "DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES",
+    "DEFAULT_MAX_UPLOAD_SIZE_BYTES",
+    "DEFAULT_SIGNED_URL_EXPIRATION_MINUTES",
+]

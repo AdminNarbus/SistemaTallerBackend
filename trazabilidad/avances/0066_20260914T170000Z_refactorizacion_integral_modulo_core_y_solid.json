@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 66,
+  "id": "AV-0066",
+  "timestamp": "2026-09-14T17:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CORE-REFACTOR-1",
+    "name": "Refactorización Integral de Arquitectura Limpia, Principios SOLID y Calidad en Módulo Core",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Auditoría técnica exhaustiva y refactorización integral de la carpeta app/core en estricto cumplimiento con AGENTS.md, BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, BUENAS_PRACTICAS_CODIGO.md y BUENAS_PRACTICAS_BD.md. Se descompuso la función monolítica de 223 líneas en seed.py bajo el patrón Coordinador vs. Especialistas con funciones atómicas de 10-25 líneas y manejo explícito de rollback en transacciones; se refactorizó setup_logging en logging_config.py separando la construcción de handlers de consola, archivo rotatorio y configuración de librerías externas con constantes con nombre; se introdujo StorageUploadResultDTO en storage/dtos.py garantizando cumplimiento de la Regla 2 (DTOs obligatorios) con interfaz dual retrocompatible (acceso por atributo y por diccionario); se tipó STORAGE_PROVIDER mediante la enumeración StorageProviderType en config.py y se erradicaron capturas genéricas silenciosas 'except Exception: pass'; se aislaron parámetros de pool de base de datos en database.py mediante constantes Final[int]; se refinó verify_password en security.py para capturar específicamente (ValueError, TypeError); se definieron exportaciones explícitas __all__ en la totalidad de los módulos de app/core; y se implementó una suite completa de pruebas unitarias puras AAA en test_core_module.py, alcanzando 143 de 143 tests verdes en la suite del backend (100% de éxito).",
+  "scope": {
+    "planned": [
+      "Auditar todos los archivos de app/core frente a principios SOLID, Clean Code y estándares backend",
+      "Crear y activar la rama GitFlow feature/refactor-modulo-core desde develop",
+      "Refactorizar app/core/config.py agregando StorageProviderType, eliminando except Exception pass y organizando imports",
+      "Aislar constantes con nombre Final[int] para el pool de conexiones en app/core/database.py y simplificar get_db",
+      "Tipar exhaustivamente app/core/exceptions.py y actualizar código HTTP 422 para Starlette",
+      "Refactorizar setup_logging en app/core/logging_config.py bajo patrón Coordinador vs. Especialistas con constantes",
+      "Refinar manejo de excepciones en verify_password de app/core/security.py y tipar create_access_token",
+      "Descomponer seed_initial_data en app/core/seed.py en 7 subfunciones atómicas con constantes de datasets y rollback seguro",
+      "Exportar ambos datasets oficiales en app/core/seeds/__init__.py",
+      "Crear app/core/storage/dtos.py con StorageUploadResultDTO de interfaz dual retrocompatible",
+      "Refactorizar app/core/storage/local_provider.py aislando _extract_relative_upload_path y ordenando imports",
+      "Refactorizar app/core/storage/gcs_provider.py aislando constantes de holgura de caché y ordenando imports",
+      "Refactorizar app/core/storage/storage_service.py aislando _validate_image_file y retornando StorageUploadResultDTO",
+      "Definir __all__ explícito en todos los módulos de app/core",
+      "Crear tests/unit/test_core_module.py con cobertura pura AAA para DTOs, seguridad, normalización y logging",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md reflejando el módulo Core auditado y refactorizado",
+      "Verificar que la suite completa pase al 100% (143/143 tests verdes)"
+    ],
+    "completed": [
+      "Auditar todos los archivos de app/core frente a principios SOLID, Clean Code y estándares backend",
+      "Crear y activar la rama GitFlow feature/refactor-modulo-core desde develop",
+      "Refactorizar app/core/config.py agregando StorageProviderType, eliminando except Exception pass y organizando imports",
+      "Aislar constantes con nombre Final[int] para el pool de conexiones en app/core/database.py y simplificar get_db",
+      "Tipar exhaustivamente app/core/exceptions.py y actualizar código HTTP 422 para Starlette",
+      "Refactorizar setup_logging en app/core/logging_config.py bajo patrón Coordinador vs. Especialistas con constantes",
+      "Refinar manejo de excepciones en verify_password de app/core/security.py y tipar create_access_token",
+      "Descomponer seed_initial_data en app/core/seed.py en 7 subfunciones atómicas con constantes de datasets y rollback seguro",
+      "Exportar ambos datasets oficiales en app/core/seeds/__init__.py",
+      "Crear app/core/storage/dtos.py con StorageUploadResultDTO de interfaz dual retrocompatible",
+      "Refactorizar app/core/storage/local_provider.py aislando _extract_relative_upload_path y ordenando imports",
+      "Refactorizar app/core/storage/gcs_provider.py aislando constantes de holgura de caché y ordenando imports",
+      "Refactorizar app/core/storage/storage_service.py aislando _validate_image_file y retornando StorageUploadResultDTO",
+      "Definir __all__ explícito en todos los módulos de app/core",
+      "Crear tests/unit/test_core_module.py con cobertura pura AAA para DTOs, seguridad, normalización y logging",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md reflejando el módulo Core auditado y refactorizado",
+      "Verificar que la suite completa pase al 100% (143/143 tests verdes)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/core/base.py",
+      "action": "modified",
+      "summary": "Exportación canónica de Base y TimestampMixin mediante __all__."
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Incorporación de StorageProviderType(str, Enum), organización canónica de imports con json a nivel de módulo, eliminación de except Exception: pass en assemble_cors_origins reemplazado por captura específica (json.JSONDecodeError, TypeError, ValueError), constantes con nombre para timeouts y expiraciones, y exportación explícita con __all__."
+    },
+    {
+      "path": "app/core/database.py",
+      "action": "modified",
+      "summary": "Aislamiento de números mágicos de configuración del pool en constantes Final[int] (DEFAULT_DB_POOL_SIZE, DEFAULT_DB_MAX_OVERFLOW, DEFAULT_DB_POOL_RECYCLE_SECONDS, DEFAULT_DB_POOL_TIMEOUT_SECONDS), simplificación de get_db aprovechando el context manager asíncrono de sesión, y exportación con __all__."
+    },
+    {
+      "path": "app/core/exceptions.py",
+      "action": "modified",
+      "summary": "Tipado fuerte en constructores de excepciones (detail: Optional[Any], status_code: Optional[int]), tipado de retorno Dict[str, Any] en _error_body, uso de HTTP_422_UNPROCESSABLE_CONTENT, y exportación canónica mediante __all__."
+    },
+    {
+      "path": "app/core/logging_config.py",
+      "action": "modified",
+      "summary": "Refactorización de setup_logging bajo el patrón Coordinador vs. Especialistas (_build_console_handler, _build_file_handler, _configure_external_loggers), aislamiento de constantes Final (FMT_LOG, DATEFMT_LOG, LOG_MAX_BYTES, LOG_BACKUP_COUNT, LOG_FILENAME), reducción de función principal a 15 líneas y exportación con __all__."
+    },
+    {
+      "path": "app/core/security.py",
+      "action": "modified",
+      "summary": "Refinamiento de manejo de excepciones en verify_password capturando específicamente (ValueError, TypeError), simplificación de tipado de subject: Union[str, int] en create_access_token, y exportación con __all__."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Descomposición total de seed_initial_data (223 líneas) en funciones especializadas con SRP (_seed_usuarios, _seed_conductores, _seed_categorias_y_fallas, _seed_catalogo_buses, _seed_solicitudes_iniciales, _seed_reporte_neumatico, _seed_pauta_preventiva), aislamiento de datos estáticos en constantes de módulo en mayúsculas, incorporación de await db.rollback() ante fallos y exportación con __all__."
+    },
+    {
+      "path": "app/core/seeds/__init__.py",
+      "action": "modified",
+      "summary": "Exportación pública explícita de BUSES_DATASET y CONDUCTORES_DATASET en __all__."
+    },
+    {
+      "path": "app/core/storage/dtos.py",
+      "action": "created",
+      "summary": "Creación de StorageUploadResultDTO con validación Pydantic y soporte dual de acceso (atributo dto.url y diccionario dto['url'], dto.get('path'), 'url' in dto) para garantizar 100% de compatibilidad hacia atrás."
+    },
+    {
+      "path": "app/core/storage/base.py",
+      "action": "modified",
+      "summary": "Exportación canónica de BaseStorageProvider con __all__."
+    },
+    {
+      "path": "app/core/storage/local_provider.py",
+      "action": "modified",
+      "summary": "Reubicación de import de settings al inicio del archivo, extracción de función pura _extract_relative_upload_path para normalización de URLs, y exportación canónica mediante __all__."
+    },
+    {
+      "path": "app/core/storage/gcs_provider.py",
+      "action": "modified",
+      "summary": "Reubicación de imports ClientOptions y auth_requests al inicio del módulo, aislamiento de constante SIGNED_URL_CACHE_MARGIN_SECONDS: Final[float] = 300.0, y exportación con __all__."
+    },
+    {
+      "path": "app/core/storage/storage_service.py",
+      "action": "modified",
+      "summary": "Aislamiento de función utilitaria pura _validate_image_file con guard clauses y fail-fast, reducción de upload_image a función coordinadora de 18 líneas retornando StorageUploadResultDTO tipado, reubicación de imports a nivel de módulo y exportación con __all__."
+    },
+    {
+      "path": "app/core/storage/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de StorageUploadResultDTO junto con los proveedores y servicios en __all__."
+    },
+    {
+      "path": "tests/unit/test_core_module.py",
+      "action": "created",
+      "summary": "Creación de suite de pruebas unitarias puras bajo patrón AAA cubriendo: acceso dual en StorageUploadResultDTO, verificación de contraseñas y hashes malformados en verify_password, generación de JWT en create_access_token, extracción y normalización de rutas de almacenamiento en _extract_relative_upload_path, validación de configuraciones CORS y enums en Settings, y construcción de handlers de logging."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0066-01",
+      "title": "Descomposición de seed.py bajo el patrón Coordinador vs. Especialistas",
+      "rationale": "La función seed_initial_data() contenía 223 líneas y 8 responsabilidades dispares (usuarios, conductores, categorías, fallas, buses, solicitudes, reportes de neumáticos, pauta preventiva) con imports inline tardíos y sin rollback. Se modularizó en 7 subfunciones independientes de 10-25 líneas cada una con constantes de catálogo aisladas en mayúsculas.",
+      "consequences": "Código altamente legible, mantenible, fácil de depurar paso a paso y protegido contra corrupciones de estado en la sesión mediante await db.rollback() si alguna etapa falla."
+    },
+    {
+      "id": "DEC-0066-02",
+      "title": "Introducción de StorageUploadResultDTO con Interfaz Dual Retrocompatible",
+      "rationale": "El método StorageService.upload_image() retornaba diccionarios genéricos dict, violando la regla 2 de AGENTS.md (obligatoriedad de DTOs tipados). Sin embargo, múltiples servicios y tests existentes accedían a las claves mediante corchetes resultado['url']. Para evitar regresiones masivas o quiebres de contratos, se creó un DTO Pydantic formal que implementa __getitem__, get y __contains__.",
+      "consequences": "Cumplimiento estricto del estándar de DTOs en el backend, tipado estricto en respuestas y 100% de compatibilidad hacia atrás tanto con código legacy como con nuevos consumidores tipados."
+    },
+    {
+      "id": "DEC-0066-03",
+      "title": "Aislamiento de Constantes Final y Erradicación de Números Mágicos en Base de Datos y Logging",
+      "rationale": "Parámetros críticos de infraestructura (tamaño y timeouts del pool de conexiones PostgreSQL, bytes máximos y respaldos de rotación de logs, margen de caché de signed URLs) estaban dispersos como literales numéricos sin nombre. Se declararon constantes Final[int] y Final[float] en SNAKE_CASE.",
+      "consequences": "Configuraciones predecibles, centralizadas y auditables según las directrices de Clean Code (BUENAS_PRACTICAS_CODIGO.md)."
+    },
+    {
+      "id": "DEC-0066-04",
+      "title": "Erradicación de 'except Exception: pass' y Tipado Fuerte de Proveedores",
+      "rationale": "El anti-patrón de capturar Exception genérica e ignorarla silenciosamente en assemble_cors_origins y verify_password ocultaba potenciales anomalías y violaba las directrices de robustez y fail-fast. Se refinó a capturas de tipos específicos de error ((json.JSONDecodeError, TypeError, ValueError) y (ValueError, TypeError)). Asimismo, se tipó STORAGE_PROVIDER con el Enum StorageProviderType.",
+      "consequences": "Diagnóstico claro y prevención de errores silenciosos o estados inconsistentes en tiempo de ejecución."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_core_module.py -v",
+      "result": "passed",
+      "evidence": "6 passed in 0.71s sin errores ni advertencias."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "143 passed, 1 warning (Starlette internal) in 54.99s. 100% de la suite de pruebas del backend exitosa."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar feature/refactor-modulo-core en develop mediante GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-modulo-core",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "La suite total de pruebas del backend se incrementó de 137 a 143 tests automatizados.",
+    "Todos los módulos de app/core cuentan ahora con especificación explícita de exportaciones __all__."
+  ]
+}

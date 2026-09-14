@@ -5,8 +5,10 @@ import logging
 import os
 import time
 import urllib.request
-from typing import BinaryIO, Dict, Optional, Tuple, Union
+from typing import BinaryIO, Dict, Final, Optional, Tuple, Union
+from google.api_core.client_options import ClientOptions
 from google.auth.credentials import Signing
+from google.auth.transport import requests as auth_requests
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
 
@@ -16,6 +18,7 @@ from app.core.storage.base import BaseStorageProvider
 
 logger = logging.getLogger(__name__)
 
+SIGNED_URL_CACHE_MARGIN_SECONDS: Final[float] = 300.0  # 5 minutos de holgura
 # Caché en memoria para Signed URLs: blob_name -> (expires_timestamp, signed_url)
 _SIGNED_URL_CACHE: Dict[str, Tuple[float, str]] = {}
 
@@ -104,11 +107,9 @@ def _get_iam_access_token(credentials) -> Optional[str]:
     except Exception as me:
         logger.debug("[STORAGE_GCS] No se pudo obtener token con scope desde metadata server: %s", me)
 
-    # 2. Si credentials es de Compute Engine / ADC, configurar scopes antes de refrescar
     if hasattr(credentials, "_scopes"):
         credentials._scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 
-    from google.auth.transport import requests as auth_requests
     auth_req = auth_requests.Request()
     if not hasattr(credentials, "valid") or not credentials.valid:
         credentials.refresh(auth_req)
@@ -180,7 +181,6 @@ class GCSStorageProvider(BaseStorageProvider):
 
         # Inicialización del cliente de Google Cloud Storage
         try:
-            from google.api_core.client_options import ClientOptions
             gcs_scopes = [
                 "https://www.googleapis.com/auth/cloud-platform",
                 "https://www.googleapis.com/auth/devstorage.full_control",
@@ -291,7 +291,7 @@ class GCSStorageProvider(BaseStorageProvider):
         cached = _SIGNED_URL_CACHE.get(blob_name)
         if cached:
             expires_at, signed_url = cached
-            if now < (expires_at - 300):
+            if now < (expires_at - SIGNED_URL_CACHE_MARGIN_SECONDS):
                 return signed_url
 
         try:
@@ -337,4 +337,7 @@ class GCSStorageProvider(BaseStorageProvider):
                 e,
             )
             return False
+
+
+__all__ = ["GCSStorageProvider", "SIGNED_URL_CACHE_MARGIN_SECONDS"]
 

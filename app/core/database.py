@@ -1,7 +1,12 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Final
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+
+DEFAULT_DB_POOL_SIZE: Final[int] = 10
+DEFAULT_DB_MAX_OVERFLOW: Final[int] = 20
+DEFAULT_DB_POOL_RECYCLE_SECONDS: Final[int] = 300
+DEFAULT_DB_POOL_TIMEOUT_SECONDS: Final[int] = 30
 
 engine_kwargs = {
     "echo": False,
@@ -11,10 +16,10 @@ engine_kwargs = {
 if "sqlite" not in settings.async_database_url:
     engine_kwargs.update(
         {
-            "pool_size": 10,
-            "max_overflow": 20,
-            "pool_recycle": 300,
-            "pool_timeout": 30,
+            "pool_size": DEFAULT_DB_POOL_SIZE,
+            "max_overflow": DEFAULT_DB_MAX_OVERFLOW,
+            "pool_recycle": DEFAULT_DB_POOL_RECYCLE_SECONDS,
+            "pool_timeout": DEFAULT_DB_POOL_TIMEOUT_SECONDS,
         }
     )
 
@@ -35,7 +40,16 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency that provides an async database session for FastAPI endpoints."""
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
+
+
+__all__ = [
+    "engine",
+    "AsyncSessionLocal",
+    "get_db",
+    "DEFAULT_DB_POOL_SIZE",
+    "DEFAULT_DB_MAX_OVERFLOW",
+    "DEFAULT_DB_POOL_RECYCLE_SECONDS",
+    "DEFAULT_DB_POOL_TIMEOUT_SECONDS",
+]
+

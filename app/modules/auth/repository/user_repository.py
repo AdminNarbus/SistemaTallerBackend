@@ -1,9 +1,10 @@
 import logging
 from typing import Any, List, Optional
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.constants import RolUsuario, DEFAULT_PAGE_LIMIT
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
 
@@ -14,12 +15,14 @@ class UserRepository:
     """Repositorio para la gestión de persistencia y consultas de usuarios y roles."""
 
     async def get_or_create_rol(self, db: AsyncSession, nombre_rol: str) -> Rol:
-        """Busca o crea un rol en la tabla roles."""
+        """
+        [DEPRECADO] Busca o crea un rol en la tabla roles.
+        Usar get_rol_by_nombre; los roles deben ser estáticos y controlados por migraciones.
+        """
         rol_clean = (nombre_rol or "CONDUCTOR").upper().strip()
-        stmt = select(Rol).where(Rol.nombre == rol_clean)
-        res = await db.execute(stmt)
-        rol = res.scalar_one_or_none()
+        rol = await self.get_rol_by_nombre(db, rol_clean)
         if not rol:
+            logger.warning("[AUTH] Rol '%s' no encontrado; creándolo dinámicamente [DEPRECADO]", rol_clean)
             rol = Rol(nombre=rol_clean, descripcion=f"Rol de {rol_clean.capitalize()}")
             db.add(rol)
             await db.flush()
@@ -107,18 +110,21 @@ class UserRepository:
         self, db: AsyncSession, usuario_or_dto: Any
     ) -> Usuario:
         """
-        Persiste un usuario en la BD con flush atómico en sesión (sin commit).
-        Acepta una entidad Usuario ya configurada o un DTO UsuarioCreateDTO.
+        Persiste una entidad Usuario en la BD con flush atómico en sesión (sin commit).
+        Acepta una entidad Usuario ya configurada o un DTO UsuarioCreateDTO por retrocompatibilidad.
         """
         if isinstance(usuario_or_dto, Usuario):
             db.add(usuario_or_dto)
             await db.flush()
             return usuario_or_dto
 
-        # Soporte para UsuarioCreateDTO (retrocompatibilidad)
-        logger.debug("[AUTH] Creando usuario desde DTO | username='%s' | rol='%s'", usuario_or_dto.username, getattr(usuario_or_dto, "rol", None))
-        rol_obj = await self.get_or_create_rol(db, getattr(usuario_or_dto, "rol", None) or "CONDUCTOR")
-        
+        logger.warning("[AUTH] Invocación de user_repository.create con DTO en lugar de entidad Usuario [DEPRECADO]")
+        rol_nombre = getattr(usuario_or_dto, "rol", None)
+        rol_str = getattr(rol_nombre, "value", rol_nombre) or "CONDUCTOR"
+        rol_obj = await self.get_rol_by_nombre(db, rol_str)
+        if not rol_obj:
+            rol_obj = await self.get_or_create_rol(db, rol_str)
+
         pwd = getattr(usuario_or_dto, "password", "")
         if pwd.startswith("$2b$") or pwd.startswith("$2a$"):
             password_hash = pwd
@@ -137,16 +143,12 @@ class UserRepository:
         db_usuario.rol_rel = rol_obj
         db.add(db_usuario)
         await db.flush()
-        logger.info("[AUTH] Usuario registrado en sesión | id=%s | username='%s' | rol='%s'", db_usuario.id, db_usuario.username, rol_obj.nombre)
         return db_usuario
 
     async def desactivar(
         self, db: AsyncSession, user_or_id: Any
     ) -> Optional[Usuario]:
-        """
-        Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico.
-        Acepta tanto la entidad Usuario ya cargada como un user_id entero.
-        """
+        """Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico."""
         if isinstance(user_or_id, Usuario):
             user = user_or_id
         else:
@@ -164,32 +166,33 @@ class UserRepository:
         self, db: AsyncSession, username: str, password: str
     ) -> Optional[Usuario]:
         """
-        Valida credenciales contra la BD.
-        (Nota arquitectónica: La orquestación principal reside en AuthService;
-        este método se mantiene por compatibilidad en tests de repositorio).
+        [DEPRECADO] Valida credenciales contra la BD.
+        Se recomienda delegar la autenticación exclusivamente a AuthService.login().
         """
-        logger.debug("[AUTH] Intento de autenticación en repositorio | username='%s'", username)
         user = await self.get_by_username(db, username)
         if not user:
-            logger.warning("[AUTH] Autenticación fallida: usuario no existe | username='%s'", username)
             return None
         from app.core.security import verify_password
         if not verify_password(password, user.password_hash):
-            logger.warning("[AUTH] Autenticación fallida: contraseña incorrecta | username='%s'", username)
             return None
-        logger.info("[AUTH] Autenticación exitosa en repositorio | id=%s | username='%s'", user.id, username)
         return user
 
+    def _construir_filtro_mecanico_q(self, q: Optional[str]):
+        """Construye condición de búsqueda para mecánicos por término q."""
+        if not q or not q.strip():
+            return None
+        pattern = f"%{q.strip()}%"
+        return or_(
+            Usuario.username.ilike(pattern),
+            Usuario.nombre.ilike(pattern),
+            Usuario.apellido.ilike(pattern),
+            func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(pattern),
+        )
 
-    async def buscar_mecanicos(
-        self, db: AsyncSession, q: Optional[str] = None, exclude_id: Optional[int] = None
-    ) -> List[Usuario]:
-        """
-        Busca usuarios activos con rol MECÁNICO por nombre, apellido o username.
-        Si q está vacío o es None, retorna todos los mecánicos activos.
-        Si exclude_id se provee, ese usuario es excluido de los resultados (ej: el mecánico logueado).
-        """
-        from sqlalchemy import or_, and_, func
+    def _construir_stmt_mecanicos(
+        self, q: Optional[str] = None, exclude_id: Optional[int] = None
+    ):
+        """Construye sentencia SQL base para búsqueda de mecánicos activos."""
         stmt = (
             select(Usuario)
             .options(joinedload(Usuario.rol_rel))
@@ -197,60 +200,61 @@ class UserRepository:
             .where(
                 and_(
                     Usuario.is_active == True,
-                    Rol.nombre == "MECANICO",
+                    Rol.nombre == RolUsuario.MECANICO.value,
                 )
             )
         )
-        if q and q.strip():
-            pattern = f"%{q.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    Usuario.username.ilike(pattern),
-                    Usuario.nombre.ilike(pattern),
-                    Usuario.apellido.ilike(pattern),
-                    func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
-                )
-            )
+        filtro_q = self._construir_filtro_mecanico_q(q)
+        if filtro_q is not None:
+            stmt = stmt.where(filtro_q)
         if exclude_id:
             stmt = stmt.where(Usuario.id != exclude_id)
-        stmt = stmt.order_by(Usuario.nombre.asc(), Usuario.username.asc())
+        return stmt.order_by(Usuario.nombre.asc(), Usuario.username.asc())
+
+    async def buscar_mecanicos(
+        self,
+        db: AsyncSession,
+        q: Optional[str] = None,
+        exclude_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = DEFAULT_PAGE_LIMIT,
+    ) -> List[Usuario]:
+        """Busca usuarios activos con rol MECÁNICO con paginación y filtros opcionales."""
+        stmt = self._construir_stmt_mecanicos(q, exclude_id).offset(skip).limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
-    async def get_mecanicos_by_nombres_o_usernames(
-        self, db: AsyncSession, nombres: List[str]
-    ) -> List[Usuario]:
-        """
-        Dada una lista de nombres de usuario o nombres completos, resuelve los usuarios mecánicos correspondientes.
-        """
-        from sqlalchemy import or_, and_, func
-        if not nombres:
-            return []
-
+    def _construir_condiciones_mecanicos_nombres(self, nombres: List[str]):
+        """Construye condiciones OR de búsqueda para listado de nombres o usernames."""
         condiciones = []
         for item in nombres:
             clean = item.strip()
             if not clean:
                 continue
-            pattern = clean
-            pattern_like = f"%{clean}%"
             condiciones.extend([
-                Usuario.username.ilike(pattern),
-                Usuario.nombre.ilike(pattern),
-                func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern),
-                func.concat(func.coalesce(Usuario.nombre, ''), ' ', func.coalesce(Usuario.apellido, '')).ilike(pattern_like),
+                Usuario.username.ilike(clean),
+                Usuario.nombre.ilike(clean),
+                func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(clean),
+                func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(f"%{clean}%"),
             ])
+        return condiciones
 
+    async def get_mecanicos_by_nombres_o_usernames(
+        self, db: AsyncSession, nombres: List[str]
+    ) -> List[Usuario]:
+        """Dada una lista de nombres de usuario o nombres completos, resuelve los usuarios mecánicos correspondientes."""
+        condiciones = self._construir_condiciones_mecanicos_nombres(nombres or [])
         if not condiciones:
             return []
 
         stmt = (
             select(Usuario)
-            .join(Rol)
+            .options(joinedload(Usuario.rol_rel))
+            .join(Rol, Usuario.rol_id == Rol.id)
             .where(
                 and_(
                     Usuario.is_active == True,
-                    Rol.nombre == "MECANICO",
+                    Rol.nombre == RolUsuario.MECANICO.value,
                     or_(*condiciones),
                 )
             )

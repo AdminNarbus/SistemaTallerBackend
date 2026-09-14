@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -26,12 +26,12 @@ class Usuario(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     
     rol_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False
+        Integer, ForeignKey("roles.id", ondelete="RESTRICT"), index=True, nullable=False
     )
-    rol_rel: Mapped["Rol"] = relationship("Rol", lazy="selectin")
+    rol_rel: Mapped["Rol"] = relationship("Rol", back_populates="usuarios")
 
     is_active: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
+        Boolean, default=True, server_default=text("true"), nullable=False
     )
 
     created_at: Mapped[datetime] = mapped_column(

@@ -10,7 +10,7 @@ async def test_unauthorized_access_format(client):
 
     json_data = res.json()
     assert "error" in json_data
-    assert json_data["error"]["code"] == "HTTP_ERROR"
+    assert json_data["error"]["code"] == "UNAUTHORIZED"
 
 
 @pytest.mark.asyncio
@@ -19,7 +19,7 @@ async def test_forbidden_access_format(client, auth_headers_conductor, seed_test
     res = await client.get("/api/v1/supervision/auditoria/buses-taller", headers=auth_headers_conductor)
     assert res.status_code == 403
     json_data = res.json()
-    assert json_data["error"]["code"] == "HTTP_ERROR"
+    assert json_data["error"]["code"] == "FORBIDDEN"
     assert "Acceso denegado" in json_data["error"]["message"]
 
 

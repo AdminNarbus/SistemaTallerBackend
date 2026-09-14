@@ -1,7 +1,7 @@
 import json
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,9 +40,58 @@ from app.modules.mantencion.dtos import (
     ComentarioAddedDTO,
 )
 
+from app.modules.mantencion.constants import (
+    DEFAULT_PAGE_LIMIT,
+    DEFAULT_PAGE_SKIP,
+    MAX_PAGE_LIMIT,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mantencion", tags=["mantencion"])
+
+
+def _extraer_datos_multipart_solicitud(
+    form: Any,
+) -> tuple[SolicitudCreateDTO, Optional[Any], List[Any]]:
+    """Extrae y estructura los campos del formulario multipart y archivos adjuntos."""
+    n_bus = form.get("n_bus")
+    bus_id_val = form.get("bus_id")
+    bus_id = int(bus_id_val) if bus_id_val is not None and str(bus_id_val).isdigit() else None
+    bus_patente = form.get("bus_patente")
+    descripcion_general = form.get("descripcion_general")
+    foto_url = form.get("foto_url")
+
+    fotos_files: List[Any] = []
+    for key in ["fotos", "fotos[]", "evidencias", "evidencias[]", "foto", "evidencia"]:
+        items = form.getlist(key)
+        for item in items:
+            if hasattr(item, "filename") and item.filename and item not in fotos_files:
+                fotos_files.append(item)
+
+    foto_file = fotos_files[0] if fotos_files else None
+
+    detalles_raw = form.get("detalles")
+    detalles = None
+    if detalles_raw:
+        if isinstance(detalles_raw, str):
+            try:
+                detalles_list = json.loads(detalles_raw)
+                detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_list]
+            except Exception as e:
+                logger.warning("[MANTENCION] Error al parsear detalles JSON en multipart: %s", e)
+        elif isinstance(detalles_raw, list):
+            detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_raw]
+
+    dto = SolicitudCreateDTO(
+        n_bus=n_bus,
+        bus_id=bus_id,
+        bus_patente=bus_patente,
+        descripcion_general=descripcion_general,
+        foto_url=foto_url,
+        detalles=detalles,
+    )
+    return dto, foto_file, fotos_files
 
 
 @router.get("/pauta/items", response_model=List[PautaTallerItemDTO])
@@ -85,53 +134,17 @@ async def create_solicitud(
     Crea una nueva solicitud de mantención de taller.
     Soporta dos modalidades de consumo en 1 solo request HTTP:
     1. application/json: Envío estándar de SolicitudCreateDTO con foto_url (opcional).
-    2. multipart/form-data: Envío directo del formulario y el archivo fotográfico adjunto ('foto'),
-       subiendo automáticamente la imagen a Google Cloud Storage mediante el servicio interno sin requerir endpoints previos.
+    2. multipart/form-data: Envío directo del formulario y archivos fotográficos adjuntos ('foto'/'evidencias'),
+       subiendo automáticamente al almacenamiento configurado mediante el servicio interno.
     """
     content_type = request.headers.get("content-type", "").lower()
     foto_file = None
-    fotos_files = []
+    fotos_files: List[Any] = []
 
     try:
         if "multipart/form-data" in content_type:
             form = await request.form()
-            n_bus = form.get("n_bus")
-            bus_id_val = form.get("bus_id")
-            bus_id = int(bus_id_val) if bus_id_val is not None and str(bus_id_val).isdigit() else None
-            bus_patente = form.get("bus_patente")
-            descripcion_general = form.get("descripcion_general")
-            foto_url = form.get("foto_url")
-
-            # Extraer archivos adjuntos (soporte individual 'foto'/'evidencia' y múltiple 'fotos'/'fotos[]'/'evidencias')
-            for key in ["fotos", "fotos[]", "evidencias", "evidencias[]", "foto", "evidencia"]:
-                items = form.getlist(key)
-                for item in items:
-                    if hasattr(item, "filename") and item.filename and item not in fotos_files:
-                        fotos_files.append(item)
-
-            if fotos_files:
-                foto_file = fotos_files[0]
-
-            detalles_raw = form.get("detalles")
-            detalles = None
-            if detalles_raw:
-                if isinstance(detalles_raw, str):
-                    try:
-                        detalles_list = json.loads(detalles_raw)
-                        detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_list]
-                    except Exception as e:
-                        logger.warning("[MANTENCION] Error al parsear detalles JSON en multipart: %s", e)
-                elif isinstance(detalles_raw, list):
-                    detalles = [SolicitudDetalleCreateDTO(**d) for d in detalles_raw]
-
-            dto = SolicitudCreateDTO(
-                n_bus=n_bus,
-                bus_id=bus_id,
-                bus_patente=bus_patente,
-                descripcion_general=descripcion_general,
-                foto_url=foto_url,
-                detalles=detalles,
-            )
+            dto, foto_file, fotos_files = _extraer_datos_multipart_solicitud(form)
         else:
             body = await request.json()
             dto = SolicitudCreateDTO(**body)
@@ -157,8 +170,8 @@ async def create_solicitud(
 @router.get("/pendientes", response_model=List[SolicitudResumenDTO])
 async def list_pendientes(
     response: Response,
-    skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
-    limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
+    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
@@ -170,14 +183,15 @@ async def list_pendientes(
 @router.get("/mis-trabajos", response_model=List[SolicitudResumenDTO])
 async def list_mis_trabajos(
     response: Response,
-    skip: int = Query(0, ge=0, description="Número de solicitudes a omitir para paginación"),
-    limit: Optional[int] = Query(50, ge=1, le=100, description="Límite de solicitudes a retornar"),
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
+    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
     return await mantencion_service.list_mis_trabajos(db, mecanico_id=current_user.id, limit=limit, skip=skip)
+
 
 
 @router.get("/{id}", response_model=SolicitudDTO)

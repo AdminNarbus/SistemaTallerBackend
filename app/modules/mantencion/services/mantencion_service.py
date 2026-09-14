@@ -111,6 +111,17 @@ class MantencionService:
                 solicitud._mecanicos_nuevos = []
             solicitud._mecanicos_nuevos.append(mecanico)
 
+    def mapear_a_solicitud_dto(self, item: Any) -> Optional[SolicitudDTO]:
+        """
+        Mapea de forma segura un diccionario agregado (PostgreSQL JSON) o un modelo ORM (SQLite) a SolicitudDTO.
+        Punto de entrada público que encapsula las conversiones internas.
+        """
+        if item is None:
+            return None
+        if isinstance(item, dict):
+            return self._dict_to_solicitud_dto(item)
+        return self._to_solicitud_dto(item)
+
     def _to_solicitud_dto(self, sol) -> Optional[SolicitudDTO]:
         if not sol:
             return None

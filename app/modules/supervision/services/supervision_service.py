@@ -2,13 +2,24 @@ import logging
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
-from app.modules.supervision.repository import supervision_repository
+from app.modules.mantencion.services.mantencion_service import (
+    MantencionService,
+    mantencion_service,
+)
+from app.modules.mantencion.dtos.mantencion_dto import (
+    AsignarFallasSupervisoraDTO,
+    SolicitudDTO,
+)
+from app.modules.supervision.constants import (
+    DEFAULT_PAGE_SKIP,
+    DEFAULT_PAGE_LIMIT,
+)
+from app.modules.supervision.repository.supervision_repository import (
+    SupervisionRepository,
+    supervision_repository,
+)
 from app.modules.supervision.dtos import (
     ResumenTallerDTO,
-    MetricasEstadoDTO,
-    CategoriaFrecuenciaDTO,
     AlertaSupervisionDTO,
 )
 
@@ -18,7 +29,16 @@ logger = logging.getLogger(__name__)
 class SupervisionService:
     """
     Servicio de capa de negocio para telemetría, auditoría y análisis de rendimiento del taller.
+    Aplica Principio de Inversión de Dependencias (DIP) y desacoplamiento de capas.
     """
+
+    def __init__(
+        self,
+        repository: Optional[SupervisionRepository] = None,
+        mantencion_srv: Optional[MantencionService] = None,
+    ) -> None:
+        self.repo = repository or supervision_repository
+        self.mantencion = mantencion_srv or mantencion_service
 
     async def get_auditoria_solicitudes(
         self,
@@ -26,9 +46,10 @@ class SupervisionService:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
-        skip: int = 0,
-        limit: int = 50,
+        skip: int = DEFAULT_PAGE_SKIP,
+        limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[SolicitudDTO]:
+        """Obtiene la auditoría completa de solicitudes de taller aplicando filtros y paginación."""
         logger.info(
             "[SUPERVISION_SERVICE] Obteniendo auditoria de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
             n_bus,
@@ -37,22 +58,30 @@ class SupervisionService:
             skip,
             limit,
         )
-        solicitudes = await supervision_repository.get_auditoria(
-            db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre, skip=skip, limit=limit
+        solicitudes = await self.repo.get_auditoria(
+            db,
+            n_bus=n_bus,
+            estado=estado,
+            mecanico_nombre=mecanico_nombre,
+            skip=skip,
+            limit=limit,
         )
-        return [
-            mantencion_service._dict_to_solicitud_dto(s) if isinstance(s, dict) else mantencion_service._to_solicitud_dto(s)
-            for s in solicitudes
-        ]
+        dtos: List[SolicitudDTO] = []
+        for item in solicitudes:
+            dto = self.mantencion.mapear_a_solicitud_dto(item)
+            if dto is not None:
+                dtos.append(dto)
+        return dtos
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:
+        """Calcula y retorna el resumen consolidado, KPIs y métricas generales del taller."""
         logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller")
-        return await supervision_repository.get_resumen_taller_consolidado(db)
+        return await self.repo.get_resumen_taller_consolidado(db)
 
     async def get_alertas_taller(self, db: AsyncSession) -> List[AlertaSupervisionDTO]:
         """Retorna exclusivamente las alertas operacionales activas de taller de forma directa."""
         logger.info("[SUPERVISION_SERVICE] Consultando centro de alertas operacionales activas directamente")
-        return await supervision_repository.get_alertas_activas(db)
+        return await self.repo.get_alertas_activas(db)
 
     async def asignar_fallas_supervisora(
         self,
@@ -71,7 +100,7 @@ class SupervisionService:
             dto.mecanico_id,
             solicitud_id,
         )
-        return await mantencion_service.asignar_fallas_supervisora(
+        return await self.mantencion.asignar_fallas_supervisora(
             db, solicitud_id=solicitud_id, dto=dto, supervisor_id=supervisor_id
         )
 

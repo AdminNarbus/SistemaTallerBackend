@@ -6,6 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
+from app.modules.supervision.constants import (
+    DEFAULT_PAGE_SKIP,
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    ESTADOS_VALIDOS_AUDITORIA,
+)
 from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO
 from app.modules.supervision.services import supervision_service
 
@@ -31,10 +37,13 @@ async def get_alertas_taller(
 @router.get("/auditoria/buses-taller", response_model=List[SolicitudDTO])
 async def get_auditoria_buses_taller(
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),
-    estado: Optional[str] = Query(None, description="Filtrar por estado (REPORTADO, EN_REPARACION, PENDIENTE_REASIGNACION, FINALIZADO)"),
+    estado: Optional[str] = Query(
+        None,
+        description=f"Filtrar por estado ({', '.join(ESTADOS_VALIDOS_AUDITORIA)})",
+    ),
     mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
-    skip: int = Query(0, ge=0, description="Número de registros a omitir para paginación"),
-    limit: int = Query(50, ge=1, le=100, description="Límite máximo de solicitudes a retornar"),
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de registros a omitir para paginación"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite máximo de solicitudes a retornar"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):

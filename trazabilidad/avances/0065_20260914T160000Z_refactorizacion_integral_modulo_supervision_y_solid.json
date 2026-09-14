@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 65,
+  "id": "AV-0065",
+  "timestamp": "2026-09-14T16:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUPERVISION-REFACTOR-1",
+    "name": "Refactorización Integral de Arquitectura Limpia, Principios SOLID y Desacoplamiento del Módulo Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Auditoría técnica exhaustiva y refactorización integral del módulo de supervisión (app/modules/supervision) en estricto cumplimiento con AGENTS.md, BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, BUENAS_PRACTICAS_CODIGO.md y BUENAS_PRACTICAS_BD.md. Se definieron constantes canónicas y enumeraciones tipadas (TipoAlertaSupervision, SeveridadAlerta, límites y defaults de paginación, estados válidos de auditoría) en constants.py; se extrajeron funciones puras de dominio y matemáticas (calcular_porcentaje_resolucion, formatear_mensaje_alerta_repuesto, formatear_mensaje_alerta_pauta, formatear_mensaje_alerta_bus_sin_mecanicos, construir_alerta_supervision) en utils.py; se tiparon los DTOs en dtos/supervision_dto.py con enumeraciones canónicas garantizando validación estricta y 100% de compatibilidad con Frontend; se formalizó el método público mapear_a_solicitud_dto en MantencionService eliminando el acoplamiento a métodos privados; se refactorizó SupervisionRepository para preservar persistencia pura SQL delegando el cálculo de KPIs y formateo de mensajes a utils.py; se implementó el Principio de Inversión de Dependencias (DIP) en SupervisionService mediante constructor con inyección __init__(repository=..., mantencion_srv=...) desacoplándolo de singletons globales; se limpió el router api/router.py usando constantes nombradas de paginación y documentación de filtros; y se amplió la suite de pruebas unitarias puras bajo el patrón Arrange-Act-Assert (AAA) con AsyncMock y MagicMock, alcanzando 137 de 137 tests verdes en la suite del backend (100% de éxito).",
+  "scope": {
+    "planned": [
+      "Crear app/modules/supervision/constants.py con TipoAlertaSupervision, SeveridadAlerta, DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT y constantes de catálogo",
+      "Crear app/modules/supervision/utils.py aislando funciones puras matemáticas y formateadores de alertas operacionales",
+      "Actualizar app/modules/supervision/dtos/supervision_dto.py tipando tipo y severidad con enumeraciones canónicas",
+      "Agregar método público formal mapear_a_solicitud_dto a MantencionService para evitar llamadas a métodos privados protegidos",
+      "Refactorizar supervision_repository.py para delegar formateos y cálculo matemático de resolución a utils.py manteniendo persistencia pura",
+      "Refactorizar supervision_service.py implementando Dependency Inversion Principle (DIP) con __init__(self, repository=None, mantencion_srv=None)",
+      "Actualizar api/router.py reemplazando números mágicos por constantes canónicas de paginación y documentando filtros válidos",
+      "Ampliar tests/unit/test_supervision_service.py con pruebas unitarias puras AAA para utils.py y SupervisionService aislado con AsyncMock",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md con el nuevo estado del módulo Supervisión",
+      "Verificar el 100% de la suite de pruebas del backend (137/137 tests verdes sin regresiones)"
+    ],
+    "completed": [
+      "Crear app/modules/supervision/constants.py con TipoAlertaSupervision, SeveridadAlerta, DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT y constantes de catálogo",
+      "Crear app/modules/supervision/utils.py aislando funciones puras matemáticas y formateadores de alertas operacionales",
+      "Actualizar app/modules/supervision/dtos/supervision_dto.py tipando tipo y severidad con enumeraciones canónicas",
+      "Agregar método público formal mapear_a_solicitud_dto a MantencionService para evitar llamadas a métodos privados protegidos",
+      "Refactorizar supervision_repository.py para delegar formateos y cálculo matemático de resolución a utils.py manteniendo persistencia pura",
+      "Refactorizar supervision_service.py implementando Dependency Inversion Principle (DIP) con __init__(self, repository=None, mantencion_srv=None)",
+      "Actualizar api/router.py reemplazando números mágicos por constantes canónicas de paginación y documentando filtros válidos",
+      "Ampliar tests/unit/test_supervision_service.py con pruebas unitarias puras AAA para utils.py y SupervisionService aislado con AsyncMock",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md con el nuevo estado del módulo Supervisión",
+      "Verificar el 100% de la suite de pruebas del backend (137/137 tests verdes sin regresiones)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/constants.py",
+      "action": "created",
+      "summary": "Centralización de enums y constantes canónicas: TipoAlertaSupervision (REPUESTO_FALTANTE, DEFECTO_PAUTA, BUS_SIN_MECANICOS, TIEMPO_EXCEDIDO), SeveridadAlerta (BAJA, MEDIA, ALTA, CRITICA), DEFAULT_PAGE_SKIP = 0, DEFAULT_PAGE_LIMIT = 50, MAX_PAGE_LIMIT = 100, BUS_SIN_NUMERO = 'S/N', CATEGORIA_SIN_ASIGNAR_NOMBRE = 'Personalizada / Sin Categoría' y ESTADOS_VALIDOS_AUDITORIA."
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "created",
+      "summary": "Aislamiento de funciones puras de dominio: calcular_porcentaje_resolucion (seguro contra división por cero y redondeado a 2 decimales), formatear_mensaje_alerta_repuesto, formatear_mensaje_alerta_pauta, formatear_mensaje_alerta_bus_sin_mecanicos y helper constructor construir_alerta_supervision."
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "Tipado fuerte en AlertaSupervisionDTO: tipo (TipoAlertaSupervision | str) y severidad (SeveridadAlerta | str) manteniendo plena retrocompatibilidad JSON con clientes existentes."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Incorporación de método público formal mapear_a_solicitud_dto(self, item: Any) -> Optional[SolicitudDTO] que encapsula internamente _dict_to_solicitud_dto y _to_solicitud_dto, eliminando accesos privados ajenos."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Persistencia pura SQL: sustitución de magic strings por constantes de constants.py y delegación de cálculos matemáticos y formateos de alerta a utils.py."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Inversión de dependencias (DIP) con constructor __init__(self, repository=None, mantencion_srv=None), eliminando accesos a singletons globales estáticos y delegando el mapeo a self.mantencion.mapear_a_solicitud_dto."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Sustitución de números mágicos de paginación por DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT y MAX_PAGE_LIMIT en Query, y documentación de estados válidos en auditoría."
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Expansión de la suite de pruebas del módulo: 6 tests unitarios puros para utils.py, 5 tests unitarios AAA con AsyncMock/MagicMock para SupervisionService y preservación de tests preexistentes (13 tests en total)."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización del estado del módulo Supervisión y Telemetría a REFACTORIZADO Y AUDITADO (SOLID & CLEAN CODE)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Centralización Canónica de Tipos y Severidades de Alertas en constants.py",
+      "rationale": "El código del repositorio, servicios y router utilizaba strings literales dispersos ('REPUESTO_FALTANTE', 'DEFECTO_PAUTA', 'BUS_SIN_MECANICOS', 'ALTA', 'MEDIA', 'S/N') y límites fijos de paginación. Centralizarlos en enumeraciones canónicas StrEnum y constantes Final erradica inconsistencias y simplifica el mantenimiento.",
+      "consequences": "Mayor legibilidad, prevención de errores de tipeo y alineación estricta con BUENAS_PRACTICAS_CODIGO.md."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Aislamiento de Funciones Puras Matemáticas y Formateo Semántico en utils.py",
+      "rationale": "El cálculo del porcentaje de resolución de fallas y la interpolación de cadenas para describir alertas operacionales se ejecutaban dentro del repositorio o estaban acopladas a la consulta SQL. Extraerlas como funciones puras y deterministas permite testearlas sin base de datos ni I/O.",
+      "consequences": "SupervisionRepository se enfoca exclusivamente en persistencia pura SQL (SRP), evitando el anti-patrón Smart Repository."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Inversión de Dependencias (DIP) en SupervisionService mediante Constructor __init__",
+      "rationale": "SupervisionService importaba y consumía directamente los objetos globales supervision_repository y mantencion_service, impidiendo la inyección de dobles de prueba sin parches globales de Python. Proveer __init__(repository=None, mantencion_srv=None) desacopla la capa de negocio y facilita el testeo unitario instantáneo.",
+      "consequences": "Cumplimiento del principio de Inversión de Dependencias (DIP) de SOLID y ejecución aislada y veloz de pruebas unitarias puras."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Desacoplamiento Público entre Servicios vía mapear_a_solicitud_dto",
+      "rationale": "SupervisionService invocaba métodos protegidos privados de MantencionService (_dict_to_solicitud_dto y _to_solicitud_dto), violando el principio de encapsulamiento e información oculta. Introducir un método público formal en MantencionService establece un contrato explícito y robusto entre módulos.",
+      "consequences": "Encapsulamiento garantizado y erradicación de violaciones de privacidad entre módulos independientes."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Batería Exhaustiva de Pruebas Unitarias Aisladas (Patrón AAA)",
+      "rationale": "El módulo de supervisión dependía exclusivamente de 3 tests que requerían conexión a base de datos de prueba. Se incorporaron 10 pruebas unitarias puras que verifican lógica matemática, formateadores y orquestación del servicio con AsyncMock y MagicMock.",
+      "consequences": "Incremento de la cobertura del módulo con 13 tests específicos y validación total de 137 tests en la suite completa del backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_supervision_service.py",
+      "result": "passed",
+      "evidence": "13 tests unitarios y de dominio del módulo supervisión pasaron exitosamente en 1.25s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/integration/test_supervision_api.py",
+      "result": "passed",
+      "evidence": "4 tests de integración de API pasaron exitosamente en 1.79s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "137 tests de la suite completa del backend pasaron exitosamente en 55.44s (0 fallos, 100% verde)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Realizar commit atómico bajo Conventional Commits e integrar la rama feature/refactor-modulo-supervision a develop mediante GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-modulo-supervision",
+    "commit": "43e27b3",
+    "dirty": false
+  },
+  "notes": [
+    "Todos los módulos del backend (Auth, Buses, Mantención, Neumáticos y Supervisión) se encuentran ahora 100% auditados y refactorizados bajo los estándares de AGENTS.md, principios SOLID y Clean Code."
+  ]
+}

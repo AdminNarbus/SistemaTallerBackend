@@ -1,12 +1,31 @@
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from app.modules.buses.models.bus import Bus
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
-from app.modules.supervision.services import supervision_service
-from app.modules.supervision.repository import supervision_repository
+from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
+from app.modules.supervision.services import supervision_service, SupervisionService
+from app.modules.supervision.repository import supervision_repository, SupervisionRepository
+from app.modules.supervision.constants import (
+    TipoAlertaSupervision,
+    SeveridadAlerta,
+    BUS_SIN_NUMERO,
+)
+from app.modules.supervision.dtos import (
+    AlertaSupervisionDTO,
+    ResumenTallerDTO,
+    MetricasEstadoDTO,
+)
+from app.modules.supervision.utils import (
+    calcular_porcentaje_resolucion,
+    formatear_mensaje_alerta_repuesto,
+    formatear_mensaje_alerta_pauta,
+    formatear_mensaje_alerta_bus_sin_mecanicos,
+    construir_alerta_supervision,
+)
 
 
 @pytest.mark.asyncio
@@ -132,3 +151,219 @@ async def test_supervision_repository_consultas_atomicas(db_session, seed_test_d
     # 4. get_buses_activos_taller
     activos = await supervision_repository.get_buses_activos_taller(db_session)
     assert isinstance(activos, list)
+
+
+# ==============================================================================
+# PRUEBAS UNITARIAS PURAS DE UTILS (FUNCIONES DETERMINISTAS Y MATEMÁTICAS)
+# ==============================================================================
+
+
+def test_calcular_porcentaje_resolucion_normal():
+    """Valida el cálculo correcto con redondeo a dos decimales."""
+    # Arrange
+    total = 10
+    resueltas = 5
+    # Act
+    resultado = calcular_porcentaje_resolucion(total, resueltas)
+    # Assert
+    assert resultado == 50.0
+
+    # Act 2 (con decimales)
+    resultado_decimal = calcular_porcentaje_resolucion(3, 1)
+    # Assert 2
+    assert resultado_decimal == 33.33
+
+
+def test_calcular_porcentaje_resolucion_cero_o_negativos():
+    """Valida la protección contra división por cero y valores atípicos."""
+    # Arrange & Act & Assert
+    assert calcular_porcentaje_resolucion(0, 0) == 0.0
+    assert calcular_porcentaje_resolucion(0, 5) == 0.0
+    assert calcular_porcentaje_resolucion(10, 0) == 0.0
+    assert calcular_porcentaje_resolucion(-5, 2) == 0.0
+    assert calcular_porcentaje_resolucion(10, -2) == 0.0
+
+
+def test_calcular_porcentaje_resolucion_completa():
+    """Valida el 100% de resolución exacta."""
+    # Arrange & Act & Assert
+    assert calcular_porcentaje_resolucion(8, 8) == 100.0
+
+
+def test_formatear_mensajes_alertas():
+    """Valida la construcción semántica de los mensajes de alertas operacionales."""
+    # 1. Repuesto con comentario
+    msg1 = formatear_mensaje_alerta_repuesto(12, "105", "Esperando alternador")
+    assert msg1 == "Falla #12 en Bus 105 detenida por falta de repuestos: Esperando alternador"
+
+    # 2. Repuesto sin comentario
+    msg2 = formatear_mensaje_alerta_repuesto(12, "105", None)
+    assert msg2 == "Falla #12 en Bus 105 detenida por falta de repuestos"
+
+    # 3. Repuesto con bus vacío (usa fallback BUS_SIN_NUMERO)
+    msg3 = formatear_mensaje_alerta_repuesto(12, "", "")
+    assert msg3 == f"Falla #12 en Bus {BUS_SIN_NUMERO} detenida por falta de repuestos"
+
+    # 4. Pauta preventiva con ítem nombrado
+    msg4 = formatear_mensaje_alerta_pauta("202", item_nombre="Presión de frenos", item_id=3)
+    assert msg4 == "Ítem de pauta preventiva con defecto en Bus 202: Presión de frenos"
+
+    # 5. Pauta preventiva sin nombre de ítem (usa ID)
+    msg5 = formatear_mensaje_alerta_pauta("202", item_nombre=None, item_id=7)
+    assert msg5 == "Ítem de pauta preventiva con defecto en Bus 202: Ítem #7"
+
+    # 6. Bus sin mecánicos
+    msg6 = formatear_mensaje_alerta_bus_sin_mecanicos("303")
+    assert msg6 == "Bus 303 figura EN_REPARACION pero no tiene mecánicos activos asignados"
+
+
+def test_construir_alerta_supervision():
+    """Valida la instanciación de AlertaSupervisionDTO mediante el helper puro."""
+    # Arrange & Act
+    alerta = construir_alerta_supervision(
+        tipo=TipoAlertaSupervision.REPUESTO_FALTANTE,
+        severidad=SeveridadAlerta.ALTA,
+        solicitud_id=501,
+        n_bus="404",
+        mensaje="Alerta de prueba",
+        detalle_id=99,
+    )
+
+    # Assert
+    assert isinstance(alerta, AlertaSupervisionDTO)
+    assert alerta.tipo == TipoAlertaSupervision.REPUESTO_FALTANTE
+    assert alerta.severidad == SeveridadAlerta.ALTA
+    assert alerta.solicitud_id == 501
+    assert alerta.n_bus == "404"
+    assert alerta.detalle_id == 99
+    assert alerta.mensaje == "Alerta de prueba"
+
+
+# ==============================================================================
+# PRUEBAS UNITARIAS AISLADAS DE SUPERVISION SERVICE (PATRÓN AAA CON MOCKS)
+# ==============================================================================
+
+
+def test_supervision_service_init_custom_dependencies():
+    """Verifica la inyección de dependencias en el constructor de SupervisionService."""
+    # Arrange
+    mock_repo = MagicMock(spec=SupervisionRepository)
+    mock_mantencion = MagicMock()
+
+    # Act
+    service = SupervisionService(repository=mock_repo, mantencion_srv=mock_mantencion)
+
+    # Assert
+    assert service.repo is mock_repo
+    assert service.mantencion is mock_mantencion
+
+
+@pytest.mark.asyncio
+async def test_supervision_service_get_auditoria_aislado():
+    """Verifica que get_auditoria_solicitudes delegue al repo y mapee DTOs correctamente."""
+    # Arrange
+    mock_repo = AsyncMock(spec=SupervisionRepository)
+    mock_mantencion = MagicMock()
+    mock_db = AsyncMock()
+
+    raw_item = {"id": 100, "n_bus": "500", "estado": "EN_REPARACION"}
+    mock_repo.get_auditoria.return_value = [raw_item]
+
+    dummy_dto = MagicMock(spec=SolicitudDTO)
+    dummy_dto.id = 100
+    dummy_dto.n_bus = "500"
+    mock_mantencion.mapear_a_solicitud_dto.return_value = dummy_dto
+
+    service = SupervisionService(repository=mock_repo, mantencion_srv=mock_mantencion)
+
+    # Act
+    resultado = await service.get_auditoria_solicitudes(
+        db=mock_db,
+        n_bus="500",
+        estado="EN_REPARACION",
+        mecanico_nombre="Juan",
+        skip=0,
+        limit=10,
+    )
+
+    # Assert
+    assert len(resultado) == 1
+    assert resultado[0].id == 100
+    mock_repo.get_auditoria.assert_awaited_once_with(
+        mock_db,
+        n_bus="500",
+        estado="EN_REPARACION",
+        mecanico_nombre="Juan",
+        skip=0,
+        limit=10,
+    )
+    mock_mantencion.mapear_a_solicitud_dto.assert_called_once_with(raw_item)
+
+
+@pytest.mark.asyncio
+async def test_supervision_service_get_resumen_aislado():
+    """Verifica que get_resumen_taller delegue directamente a get_resumen_taller_consolidado."""
+    # Arrange
+    mock_repo = AsyncMock(spec=SupervisionRepository)
+    mock_db = AsyncMock()
+    dummy_resumen = MagicMock(spec=ResumenTallerDTO)
+    mock_repo.get_resumen_taller_consolidado.return_value = dummy_resumen
+
+    service = SupervisionService(repository=mock_repo)
+
+    # Act
+    resultado = await service.get_resumen_taller(mock_db)
+
+    # Assert
+    assert resultado is dummy_resumen
+    mock_repo.get_resumen_taller_consolidado.assert_awaited_once_with(mock_db)
+
+
+@pytest.mark.asyncio
+async def test_supervision_service_get_alertas_aislado():
+    """Verifica que get_alertas_taller delegue directamente a get_alertas_activas."""
+    # Arrange
+    mock_repo = AsyncMock(spec=SupervisionRepository)
+    mock_db = AsyncMock()
+    dummy_alertas = [MagicMock(spec=AlertaSupervisionDTO)]
+    mock_repo.get_alertas_activas.return_value = dummy_alertas
+
+    service = SupervisionService(repository=mock_repo)
+
+    # Act
+    resultado = await service.get_alertas_taller(mock_db)
+
+    # Assert
+    assert resultado is dummy_alertas
+    mock_repo.get_alertas_activas.assert_awaited_once_with(mock_db)
+
+
+@pytest.mark.asyncio
+async def test_supervision_service_asignar_fallas_aislado():
+    """Verifica que asignar_fallas_supervisora coordine con mantencion_service."""
+    # Arrange
+    mock_mantencion = AsyncMock()
+    mock_db = AsyncMock()
+    dto = AsignarFallasSupervisoraDTO(mecanico_id=42, detalles_ids=[1, 2])
+    dummy_solicitud = MagicMock(spec=SolicitudDTO)
+    dummy_solicitud.id = 888
+    mock_mantencion.asignar_fallas_supervisora.return_value = dummy_solicitud
+
+    service = SupervisionService(mantencion_srv=mock_mantencion)
+
+    # Act
+    resultado = await service.asignar_fallas_supervisora(
+        db=mock_db,
+        solicitud_id=888,
+        dto=dto,
+        supervisor_id=10,
+    )
+
+    # Assert
+    assert resultado is dummy_solicitud
+    mock_mantencion.asignar_fallas_supervisora.assert_awaited_once_with(
+        mock_db,
+        solicitud_id=888,
+        dto=dto,
+        supervisor_id=10,
+    )

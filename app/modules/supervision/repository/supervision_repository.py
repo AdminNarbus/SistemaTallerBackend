@@ -21,6 +21,21 @@ from app.modules.supervision.dtos.supervision_dto import (
     MetricasEstadoDTO,
     CategoriaFrecuenciaDTO,
 )
+from app.modules.supervision.constants import (
+    TipoAlertaSupervision,
+    SeveridadAlerta,
+    DEFAULT_PAGE_SKIP,
+    DEFAULT_PAGE_LIMIT,
+    BUS_SIN_NUMERO,
+    CATEGORIA_SIN_ASIGNAR_NOMBRE,
+)
+from app.modules.supervision.utils import (
+    calcular_porcentaje_resolucion,
+    formatear_mensaje_alerta_repuesto,
+    formatear_mensaje_alerta_pauta,
+    formatear_mensaje_alerta_bus_sin_mecanicos,
+    construir_alerta_supervision,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,39 +154,41 @@ class SupervisionRepository:
         res = await db.execute(stmt_union)
         alertas: List[AlertaSupervisionDTO] = []
         for tipo, sev, sol_id, n_bus, det_id, extra in res.all():
-            if tipo == "REPUESTO_FALTANTE":
-                msg = f"Falla #{det_id} en Bus {n_bus} detenida por falta de repuestos"
-                if extra:
-                    msg += f": {extra}"
+            bus_num = n_bus or BUS_SIN_NUMERO
+            if tipo == TipoAlertaSupervision.REPUESTO_FALTANTE:
+                msg = formatear_mensaje_alerta_repuesto(det_id, bus_num, extra)
                 alertas.append(
-                    AlertaSupervisionDTO(
+                    construir_alerta_supervision(
                         tipo=tipo,
                         severidad=sev,
                         solicitud_id=sol_id,
-                        n_bus=n_bus or "S/N",
-                        detalle_id=det_id,
+                        n_bus=bus_num,
                         mensaje=msg,
+                        detalle_id=det_id,
                     )
                 )
-            elif tipo == "DEFECTO_PAUTA":
-                item_txt = extra if extra else f"Ítem #{det_id}"
+            elif tipo == TipoAlertaSupervision.DEFECTO_PAUTA:
+                msg = formatear_mensaje_alerta_pauta(bus_num, item_nombre=extra, item_id=det_id)
                 alertas.append(
-                    AlertaSupervisionDTO(
+                    construir_alerta_supervision(
                         tipo=tipo,
                         severidad=sev,
                         solicitud_id=sol_id,
-                        n_bus=n_bus or "S/N",
-                        mensaje=f"Ítem de pauta preventiva con defecto en Bus {n_bus}: {item_txt}",
+                        n_bus=bus_num,
+                        mensaje=msg,
+                        detalle_id=None,
                     )
                 )
             else:
+                msg = formatear_mensaje_alerta_bus_sin_mecanicos(bus_num)
                 alertas.append(
-                    AlertaSupervisionDTO(
+                    construir_alerta_supervision(
                         tipo=tipo,
                         severidad=sev,
                         solicitud_id=sol_id,
-                        n_bus=n_bus or "S/N",
-                        mensaje=f"Bus {n_bus} figura EN_REPARACION pero no tiene mecánicos activos asignados",
+                        n_bus=bus_num,
+                        mensaje=msg,
+                        detalle_id=None,
                     )
                 )
         alertas.sort(key=lambda a: a.solicitud_id, reverse=True)
@@ -338,7 +355,7 @@ class SupervisionRepository:
                 if isinstance(alerts_raw, str):
                     alerts_raw = json.loads(alerts_raw)
 
-                pct = (res_f / tot_f * 100.0) if tot_f > 0 else 0.0
+                pct = calcular_porcentaje_resolucion(tot_f, res_f)
 
                 return ResumenTallerDTO(
                     metricas_estado=MetricasEstadoDTO(
@@ -351,7 +368,7 @@ class SupervisionRepository:
                         buses_fisicamente_en_taller=bus_t,
                         fallas_bloqueadas_por_repuesto=bloq,
                     ),
-                    porcentaje_resolucion_fallas=round(pct, 2),
+                    porcentaje_resolucion_fallas=pct,
                     total_fallas_registradas=tot_f,
                     total_fallas_resueltas=res_f,
                     fallas_por_categoria=[CategoriaFrecuenciaDTO(**c) for c in cats_raw],
@@ -387,12 +404,12 @@ class SupervisionRepository:
             fallas_bloqueadas_por_repuesto=fallas_bloqueadas_por_repuesto,
         )
 
-        pct_resolucion = (total_resueltas / total_fallas * 100.0) if total_fallas > 0 else 0.0
+        pct_resolucion = calcular_porcentaje_resolucion(total_fallas, total_resueltas)
 
         fallas_por_categoria = [
             CategoriaFrecuenciaDTO(
                 categoria_id=row[0],
-                categoria_nombre=row[1] or "Personalizada / Sin Categoría",
+                categoria_nombre=row[1] or CATEGORIA_SIN_ASIGNAR_NOMBRE,
                 total_fallas=row[2],
             )
             for row in fallas_cat_raw
@@ -401,7 +418,7 @@ class SupervisionRepository:
 
         return ResumenTallerDTO(
             metricas_estado=metricas_estado,
-            porcentaje_resolucion_fallas=round(pct_resolucion, 2),
+            porcentaje_resolucion_fallas=pct_resolucion,
             total_fallas_registradas=total_fallas,
             total_fallas_resueltas=total_resueltas,
             fallas_por_categoria=fallas_por_categoria,
@@ -425,8 +442,8 @@ class SupervisionRepository:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
-        skip: int = 0,
-        limit: int = 50,
+        skip: int = DEFAULT_PAGE_SKIP,
+        limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[dict] | List[TallerSolicitud]:
         """
         Retorna la trazabilidad completa inmutable de solicitudes de taller.
@@ -648,8 +665,8 @@ class SupervisionRepository:
                 "estado": estado.upper().strip() if estado and estado.strip() else None,
                 "mecanico_nombre": mecanico_nombre.strip() if mecanico_nombre and mecanico_nombre.strip() else None,
                 "mec_pattern": f"%{mecanico_nombre.strip()}%" if mecanico_nombre and mecanico_nombre.strip() else None,
-                "limit": limit or 50,
-                "skip": skip or 0,
+                "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT,
+                "skip": skip if skip is not None else DEFAULT_PAGE_SKIP,
             }
             res = await db.execute(sql, params)
             return [dict(row) for row in res.mappings().all()]

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+from app.modules.supervision.constants import TipoAlertaSupervision, SeveridadAlerta
+
 
 class MetricasEstadoDTO(BaseModel):
     total_solicitudes: int = Field(0, description="Total histórico/activo de solicitudes de taller")
@@ -21,8 +23,8 @@ class CategoriaFrecuenciaDTO(BaseModel):
 
 
 class AlertaSupervisionDTO(BaseModel):
-    tipo: str = Field(..., description="REPUESTO_FALTANTE | TIEMPO_EXCEDIDO | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
-    severidad: str = Field("MEDIA", description="BAJA | MEDIA | ALTA | CRITICA")
+    tipo: TipoAlertaSupervision | str = Field(..., description="REPUESTO_FALTANTE | TIEMPO_EXCEDIDO | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
+    severidad: SeveridadAlerta | str = Field(SeveridadAlerta.MEDIA, description="BAJA | MEDIA | ALTA | CRITICA")
     solicitud_id: int
     n_bus: str
     mensaje: str

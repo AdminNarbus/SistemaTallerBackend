@@ -6,7 +6,7 @@ from typing import Final, List, Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24  # 24 horas por defecto
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24 * 365 * 100  # 100 años (~52.560.000 minutos, sin límite de expiración práctica)
 DEFAULT_MAX_UPLOAD_SIZE_BYTES: Final[int] = 10 * 1024 * 1024  # 10 MB
 DEFAULT_SIGNED_URL_EXPIRATION_MINUTES: Final[int] = 60
 
@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     HOST: Optional[str] = None
     PORT: int = 8000
 
-    # JWT Security Settings
+    # JWT Security Settings (100 años por defecto para login sin límite)
     SECRET_KEY: str = "narbus_secret_key_taller_2026_super_secure_jwt_token_change_in_prod"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
 
     # PostgreSQL Database Settings
     POSTGRES_SERVER: str = "localhost"

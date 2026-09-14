@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 64,
+  "id": "AV-0064",
+  "timestamp": "2026-09-14T15:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANTENCION-REFACTOR-1",
+    "name": "Refactorización Integral de Arquitectura Limpia, Principios SOLID y Desacoplamiento del Módulo Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Auditoría técnica exhaustiva y refactorización integral del módulo de mantención (app/modules/mantencion) en estricto cumplimiento con AGENTS.md, BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, BUENAS_PRACTICAS_CODIGO.md y BUENAS_PRACTICAS_BD.md. Se definieron constantes canónicas y enumeraciones tipadas (EstadoSolicitud, OrigenAsignacion, TipoComentarioBitacora, EstadoItemPauta, TOTAL_ITEMS_PAUTA_PREVENTIVA, límites de paginación) en constants.py; se extrajeron funciones puras de dominio (calcular_duracion_minutos, validaciones de pauta y fallas de cierre parcial, formateo de bitácoras y recopilación de evidencias fotográficas) en utils.py; se desacopló el cálculo de duraciones del MantencionRepository devolviéndolo a su rol de persistencia pura; se refactorizó MantencionService bajo Inversión de Dependencias (DIP) con inyección en __init__(repository=..., storage=...) reemplazando accesos globales estáticos y eliminando números mágicos y strings hardcodeados; se modularizó el router extrayendo la lógica multipart en _extraer_datos_multipart_solicitud manteniendo los endpoints bajo SLAP (<25 líneas); y se amplió la suite de pruebas unitarias puras bajo el patrón Arrange-Act-Assert (AAA) con AsyncMock, alcanzando 127 de 127 tests verdes en la suite del backend (100% de éxito).",
+  "scope": {
+    "planned": [
+      "Crear app/modules/mantencion/constants.py con EstadoSolicitud, OrigenAsignacion, TipoComentarioBitacora, EstadoItemPauta, TOTAL_ITEMS_PAUTA_PREVENTIVA y constantes de paginación",
+      "Crear app/modules/mantencion/utils.py aislando funciones puras de dominio (calcular_duracion_minutos, validar_pauta_preventiva_cierre, validar_fallas_cierre_parcial, formatear_comentario_cierre, describir_detalle_averia, recopilar_archivos_fotos)",
+      "Refactorizar mantencion_repository.py para desacoplar el cálculo de duración y mantener persistencia pura SQL",
+      "Refactorizar mantencion_service.py implementando Dependency Inversion Principle (DIP) con __init__(self, repository=None, storage=None) y eliminando números mágicos y strings literales",
+      "Modularizar api/router.py extrayendo _extraer_datos_multipart_solicitud y usando constantes de paginación para cumplir SLAP",
+      "Ampliar tests/unit/test_mantencion_service.py con pruebas unitarias puras AAA aislando el servicio con AsyncMock y validando utils.py al 100%",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md con el nuevo estado del módulo Mantención",
+      "Verificar el 100% de la suite de pruebas del backend (127/127 tests verdes)"
+    ],
+    "completed": [
+      "Crear app/modules/mantencion/constants.py con EstadoSolicitud, OrigenAsignacion, TipoComentarioBitacora, EstadoItemPauta, TOTAL_ITEMS_PAUTA_PREVENTIVA y constantes de paginación",
+      "Crear app/modules/mantencion/utils.py aislando funciones puras de dominio (calcular_duracion_minutos, validar_pauta_preventiva_cierre, validar_fallas_cierre_parcial, formatear_comentario_cierre, describir_detalle_averia, recopilar_archivos_fotos)",
+      "Refactorizar mantencion_repository.py para desacoplar el cálculo de duración y mantener persistencia pura SQL",
+      "Refactorizar mantencion_service.py implementando Dependency Inversion Principle (DIP) con __init__(self, repository=None, storage=None) y eliminando números mágicos y strings literales",
+      "Modularizar api/router.py extrayendo _extraer_datos_multipart_solicitud y usando constantes de paginación para cumplir SLAP",
+      "Ampliar tests/unit/test_mantencion_service.py con pruebas unitarias puras AAA aislando el servicio con AsyncMock y validando utils.py al 100%",
+      "Actualizar trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md con el nuevo estado del módulo Mantención",
+      "Verificar el 100% de la suite de pruebas del backend (127/127 tests verdes)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/constants.py",
+      "action": "created",
+      "summary": "Centralización de enums y constantes canónicas: EstadoSolicitud, OrigenAsignacion, TipoComentarioBitacora, EstadoItemPauta, TOTAL_ITEMS_PAUTA_PREVENTIVA = 11, DEFAULT_PAGE_SKIP = 0, DEFAULT_PAGE_LIMIT = 50, MAX_PAGE_LIMIT = 100."
+    },
+    {
+      "path": "app/modules/mantencion/utils.py",
+      "action": "created",
+      "summary": "Aislamiento de funciones puras de dominio: calcular_duracion_minutos (manejo seguro de naive/aware y duración mínima de taller), validar_pauta_preventiva_cierre, validar_fallas_cierre_parcial, formatear_comentario_cierre, describir_detalle_averia y recopilar_archivos_fotos."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Remoción de cálculo temporal interno; delegación a utils.calcular_duracion_minutos manteniendo retrocompatibilidad mediante alias."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Inversión de dependencias con constructor __init__(self, repository=None, storage=None). Reemplazo de llamadas globales estáticas por self.repo y self.storage. Sustitución de strings y números mágicos por constantes canónicas. Modularización de finalizar_solicitud y create_solicitud con helpers puros."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Extracción de _extraer_datos_multipart_solicitud reduciendo create_solicitud a <25 líneas (SLAP). Adición de tipos explícitos Any y UploadFile. Uso de constantes de paginación DEFAULT_PAGE_SKIP y DEFAULT_PAGE_LIMIT."
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Expansión integral de suite de pruebas: 14 tests unitarios puros para utils.py, 7 tests unitarios AAA con AsyncMock para MantencionService y preservación de tests de integración preexistentes (24 tests en total)."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización del estado del módulo Mantención Taller y Pauta Preventiva a REFACTORIZADO Y AUDITADO (SOLID & CLEAN CODE)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Centralización Canónica de Estados, Orígenes y Pautas en constants.py",
+      "rationale": "El código del servicio y routers utilizaba strings mágicos dispersos ('EN_PROCESO', 'PENDIENTE_REASIGNACION', 'FINALIZADA', 'AUTOASIGNADO', 'SUPERVISOR', 'ESTADO_CAMBIADO') y el número mágico 11 para la cantidad de ítems de la pauta preventiva. Centralizarlos en enumeraciones StrEnum y constantes tipadas con Final erradica errores tipográficos y facilita la extensibilidad del sistema.",
+      "consequences": "Mayor legibilidad, prevención de errores de tipeo y alineación con las buenas prácticas de código limpio de BUENAS_PRACTICAS_CODIGO.md."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Aislamiento de Funciones Puras de Dominio y Cálculo Temporal en utils.py",
+      "rationale": "El cálculo de duraciones de turno y las validaciones de cierre de orden (pauta incompleta, fallas no resueltas) estaban incrustadas en el repositorio o en el servicio, dificultando su testeo aislado y mezclando responsabilidades de persistencia con lógica matemática/negocio.",
+      "consequences": "Persistencia pura en MantencionRepository, funciones 100% testeables sin base de datos ni mocks y código reutilizable entre módulos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Inversión de Dependencias (DIP) en MantencionService mediante Inyección en __init__",
+      "rationale": "MantencionService dependía rígidamente del singleton global mantencion_repository y de storage_service importados directamente, impidiendo el testeo unitario aislado sin parchear módulos enteros. Proveer un constructor con valores por defecto permite testear el servicio con AsyncMock de forma instantánea sin romper el uso existente en el router.",
+      "consequences": "Cumplimiento del principio de Inversión de Dependencias (DIP) de SOLID y ejecución ultrarrápida de pruebas unitarias puras."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Modularización y Simplificación del Endpoint Multipart en Router (SLAP y SRP)",
+      "rationale": "El endpoint POST /solicitudes en el router contenía más de 65 líneas dedicadas a extraer campos de FormData y desempaquetar parámetros JSON vs form fields, violando el principio de único nivel de abstracción (SLAP). Extraer una función auxiliar concisa devuelve al endpoint su rol exclusivo de coordinador HTTP.",
+      "consequences": "Endpoints limpios de menos de 25 líneas y fácil lectura para los desarrolladores y agentes."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Suite Unitaria Pura AAA con Aislamiento de Persistencia",
+      "rationale": "El módulo de mantención solo contaba con 3 pruebas semi-integradas. Se requería una batería exhaustiva que validara reglas de negocio (estados, autoasignaciones, excepciones de dominio, cálculos de tiempo con distintas zonas horarias y casos borde de pauta preventiva) sin tocar la base de datos.",
+      "consequences": "Aumento de la cobertura del módulo con 24 tests específicos y garantía de no regresión en refactorizaciones futuras."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_mantencion_service.py",
+      "result": "passed",
+      "evidence": "24 tests unitarios y de dominio del módulo mantención pasaron exitosamente en 1.70s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "127 tests de la suite completa del backend pasaron exitosamente en 53.67s (0 fallos, 100% verde)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar la rama feature/refactor-modulo-mantencion a develop mediante GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-modulo-mantencion",
+    "commit": "85472a2",
+    "dirty": false
+  },
+  "notes": [
+    "Todos los módulos del backend (Auth, Buses, Mantención, Neumáticos y Supervisión) se encuentran ahora completamente auditados y refactorizados bajo los estándares de AGENTS.md y principios SOLID."
+  ]
+}

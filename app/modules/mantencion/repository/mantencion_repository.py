@@ -21,38 +21,16 @@ from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSo
 logger = logging.getLogger(__name__)
 
 
+from app.modules.mantencion.utils import calcular_duracion_minutos
+
 def clear_mantencion_repository_caches() -> None:
     """Función de compatibilidad (no-op: los catálogos se consultan directamente desde la BD)."""
     pass
 
 
-def _calcular_duracion_minutos(inicio: Optional[datetime], fin: Optional[datetime]) -> int:
-    """
-    Función utilitaria conservada para interoperabilidad.
-    Calcula la duración en minutos entre dos datetimes de forma segura (naive vs aware).
-    """
-    if not inicio or not fin:
-        return 0
+# Re-exportación para interoperabilidad hacia atrás con tests y servicios legados
+_calcular_duracion_minutos = calcular_duracion_minutos
 
-    d_inicio = inicio
-    d_fin = fin
-
-    if d_inicio.tzinfo is not None and d_fin.tzinfo is None:
-        try:
-            d_fin = d_fin.astimezone(d_inicio.tzinfo)
-        except Exception:
-            pass
-    elif d_inicio.tzinfo is None and d_fin.tzinfo is not None:
-        try:
-            d_inicio = d_inicio.astimezone(d_fin.tzinfo)
-        except Exception:
-            pass
-
-    d_inicio = d_inicio.replace(tzinfo=None) if d_inicio.tzinfo else d_inicio
-    d_fin = d_fin.replace(tzinfo=None) if d_fin.tzinfo else d_fin
-
-    delta_seconds = max(0.0, (d_fin - d_inicio).total_seconds())
-    return max(1, int(delta_seconds / 60))
 
 
 class MantencionRepository:

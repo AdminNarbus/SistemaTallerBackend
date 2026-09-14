@@ -24,25 +24,22 @@ Este documento establece las directrices de ingeniería de software, arquitectur
 
 ---
 
-## 2. Base de Datos, Transacciones y Migraciones
+## 2. Transacciones y Persistencia en la Arquitectura (Service vs. Repository)
+
+> Para las directrices canónicas de diseño relacional, modelado con SQLAlchemy 2.0 y gestión de migraciones con Alembic, consultar obligatoriamente [.agents/BUENAS_PRACTICAS_BD.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_BD.md).
 
 ### ✅ OBLIGATORIO (DOs)
-1. **Control total mediante Migraciones de Alembic:** Todo cambio en tablas, columnas, restricciones o índices debe implementarse exclusivamente en un archivo de migración versionado en `alembic/versions/`.  
-   *Por qué:* Permite trazabilidad histórica, reproducibilidad exacta de entornos (dev, staging, producción) y capacidad de revertir cambios (*rollback* determinista).
-2. **Control Transaccional en la Capa de Servicio (Unit of Work):** La capa de servicio debe decidir cuándo persistir de forma atómica (`await db.commit()`), mientras que los repositorios deben utilizar `await db.flush()` para sincronizar IDs generados sin cerrar la transacción.  
-   *Por qué:* Si una operación consta de 3 pasos y el tercero falla, se debe poder ejecutar `await db.rollback()` para no dejar la base de datos en un estado inconsistente o parcialmente modificado.
-3. **Registrar todos los modelos ORM en un único módulo maestro (`app/models/__init__.py`):**  
-   *Por qué:* Alembic depende de `Base.metadata` para autogenerar migraciones y verificar diferencias de esquema. Si un modelo no está importado, Alembic asumirá que la tabla fue eliminada.
-4. **Paginación obligatoria en endpoints de listado:** Toda consulta que devuelva colecciones debe soportar parámetros `skip` y `limit` (o `page` y `page_size`) con límites superiores razonables (ej. máximo 100 registros).  
+1. **Control Transaccional en la Capa de Servicio (Unit of Work):** La capa de servicio orquesta los casos de uso y debe decidir cuándo persistir de forma atómica (`await db.commit()`) o revertir (`await db.rollback()`), mientras que los repositorios deben utilizar `await db.flush()` para sincronizar IDs generados sin cerrar la transacción.  
+   *Por qué:* Si una operación consta de múltiples pasos y uno falla, se debe revertir de forma íntegra para no dejar la base de datos en estado inconsistente.
+2. **Paginación obligatoria en endpoints de listado:** Toda consulta que devuelva colecciones debe soportar parámetros `skip` y `limit` (o `page` y `page_size`) con límites superiores razonables (ej. máximo 100 registros).  
    *Por qué:* Previene denegaciones de servicio y saturación de memoria por consultas desmedidas a tablas grandes.
+3. **Adhesión estricta a los Estándares de Base de Datos:** Todo cambio estructural de tablas, columnas o índices debe implementarse exclusivamente mediante migraciones versionadas de Alembic según [.agents/BUENAS_PRACTICAS_BD.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_BD.md).
 
 ### ❌ PROHIBIDO (DON'Ts)
-1. **NUNCA ejecutar sentencias DDL (`ALTER TABLE`, `CREATE TABLE`, `DROP COLUMN`) en tiempo de ejecución de la aplicación (ej. en scripts de arranque o `lifespan`).**  
-   *Por qué:* Bloquea la base de datos en entornos concurrentes, genera contención severa de bloqueos de catálogo (`AccessExclusiveLock`) y destruye la reproducibilidad del esquema.
-2. **NUNCA ejecutar `await db.commit()` dentro de los métodos individuales de un Repositorio.**  
-   *Por qué:* Rompe la atomicidad de transacciones compuestas. Si el repositorio A hace commit, y el repositorio B falla a continuación, la operación del repositorio A ya no se puede revertir.
-3. **NUNCA usar `lazy="selectin"` de forma indiscriminada en todas las relaciones de los modelos ORM.**  
-   *Por qué:* Provoca "tormentas de SELECTs" (*Select Storm*), disparando múltiples consultas SQL secundarias cada vez que se carga una entidad, incluso para consultas simples donde no se requerían dichas relaciones.
+1. **NUNCA ejecutar `await db.commit()` dentro de los métodos individuales de un Repositorio.**  
+   *Por qué:* Rompe la atomicidad de transacciones compuestas coordinadas por el servicio. Si el repositorio A hace commit y el repositorio B falla a continuación, la operación del repositorio A ya no se puede revertir.
+2. **NUNCA ejecutar sentencias DDL ni `create_all()` en tiempo de ejecución de la aplicación.**  
+   *Por qué:* Bloquea la base de datos en entornos concurrentes y destruye la reproducibilidad del esquema (ver reglas en [.agents/BUENAS_PRACTICAS_BD.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_BD.md)).
 
 ---
 
@@ -53,7 +50,7 @@ Este documento establece las directrices de ingeniería de software, arquitectur
    *Por qué:* Los motores relacionales (PostgreSQL) están optimizados en C para procesar millones de filas en milisegundos mediante índices.
 2. **Filtrar en la base de datos con cláusulas `WHERE` e índices adecuados:**  
    *Por qué:* Descargar miles de registros a la memoria RAM de Python para luego filtrarlos con `if bus.startswith(...)` desperdicia ancho de banda de red, CPU y memoria.
-3. **Cargar relaciones explícitamente solo cuando sean necesarias:** Usar `selectinload()` o `joinedload()` de forma deliberada en las consultas del repositorio según el caso de uso.  
+3. **Cargar relaciones explícitamente solo cuando sean necesarias:** Usar `selectinload()` o `joinedload()` de forma deliberada en las consultas del repositorio según el caso de uso específico.  
    *Por qué:* Evita el clásico problema de N+1 consultas sin sobrecargar la memoria con datos que no se van a utilizar.
 
 ### ❌ PROHIBIDO (DON'Ts)
@@ -61,6 +58,8 @@ Este documento establece las directrices de ingeniería de software, arquitectur
    *Por qué:* Descargar toda la base de datos y recorrerla con bucles `for` genera riesgos críticos de **Out Of Memory (OOM)** y bloquea los recursos del servidor a medida que la empresa crece.
 2. **NUNCA ejecutar consultas dentro de un bucle `for` (Problema N+1).**  
    *Por qué:* Si se procesan 50 elementos, se ejecutan 50 consultas individuales en lugar de 1 sola consulta con la cláusula `IN (:valores)`.
+3. **NUNCA usar `lazy="selectin"` de forma indiscriminada en las relaciones de los modelos ORM.**  
+   *Por qué:* Provoca "tormentas de SELECTs" (*Select Storm*), disparando múltiples consultas SQL secundarias cada vez que se carga una entidad, incluso para consultas simples donde no se requerían dichas relaciones.
 
 ---
 
@@ -153,13 +152,15 @@ Este documento establece las directrices de ingeniería de software, arquitectur
 
 ## 8. Calidad de Código, Limpieza y Mantenimiento
 
+> Las directrices detalladas de código limpio, funciones compactas, principios SOLID, nomenclatura semántica, "Fail Fast", testing unitario y Conventional Commits se encuentran documentadas de forma canónica en [.agents/BUENAS_PRACTICAS_CODIGO.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_CODIGO.md).
+
 ### ✅ OBLIGATORIO (DOs)
-1. **Eliminar código muerto o prototipos no utilizados:** Archivos de prueba obsoletos, servicios sustituidos o DTOs en desuso deben eliminarse inmediatamente del repositorio.  
+1. **Adherirse a los Principios SOLID y Código Limpio:** Todo nuevo desarrollo o refactorización debe cumplir estrictamente con las reglas de [.agents/BUENAS_PRACTICAS_CODIGO.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_CODIGO.md) (funciones de 5-20 líneas, 0-2 parámetros, CQS, sin flags booleanos, constantes nombradas y guard clauses).
+2. **Eliminar código muerto o prototipos no utilizados:** Archivos de prueba obsoletos, servicios sustituidos o DTOs en desuso deben eliminarse inmediatamente del repositorio.  
    *Por qué:* Reduce la carga cognitiva de los desarrolladores y evita que otros agentes o programadores reutilicen código defectuoso por error.
-2. **Configurar correctamente las herramientas de testing en `pytest.ini` (`pythonpath = .`):**  
+3. **Configurar correctamente las herramientas de testing en `pytest.ini` (`pythonpath = .`):**  
    *Por qué:* Asegura que los tests unitarios y de integración se ejecuten sin errores de importación desde cualquier terminal o tubería de CI/CD.
-3. **Aplicar DRY (Don't Repeat Yourself):** Reutilizar propiedades y métodos existentes en los modelos (por ejemplo, `usuario.nombre_completo`) en lugar de concatenar cadenas manualmente en decenas de archivos.
 
 ### ❌ PROHIBIDO (DON'Ts)
-1. **NUNCA dejar archivos de código huérfanos sin eliminar bajo la excusa de "por si acaso".**  
-   *Por qué:* Para recuperar código histórico existe el control de versiones con Git.
+1. **NUNCA dejar archivos de código huérfanos ni código comentado bajo la excusa de "por si acaso".**  
+   *Por qué:* Para recuperar código histórico existe el control de versiones con Git. Mantener código comentado degrada la legibilidad y confunde a los desarrolladores y agentes AI.

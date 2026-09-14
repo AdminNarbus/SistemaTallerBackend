@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 61,
+  "id": "AV-0061",
+  "timestamp": "2026-09-14T11:46:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "STD-CODE-1",
+    "name": "Estandarización de Buenas Prácticas de Código, Principios SOLID y Limpieza",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Formalización e integración de la guía de buenas prácticas de código limpio, principios SOLID, diseño de funciones compactas, nomenclatura semántica y Conventional Commits en .agents/BUENAS_PRACTICAS_CODIGO.md, complementada con la depuración integral de duplicidades y armonización de roles entre AGENTS.md, BUENAS_PRACTICAS_BD.md y BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md.",
+  "scope": {
+    "planned": [
+      "Analizar el documento base buenas_practicas_code.md",
+      "Crear .agents/BUENAS_PRACTICAS_CODIGO.md adaptado al dominio BackendTallerNarbus con DOs y DON'Ts",
+      "Actualizar sección 8 de .agents/BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md",
+      "Actualizar reglas obligatorias en .agents/AGENTS.md vinculando el nuevo estándar y Conventional Commits",
+      "Auditar y eliminar duplicidades y contradicciones en toda la carpeta .agents/",
+      "Registrar avance con trazabilidad y decisiones técnicas"
+    ],
+    "completed": [
+      "Analizar el documento base buenas_practicas_code.md",
+      "Crear .agents/BUENAS_PRACTICAS_CODIGO.md adaptado al dominio BackendTallerNarbus con DOs y DON'Ts",
+      "Actualizar sección 8 de .agents/BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md",
+      "Actualizar reglas obligatorias en .agents/AGENTS.md vinculando el nuevo estándar y Conventional Commits",
+      "Auditar y eliminar duplicidades y contradicciones en toda la carpeta .agents/",
+      "Registrar avance con trazabilidad y decisiones técnicas"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".agents/BUENAS_PRACTICAS_CODIGO.md",
+      "action": "created",
+      "summary": "Guía completa de código limpio y buenas prácticas de programación: SRP (coordinadores vs ejecutores), SOLID, funciones limpias (5-20 líneas, 0-2 params, CQS, sin boolean flags), nomenclatura semántica, Fail Fast, testing AAA, Conventional Commits y checklist rápido de calidad, alineado al patrón Unit of Work del backend."
+    },
+    {
+      "path": ".agents/BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md",
+      "action": "modified",
+      "summary": "Reestructurada Sección 2 eliminando duplicidades de Alembic/modelos (delegados a BUENAS_PRACTICAS_BD.md) para centrarse en Unit of Work (commit en servicio vs flush en repo), consolidada carga de relaciones en Sección 3 y limpiada Sección 8 delegando a BUENAS_PRACTICAS_CODIGO.md."
+    },
+    {
+      "path": ".agents/AGENTS.md",
+      "action": "modified",
+      "summary": "Reorganizadas secciones 1, 2, 3, 5 y 6 con separación limpia de responsabilidades (Base de Datos -> BUENAS_PRACTICAS_BD.md, Arquitectura Backend -> BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, Código Limpio -> BUENAS_PRACTICAS_CODIGO.md) sin solapamiento de textos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0064",
+      "title": "Estandarización, armonización y eliminación de duplicidad en directrices .agents",
+      "rationale": "Se identificó que BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md duplicaba directrices de migraciones Alembic y DDL ya cubiertas a profundidad en BUENAS_PRACTICAS_BD.md, y duplicaba lineamientos de código limpio cubiertos en BUENAS_PRACTICAS_CODIGO.md. Además, existía una ambigüedad en el ejemplo de persistencia de servicio. Se armonizaron los 4 documentos delimitando claramente sus alcances: AGENTS.md (reglas maestras de gobernanza), BUENAS_PRACTICAS_BD.md (modelos, migraciones y SQL), BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md (arquitectura de 4 capas, Unit of Work, REST, I/O asíncrono y excepciones) y BUENAS_PRACTICAS_CODIGO.md (Clean Code, SOLID, funciones, testing y commits).",
+      "consequences": "Cero contradicciones, cero duplicidad y referencias cruzadas directas y navegables que reducen la carga cognitiva y garantizan que los agentes AI sigan un único camino claro en cada aspecto del backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": "git status",
+      "result": "passed",
+      "evidence": "Archivos creados y actualizados correctamente en .agents/ y trazabilidad/avances/."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar de manera sistemática los estándares de código limpio y pruebas unitarias en los desarrollos y refactorizaciones posteriores del backend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "La documentación complementa los estándares de base de datos definidos en BUENAS_PRACTICAS_BD.md y la arquitectura de capas en BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md."
+  ]
+}

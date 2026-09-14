@@ -9,6 +9,7 @@ from app.api.deps import (
     require_current_user,
     require_supervisor_or_admin,
 )
+from app.modules.auth.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
@@ -99,14 +100,16 @@ async def get_me(
 async def buscar_mecanicos(
     q: Optional[str] = Query("", description="Texto a buscar por nombre, apellido o username. Si está vacío, retorna todos."),
     exclude_id: Optional[int] = Query(None, description="ID de usuario a excluir de los resultados (ej: el mecánico logueado)"),
+    skip: int = Query(0, ge=0, description="Número de registros a omitir para paginación"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de mecánicos a retornar"),
     db: AsyncSession = SessionDep,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> List[UsuarioResponseDTO]:
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
     """
-    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | usuario_solicitante_id=%s", q, exclude_id, current_user.id)
-    return await auth_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id)
+    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | skip=%d | limit=%d | usuario_solicitante_id=%s", q, exclude_id, skip, limit, current_user.id)
+    return await auth_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id, skip=skip, limit=limit)
 
 
 # =====================================================================
@@ -121,7 +124,7 @@ async def buscar_mecanicos(
 )
 async def listar_usuarios(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     db: AsyncSession = SessionDep,
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
 ) -> List[UsuarioResponseDTO]:

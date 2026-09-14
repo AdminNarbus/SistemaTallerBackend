@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 62,
+  "id": "AV-0062",
+  "timestamp": "2026-09-14T13:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "AUTH-REFACTOR-1",
+    "name": "Refactorización Integral de Calidad, Arquitectura Limpia y Principios SOLID del Módulo Auth",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Auditoría técnica y refactorización integral del módulo de autenticación (app/modules/auth) alineado rigurosamente a las directrices de AGENTS.md, BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, BUENAS_PRACTICAS_CODIGO.md y BUENAS_PRACTICAS_BD.md. Se eliminó la inversión de dependencias hacia la capa API, se transformó UserRepository en persistencia pura (eliminando hashing y verificación de passwords del repo), se eliminó la duplicación DRY entre registro y creación administrativa, se normalizaron los roles con el enum RolUsuario y validación Fail-Fast, se implementó paginación completa en búsqueda de mecánicos y listado de usuarios, se creó la migración Alembic 010 para indexar rol_id, y se incorporó una suite completa de pruebas unitarias AAA con AsyncMock.",
+  "scope": {
+    "planned": [
+      "Crear app/modules/auth/constants.py con RolUsuario, ROLES_PERMITIDOS y límites de paginación",
+      "Actualizar modelos Rol y Usuario con back_populates, index=True en rol_id y server_default en is_active",
+      "Actualizar DTOs con RolUsuario, sanitización de strings y validaciones fail-fast",
+      "Refactorizar user_repository.py a persistencia pura con paginación y modularización de filtros (funciones 5-20 líneas)",
+      "Desacoplar auth_service.py eliminando import circular desde deps.py y centralizando user_cache.py",
+      "Eliminar duplicación de código en creación de usuarios (DRY)",
+      "Actualizar deps.py para delegar resolución de usuarios a auth_service y lanzar excepciones de dominio (AuthenticationException, PermissionException)",
+      "Añadir parámetros de paginación en endpoints de mecánicos y usuarios en router.py",
+      "Crear migración Alembic 010_add_index_usuarios_rol_id con ciclo upgrade/downgrade",
+      "Incorporar tests unitarios puros AAA con AsyncMock en test_auth_service.py y validar 100% de la suite"
+    ],
+    "completed": [
+      "Crear app/modules/auth/constants.py con RolUsuario, ROLES_PERMITIDOS y límites de paginación",
+      "Actualizar modelos Rol y Usuario con back_populates, index=True en rol_id y server_default en is_active",
+      "Actualizar DTOs con RolUsuario, sanitización de strings y validaciones fail-fast",
+      "Refactorizar user_repository.py a persistencia pura con paginación y modularización de filtros (funciones 5-20 líneas)",
+      "Desacoplar auth_service.py eliminando import circular desde deps.py y centralizando user_cache.py",
+      "Eliminar duplicación de código en creación de usuarios (DRY)",
+      "Actualizar deps.py para delegar resolución de usuarios a auth_service y lanzar excepciones de dominio (AuthenticationException, PermissionException)",
+      "Añadir parámetros de paginación en endpoints de mecánicos y usuarios en router.py",
+      "Crear migración Alembic 010_add_index_usuarios_rol_id con ciclo upgrade/downgrade",
+      "Incorporar tests unitarios puros AAA con AsyncMock en test_auth_service.py y validar 100% de la suite"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/auth/constants.py",
+      "action": "created",
+      "summary": "Definición del enum RolUsuario (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR), conjunto inmutable ROLES_PERMITIDOS y constantes canónicas de paginación (DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT)."
+    },
+    {
+      "path": "app/modules/auth/user_cache.py",
+      "action": "created",
+      "summary": "Módulo desacoplado para gestión de caché en memoria de usuarios autenticados (_USER_CACHE) con TTL y funciones auxiliares get_cached_user, set_cached_user y clear_user_cache."
+    },
+    {
+      "path": "app/modules/auth/models/rol.py",
+      "action": "modified",
+      "summary": "Agregada relación bidireccional usuarios con back_populates='rol_rel'."
+    },
+    {
+      "path": "app/modules/auth/models/usuario.py",
+      "action": "modified",
+      "summary": "Agregado index=True explícito en columna rol_id, back_populates='usuarios' en rol_rel y server_default=text('true') en is_active."
+    },
+    {
+      "path": "app/modules/auth/dtos/usuario_dto.py",
+      "action": "modified",
+      "summary": "Tipado de rol mediante RolUsuario, normalización case-insensitive, strip automático en cadenas y validación Fail-Fast min_length en UsuarioLoginDTO."
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "Transformación a persistencia pura: funciones modularizadas entre 5 y 20 líneas (_construir_filtro_mecanico_q, _construir_stmt_mecanicos), soporte de paginación skip/limit en buscar_mecanicos, y delegación de hash y verificación de contraseñas."
+    },
+    {
+      "path": "app/modules/auth/services/auth_service.py",
+      "action": "modified",
+      "summary": "Eliminado import cruzado desde app.api.deps, extraído método privado _crear_usuario_entidad (DRY), validación estricta de roles mediante ROLES_PERMITIDOS, método get_current_user_profile con caché y soporte de paginación."
+    },
+    {
+      "path": "app/api/deps.py",
+      "action": "modified",
+      "summary": "Delegación del caso de uso de perfil autenticado a auth_service, uso de excepciones de dominio centralizadas (AuthenticationException, PermissionException) y constantes de roles."
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "Soporte de parámetros Query de paginación skip y limit en endpoints /mecanicos, /mecanicos/buscar y ajuste de límite máximo en /usuarios."
+    },
+    {
+      "path": "alembic/versions/010_add_index_usuarios_rol_id.py",
+      "action": "created",
+      "summary": "Migración Alembic para crear índice ix_usuarios_rol_id en tabla usuarios(rol_id), normalizando índices heredados de forma idempotente."
+    },
+    {
+      "path": "tests/unit/test_auth_service.py",
+      "action": "modified",
+      "summary": "Incorporación de suite completa de pruebas unitarias puras bajo patrón AAA con AsyncMock (login exitoso, credenciales inválidas, usuario inactivo, rol inválido, usuario duplicado, mecánicos paginado)."
+    },
+    {
+      "path": "tests/e2e/test_seguridad_excepciones_e2e.py",
+      "action": "modified",
+      "summary": "Actualización de aserciones de código de error a los códigos estandarizados de dominio UNAUTHORIZED y FORBIDDEN."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0065",
+      "title": "Desacoplamiento de dependencias API y aislamiento de caché en módulo auth",
+      "rationale": "AuthService importaba clear_user_cache desde app.api.deps, violando la regla de arquitectura limpia que prohíbe que la capa de servicios dependa de la capa HTTP. Se extrajo la infraestructura de caché a app/modules/auth/user_cache.py, consumida ordenadamente por el servicio y re-exportada transparentemente por deps.py para total retrocompatibilidad.",
+      "consequences": "Independencia completa de la capa de lógica de negocio, cero imports circulares y preservación de compatibilidad con fixtures de pruebas existentes."
+    },
+    {
+      "id": "DEC-0066",
+      "title": "Eliminación del anti-patrón Smart Repository en UserRepository",
+      "rationale": "UserRepository implementaba hashing bcrypt y verificaciones de contraseñas dentro de create() y authenticate(), mezclando persistencia SQL con reglas de negocio y seguridad. Se simplificó la responsabilidad a persistencia pura delegando la lógica al caso de uso en AuthService.",
+      "consequences": "Cumplimiento estricto del Principio de Responsabilidad Única (SRP) y facilidad para mockear persistencia en pruebas unitarias."
+    },
+    {
+      "id": "DEC-0067",
+      "title": "Tipado canónico con RolUsuario Enum y validación Fail-Fast en DTOs y Servicios",
+      "rationale": "El uso de strings mágicos dispersos ('ADMIN', 'MECANICO', etc.) y la creación dinámica de cualquier rol en la base de datos representaba un riesgo de inconsistencia y seguridad. Se unificaron los roles en RolUsuario StrEnum y conjunto inmutable ROLES_PERMITIDOS.",
+      "consequences": "Imposibilidad de inyectar roles arbitrarios en tiempo de ejecución; errores detectados de forma Fail-Fast en la frontera del DTO o validación de servicio con BusinessRuleException."
+    },
+    {
+      "id": "DEC-0068",
+      "title": "Paginación estándar y funciones compactas en repositorios y routers",
+      "rationale": "El listado de mecánicos no contaba con paginación y las funciones de consulta superaban las 35 líneas, violando las buenas prácticas de código. Se modularizaron los constructores de filtros y se introdujo paginación skip/limit con valores predeterminados seguros.",
+      "consequences": "Prevención de saturación de memoria por listados masivos y código altamente legible y mantenible (funciones de 5 a 20 líneas)."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_auth_service.py tests/integration/test_auth_api.py -v",
+      "result": "passed",
+      "evidence": "16 pruebas del módulo de autenticación (unitarias AAA y de integración API) pasaron exitosamente."
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "99 pruebas de la suite completa de regresión pasaron exitosamente (100% de la suite del backend)."
+    },
+    {
+      "command": "venv\\Scripts\\alembic.exe upgrade head && venv\\Scripts\\alembic.exe downgrade -1 && venv\\Scripts\\alembic.exe upgrade head",
+      "result": "passed",
+      "evidence": "Migración 010_add_index_usuarios_rol_id aplicada, revertida y reaplicada sin errores en Neon PostgreSQL."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con la auditoría y refactorización de calidad y principios SOLID en los siguientes módulos del sistema según el plan de implementación.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-modulo-auth",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los contratos API de autenticación (/login, /login/token, /register, /me, /mecanicos, /usuarios) mantienen 100% de retrocompatibilidad con el Frontend."
+  ]
+}

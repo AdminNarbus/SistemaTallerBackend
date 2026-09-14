@@ -1,9 +1,20 @@
+from unittest.mock import AsyncMock, patch
 import pytest
 import jwt
+from app.core.exceptions import (
+    AuthenticationException,
+    BusinessRuleException,
+    ConflictException,
+    NotFoundException,
+)
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.core.config import settings
+from app.modules.auth.constants import RolUsuario
+from app.modules.auth.models.rol import Rol
+from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.repository.user_repository import user_repository
-from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
+from app.modules.auth.services.auth_service import auth_service
+from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO, UsuarioLoginDTO
 
 
 def test_password_hashing():
@@ -27,6 +38,167 @@ def test_jwt_token_generation_and_decoding():
     assert "exp" in payload
 
 
+# =====================================================================
+# PRUEBAS UNITARIAS PURAS CON MOCKS (AAA) - AUTH SERVICE
+# =====================================================================
+
+@pytest.mark.asyncio
+async def test_auth_service_login_exitoso():
+    """Prueba login exitoso retornando TokenDTO con usuario autenticado."""
+    # Arrange
+    mock_db = AsyncMock()
+    login_dto = UsuarioLoginDTO(username="juan", password="password123")
+    hashed_pwd = get_password_hash("password123")
+    mock_rol = Rol(id=3, nombre="CONDUCTOR", descripcion="Conductor")
+    mock_usuario = Usuario(
+        id=1,
+        username="juan",
+        password_hash=hashed_pwd,
+        rol_id=3,
+        is_active=True,
+    )
+    mock_usuario.rol_rel = mock_rol
+
+    with patch("app.modules.auth.services.auth_service.user_repository.get_by_username", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_usuario
+
+        # Act
+        token_dto = await auth_service.login(mock_db, login_dto)
+
+        # Assert
+        assert token_dto.access_token is not None
+        assert token_dto.token_type == "bearer"
+        assert token_dto.user.username == "juan"
+        assert token_dto.user.rol == "CONDUCTOR"
+        mock_get.assert_awaited_once_with(mock_db, username="juan")
+
+
+@pytest.mark.asyncio
+async def test_auth_service_login_credenciales_invalidas():
+    """Prueba rechazo con AuthenticationException ante contraseña incorrecta."""
+    # Arrange
+    mock_db = AsyncMock()
+    login_dto = UsuarioLoginDTO(username="juan", password="wrongpassword")
+    hashed_pwd = get_password_hash("password123")
+    mock_rol = Rol(id=3, nombre="CONDUCTOR")
+    mock_usuario = Usuario(
+        id=1,
+        username="juan",
+        password_hash=hashed_pwd,
+        rol_id=3,
+        is_active=True,
+    )
+    mock_usuario.rol_rel = mock_rol
+
+    with patch("app.modules.auth.services.auth_service.user_repository.get_by_username", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_usuario
+
+        # Act & Assert
+        with pytest.raises(AuthenticationException) as exc_info:
+            await auth_service.login(mock_db, login_dto)
+        assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_auth_service_login_usuario_inactivo():
+    """Prueba rechazo con BusinessRuleException cuando el usuario está desactivado."""
+    # Arrange
+    mock_db = AsyncMock()
+    login_dto = UsuarioLoginDTO(username="inactivo", password="password123")
+    hashed_pwd = get_password_hash("password123")
+    mock_rol = Rol(id=3, nombre="CONDUCTOR")
+    mock_usuario = Usuario(
+        id=2,
+        username="inactivo",
+        password_hash=hashed_pwd,
+        rol_id=3,
+        is_active=False,
+    )
+    mock_usuario.rol_rel = mock_rol
+
+    with patch("app.modules.auth.services.auth_service.user_repository.get_by_username", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_usuario
+
+        # Act & Assert
+        with pytest.raises(BusinessRuleException) as exc_info:
+            await auth_service.login(mock_db, login_dto)
+        assert "inactivo" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_auth_service_register_rol_invalido():
+    """Prueba rechazo si el rol solicitado no pertenece a los roles permitidos."""
+    # Arrange
+    mock_db = AsyncMock()
+    # Construir un DTO con rol no permitido usando model_construct para saltar validación Pydantic
+    dto = UsuarioCreateDTO.model_construct(
+        username="pedro",
+        password="password123",
+        rol="ROL_HACKER",
+    )
+
+    with patch("app.modules.auth.services.auth_service.user_repository.get_by_username", new_callable=AsyncMock) as mock_get_user:
+        mock_get_user.return_value = None
+
+        # Act & Assert
+        with pytest.raises(BusinessRuleException) as exc_info:
+            await auth_service.register(mock_db, dto)
+        assert "no es válido" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_auth_service_register_duplicado():
+    """Prueba rechazo con ConflictException al intentar registrar un username existente."""
+    # Arrange
+    mock_db = AsyncMock()
+    dto = UsuarioCreateDTO(
+        username="existente",
+        password="password123",
+        rol=RolUsuario.CONDUCTOR,
+    )
+    mock_usuario = Usuario(id=1, username="existente")
+
+    with patch("app.modules.auth.services.auth_service.user_repository.get_by_username", new_callable=AsyncMock) as mock_get_user:
+        mock_get_user.return_value = mock_usuario
+
+        # Act & Assert
+        with pytest.raises(ConflictException) as exc_info:
+            await auth_service.register(mock_db, dto)
+        assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_auth_service_buscar_mecanicos_paginado():
+    """Prueba que buscar_mecanicos invoque el repositorio con parámetros de paginación."""
+    # Arrange
+    mock_db = AsyncMock()
+    mock_rol = Rol(id=4, nombre="MECANICO")
+    m1 = Usuario(id=10, username="meca1", nombre="Mario", apellido="Bros", rol_id=4, is_active=True)
+    m1.rol_rel = mock_rol
+    m2 = Usuario(id=11, username="meca2", nombre="Luigi", apellido="Bros", rol_id=4, is_active=True)
+    m2.rol_rel = mock_rol
+
+    with patch("app.modules.auth.services.auth_service.user_repository.buscar_mecanicos", new_callable=AsyncMock) as mock_repo_buscar:
+        mock_repo_buscar.return_value = [m1, m2]
+
+        # Act
+        resultados = await auth_service.buscar_mecanicos(
+            mock_db, q="Bros", exclude_id=5, skip=10, limit=20
+        )
+
+        # Assert
+        assert len(resultados) == 2
+        assert resultados[0].username == "meca1"
+        assert resultados[1].username == "meca2"
+        mock_repo_buscar.assert_awaited_once_with(
+            mock_db, q="Bros", exclude_id=5, skip=10, limit=20
+        )
+
+
+# =====================================================================
+# PRUEBAS DE INTEGRACIÓN CON BASE DE DATOS (db_session)
+# =====================================================================
+
 @pytest.mark.asyncio
 async def test_user_repository_create_and_authenticate(db_session):
     """Prueba la creación de un usuario y la autenticación mediante user_repository."""
@@ -35,7 +207,7 @@ async def test_user_repository_create_and_authenticate(db_session):
         apellido="User",
         username="testuser",
         password="mysecretpassword",
-        rol="MECANICO",
+        rol=RolUsuario.MECANICO,
     )
 
     created_user = await user_repository.create(db_session, user_in)
@@ -65,7 +237,7 @@ async def test_user_repository_desactivar_soft_delete(db_session):
         apellido="User",
         username="user_deactivate",
         password="password123",
-        rol="CONDUCTOR",
+        rol=RolUsuario.CONDUCTOR,
     )
     user = await user_repository.create(db_session, user_in)
     assert user.is_active is True
@@ -78,15 +250,12 @@ async def test_user_repository_desactivar_soft_delete(db_session):
 @pytest.mark.asyncio
 async def test_auth_service_deshabilitar_usuario(db_session):
     """Prueba el caso de uso deshabilitar_usuario en AuthService."""
-    from app.modules.auth.services.auth_service import auth_service
-    from app.core.exceptions import BusinessRuleException, NotFoundException
-
     user_in = UsuarioCreateDTO(
         nombre="Servicio",
         apellido="Test",
         username="user_service_test",
         password="password123",
-        rol="MECANICO",
+        rol=RolUsuario.MECANICO,
     )
     user_dto = await auth_service.crear_usuario(db_session, user_in)
     assert user_dto.is_active is True

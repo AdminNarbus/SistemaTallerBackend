@@ -1,8 +1,11 @@
-from typing import Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.auth.models.usuario import Usuario
 
 
 class Rol(Base):
@@ -22,3 +25,8 @@ class Rol(Base):
     descripcion: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True
     )
+
+    usuarios: Mapped[List["Usuario"]] = relationship(
+        "Usuario", back_populates="rol_rel"
+    )
+

@@ -98,3 +98,30 @@ async def test_actualizar_en_taller_endpoint(client, db_session, auth_headers_su
     res_404 = await client.patch("/api/v1/buses/9999/en-taller", json=payload, headers=auth_headers_supervisor)
     assert res_404.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_buses_listar_con_paginacion(client, db_session):
+    """Prueba GET /api/v1/buses y /buscar con parámetros skip y limit."""
+    buses = [
+        Bus(id=20, n_bus="501", patente="PA5001", is_active=True, en_taller=False),
+        Bus(id=21, n_bus="502", patente="PA5002", is_active=True, en_taller=False),
+        Bus(id=22, n_bus="503", patente="PA5003", is_active=True, en_taller=False),
+    ]
+    for b in buses:
+        db_session.add(b)
+    await db_session.commit()
+
+    # Listar con limit=2
+    res = await client.get("/api/v1/buses?skip=0&limit=2")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data) <= 2
+
+    # Buscar con limit=1
+    res_b = await client.get("/api/v1/buses/buscar?query=50&limit=1")
+    assert res_b.status_code == 200
+    data_b = res_b.json()
+    assert len(data_b) == 1
+    assert data_b[0]["n_bus"] == "501"
+
+

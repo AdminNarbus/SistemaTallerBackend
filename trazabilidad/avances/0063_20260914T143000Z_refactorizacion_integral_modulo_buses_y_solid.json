@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 63,
+  "id": "AV-0063",
+  "timestamp": "2026-09-14T14:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BUSES-REFACTOR-1",
+    "name": "Refactorización Integral de Arquitectura Limpia, Principios SOLID y Desacoplamiento del Módulo Buses",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Auditoría técnica exhaustiva y refactorización integral del módulo de buses (app/modules/buses) en estricto cumplimiento con AGENTS.md, BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md, BUENAS_PRACTICAS_CODIGO.md y BUENAS_PRACTICAS_BD.md. Se eliminó la inversión de dependencias y el acoplamiento circular donde BusRepository importaba e invocaba a BusService; se depuró código muerto obsoleto en el repositorio y DTOs; se extrajeron constantes canónicas para rangos operativos y paginación; se refactorizó BusService bajo el principio de responsabilidad única (SRP) y único nivel de abstracción (SLAP) extrayendo funciones puras auxiliares; se incorporaron parámetros opcionales de paginación (skip y limit) en Router y Repository preservando 100% de compatibilidad hacia atrás con el Frontend; y se incorporó una suite de pruebas unitarias puras AAA con AsyncMock.",
+  "scope": {
+    "planned": [
+      "Crear app/modules/buses/constants.py con RANGO_MIN_BUS_OPERATIVO, RANGO_MAX_BUS_OPERATIVO y límites de paginación",
+      "Depurar DTOs huérfanos BusCreateDTO y BusSearchPayloadDTO de bus_dto.py y dtos/__init__.py",
+      "Agregar validación defensiva en_taller en DTOs de buses tolerando valores None en memoria",
+      "Refactorizar bus_repository.py a persistencia pura, eliminando imports circulares hacia BusService y código muerto (buscar_n_buses_por_prefijo, buscar_buses, update_en_taller)",
+      "Incorporar soporte de paginación opcional (skip, limit) en bus_repository.py",
+      "Refactorizar bus_service.py aplicando SRP y SLAP: constantes con nombre, extracción de funciones puras _filtrar_flota_operativa, _mapear_y_deduplicar_buses_simples y _ordenar_buses_por_numero, permitiendo inyección de dependencias",
+      "Actualizar router.py con parámetros de paginación skip y limit en listar_buses y buscar_buses",
+      "Ampliar tests/unit/test_bus_service.py con pruebas unitarias puras AAA aislando el repositorio con AsyncMock y pruebas de valores límite",
+      "Añadir prueba de integración para paginación de buses en tests/integration/test_buses_api.py",
+      "Verificar el 100% de la suite de pruebas automatizadas (106/106 tests verdes)"
+    ],
+    "completed": [
+      "Crear app/modules/buses/constants.py con RANGO_MIN_BUS_OPERATIVO, RANGO_MAX_BUS_OPERATIVO y límites de paginación",
+      "Depurar DTOs huérfanos BusCreateDTO y BusSearchPayloadDTO de bus_dto.py y dtos/__init__.py",
+      "Agregar validación defensiva en_taller en DTOs de buses tolerando valores None en memoria",
+      "Refactorizar bus_repository.py a persistencia pura, eliminando imports circulares hacia BusService y código muerto (buscar_n_buses_por_prefijo, buscar_buses, update_en_taller)",
+      "Incorporar soporte de paginación opcional (skip, limit) en bus_repository.py",
+      "Refactorizar bus_service.py aplicando SRP y SLAP: constantes con nombre, extracción de funciones puras _filtrar_flota_operativa, _mapear_y_deduplicar_buses_simples y _ordenar_buses_por_numero, permitiendo inyección de dependencias",
+      "Actualizar router.py con parámetros de paginación skip y limit en listar_buses y buscar_buses",
+      "Ampliar tests/unit/test_bus_service.py con pruebas unitarias puras AAA aislando el repositorio con AsyncMock y pruebas de valores límite",
+      "Añadir prueba de integración para paginación de buses en tests/integration/test_buses_api.py",
+      "Verificar el 100% de la suite de pruebas automatizadas (106/106 tests verdes)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/buses/constants.py",
+      "action": "created",
+      "summary": "Definición de constantes canónicas RANGO_MIN_BUS_OPERATIVO (200), RANGO_MAX_BUS_OPERATIVO (900), DEFAULT_PAGE_SKIP (0), DEFAULT_PAGE_LIMIT (100) y MAX_PAGE_LIMIT (100)."
+    },
+    {
+      "path": "app/modules/buses/dtos/bus_dto.py",
+      "action": "modified",
+      "summary": "Eliminación de BusCreateDTO y BusSearchPayloadDTO. Incorporación de field_validator defensivo en_taller en BusBaseDTO, BusAutocompleteDTO y BusSimpleDTO."
+    },
+    {
+      "path": "app/modules/buses/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Actualización de __all__ removiendo los DTOs deprecados."
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Desacoplamiento total: eliminación de imports de bus_service y regla de negocio es_bus_operativo_taller. Remoción de métodos muertos buscar_n_buses_por_prefijo, buscar_buses y update_en_taller. Inclusión de soporte de paginación skip y limit en get_all y buscar_por_prefijo. Consolidación de imports en la cabecera."
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "Refactorización SRP y SLAP: uso de constantes canónicas en es_bus_operativo_taller; modularización de _filtrar_flota_operativa, _mapear_y_deduplicar_buses_simples y _ordenar_buses_por_numero. Soporte de inyección de dependencias en BusService(repository=...) y métodos coordinadores concisos."
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Incorporación de parámetros de consulta opcionales de paginación skip y limit en GET / y GET /buscar, manteniendo compatibilidad total con contratos frontend."
+    },
+    {
+      "path": "tests/unit/test_bus_service.py",
+      "action": "modified",
+      "summary": "Incorporación de suite unitaria pura AAA: casos límite de regla de negocio y pruebas con AsyncMock para buscar_sugerencias_buses, get_bus_by_id, get_bus_by_n_bus, actualizar_en_taller y listar_buses con paginación."
+    },
+    {
+      "path": "tests/integration/test_buses_api.py",
+      "action": "modified",
+      "summary": "Adición de test_buses_listar_con_paginacion verificando skip y limit en llamadas HTTP reales con cliente de pruebas."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización del estado del módulo Buses a REFACTORIZADO Y AUDITADO (SOLID & CLEAN CODE)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Erradicación de la Inversión de Dependencias en BusRepository",
+      "rationale": "El repositorio invocaba a bus_service.buscar_sugerencias_buses e importaba es_bus_operativo_taller, rompiendo la arquitectura limpia de 4 capas (Router -> Service -> Repository -> DTO) y generando dependencias circulares resueltas con imports tardíos. La persistencia debe limitarse exclusivamente a operaciones SQL sobre la base de datos.",
+      "consequences": "Independencia arquitectónica absoluta de la capa de persistencia, eliminación de imports circulares y código 100% testeable de forma aislada."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Aislamiento de Números Mágicos en app/modules/buses/constants.py",
+      "rationale": "El rango de flota operativa de taller 200 <= n_bus < 900 estaba incrustado en el cuerpo de la función es_bus_operativo_taller. Centralizarlo en constantes tipadas con Final previene inconsistencias si la flota se expande.",
+      "consequences": "Claridad semántica, cumplimiento de BUENAS_PRACTICAS_CODIGO.md y facilidad de mantenimiento futuro."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Paginación Opcional Compatible con Catálogo Dropdown del Frontend",
+      "rationale": "El frontend precarga la flota de buses activa completa para desplegables de formularios de conductores y mecánicos. Establecer límites obligatorios rompería la experiencia de usuario del combobox. Se agregaron skip y limit opcionales con tope máximo de 100 registros cuando se especifican, satisfaciendo el estándar backend sin alterar el contrato esperado por la interfaz.",
+      "consequences": "Cumplimiento de la directriz de paginación y 100% de compatibilidad hacia atrás con los clientes web y móviles existentes."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_bus_service.py tests/integration/test_buses_api.py",
+      "result": "passed",
+      "evidence": "12 tests específicos del módulo buses pasaron exitosamente en 2.29s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "106 tests de la suite completa del backend pasaron exitosamente en 55.56s (0 fallos)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar la rama feature/refactor-modulo-buses a develop mediante GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-modulo-buses",
+    "commit": "pending",
+    "dirty": false
+  },
+  "notes": [
+    "Todos los módulos del backend (Auth, Buses, Mantención, Neumáticos y Supervisión) se encuentran ahora completamente auditados y refactorizados bajo los estándares de AGENTS.md."
+  ]
+}

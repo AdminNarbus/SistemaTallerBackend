@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Any, Optional
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BusBaseDTO(BaseModel):
@@ -24,9 +24,10 @@ class BusBaseDTO(BaseModel):
     is_active: Optional[bool] = True
     en_taller: bool = False
 
-
-class BusCreateDTO(BusBaseDTO):
-    pass
+    @field_validator("en_taller", mode="before")
+    @classmethod
+    def validar_en_taller(cls, v: Any) -> bool:
+        return bool(v) if v is not None else False
 
 
 class BusResponseDTO(BusBaseDTO):
@@ -45,6 +46,11 @@ class BusAutocompleteDTO(BaseModel):
     is_active: Optional[bool] = True
     en_taller: bool = False
 
+    @field_validator("en_taller", mode="before")
+    @classmethod
+    def validar_en_taller(cls, v: Any) -> bool:
+        return bool(v) if v is not None else False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -54,15 +60,14 @@ class BusSimpleDTO(BaseModel):
     patente: Optional[str] = None
     en_taller: bool = False
 
+    @field_validator("en_taller", mode="before")
+    @classmethod
+    def validar_en_taller(cls, v: Any) -> bool:
+        return bool(v) if v is not None else False
+
     model_config = ConfigDict(from_attributes=True)
-
-
-class BusSearchPayloadDTO(BaseModel):
-    query: Optional[str] = None
 
 
 class BusUpdateEnTallerDTO(BaseModel):
     en_taller: bool
     motivo: Optional[str] = None
-
-

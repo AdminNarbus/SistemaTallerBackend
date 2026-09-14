@@ -28,11 +28,12 @@ async def buscar_buses(
     response: Response,
     query: Optional[str] = Query(None, description="Prefijo o término de búsqueda para n_bus"),
     solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Tope de sugerencias a retornar"),
     db: AsyncSession = SessionDep,
 ) -> List[BusSimpleDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
     return await bus_service.buscar_sugerencias_buses(
-        db, query=query, solo_flota_taller=solo_flota_taller
+        db, query=query, solo_flota_taller=solo_flota_taller, limit=limit
     )
 
 
@@ -46,11 +47,17 @@ async def listar_buses(
     response: Response,
     solo_activos: bool = Query(True, description="Filtrar solo buses activos"),
     solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
+    skip: int = Query(0, ge=0, description="Cantidad de registros a omitir"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Límite de registros a retornar"),
     db: AsyncSession = SessionDep,
 ) -> List[BusAutocompleteDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
     return await bus_service.listar_buses(
-        db, solo_activos=solo_activos, solo_flota_taller=solo_flota_taller
+        db,
+        solo_activos=solo_activos,
+        solo_flota_taller=solo_flota_taller,
+        skip=skip,
+        limit=limit,
     )
 
 
@@ -101,5 +108,3 @@ async def actualizar_en_taller(
     return await bus_service.actualizar_en_taller(
         db, bus_id=bus_id, en_taller=payload.en_taller, motivo=payload.motivo
     )
-
-

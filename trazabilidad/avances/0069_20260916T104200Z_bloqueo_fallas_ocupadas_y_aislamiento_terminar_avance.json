@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 69,
+  "id": "AV-0069",
+  "timestamp": "2026-09-16T10:42:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-12",
+    "name": "Bloqueo Estricto de Fallas Ocupadas y Aislamiento de Término de Avance",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de dos mejoras críticas de integridad operacional en Mantención: 1) Bloqueo estricto con BusinessRuleException (HTTP 422/400) al intentar autoasignar fallas que ya se encuentren tomadas activamente por otro mecánico; 2) Aislamiento en terminar_avance por mecánico para proteger el trabajo y la presencia activa de otros compañeros que intervienen en paralelo en el mismo bus.",
+  "scope": {
+    "planned": [
+      "Bloqueo estricto en autoasignar_fallas si la falla ya está ocupada activamente por otro mecánico",
+      "Aislamiento de terminar_avance al mecánico autenticado para no cerrar fallas ni presencias ajenas",
+      "Pruebas unitarias e integración para validar bloqueo y aislamiento",
+      "Verificación completa de suite de pruebas sin regresiones"
+    ],
+    "completed": [
+      "Bloqueo estricto en autoasignar_fallas si la falla ya está ocupada activamente por otro mecánico",
+      "Aislamiento de terminar_avance al mecánico autenticado para no cerrar fallas ni presencias ajenas",
+      "Pruebas unitarias e integración para validar bloqueo y aislamiento",
+      "Verificación completa de suite de pruebas sin regresiones (157/157 tests verdes)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (manejado en repositorio ProtoNeumaticos)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Bloqueo con BusinessRuleException en autoasignar_fallas cuando la falla ya tiene asignación activa; aislamiento por mecánico en terminar_avance para no afectar fallas ni presencia de compañeros de equipo."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Eager loading joinedload(TallerAsignacionFalla.mecanico) en get_asignaciones_activas y nuevo método atómico desactivar_asignaciones_por_mecanicos."
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Nuevos tests unitarios test_autoasignar_falla_ocupada_bloquea_con_business_rule y test_terminar_avance_aislado_por_mecanico."
+    },
+    {
+      "path": "tests/integration/test_fase3_asignacion_atomica.py",
+      "action": "modified",
+      "summary": "Actualización de paso 3 en test de integración para validar el bloqueo estricto (422 BUSINESS_RULE_VIOLATION)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0072",
+      "title": "Bloqueo Estricto de Autoasignación sobre Fallas Ocupadas",
+      "rationale": "Para evitar colisiones entre mecánicos en el piso de taller donde dos técnicos reparan la misma falla sin advertirlo, se sustituyó la co-responsabilidad implícita por un bloqueo estricto con BusinessRuleException a nivel de endpoint. La colaboración legítima en una misma falla sigue estando habilitada mediante colaboradores_ids al momento de tomar la falla.",
+      "consequences": "La API devuelve un error descriptivo con el nombre del mecánico que tiene tomada la falla, forzando a que la libere antes de que otro técnico pueda asumirla."
+    },
+    {
+      "id": "DEC-0073",
+      "title": "Aislamiento de Término de Avance por Mecánico",
+      "rationale": "Al presionar Terminar Avance sin especificar detalles_ids (liberar todo mi trabajo), el backend anteriormente cerraba todas las asignaciones activas de la OT indiscriminadamente. Ahora se filtra para cerrar únicamente las fallas y presencia activa del mecánico solicitante (y de su equipo directo en esas mismas fallas si fue una asignación conjunta), manteniendo intactas las fallas que atienden otros mecánicos en el bus.",
+      "consequences": "Múltiples mecánicos pueden pausar o entregar su trabajo independientemente sin alterar el estado ni las tareas de sus compañeros."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "157 passed, 1 warning in 141.66s (suite completa 100% verde)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Proveer la especificación y guía detallada al equipo de Frontend para manejar el error de bloqueo y los botones del pie de página.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "Los 157 tests automatizados pasan exitosamente."
+  ]
+}

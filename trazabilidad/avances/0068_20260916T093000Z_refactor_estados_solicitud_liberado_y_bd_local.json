@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 68,
+  "id": "AV-0068",
+  "timestamp": "2026-09-16T09:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-ESTADOS-LIBERADO-1",
+    "name": "Refactorización Integral de Estados de Solicitud (Eliminación de PENDIENTE_REASIGNACION, Introducción de LIBERADO y Conexión Local)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización integral del ciclo de vida de solicitudes de taller (TallerSolicitud) y adaptación completa al entorno local: 1) Eliminación del estado redundante PENDIENTE_REASIGNACION y unificación en PENDIENTE para entregas de turno y desasignaciones; 2) Introducción del nuevo estado canónico LIBERADO en cierres parciales donde el bus egresa físicamente del taller (en_taller = False) pero la orden permanece abierta con averías pendientes o falta de repuestos (motivo_cierre_parcial); 3) Reserva exclusiva del estado FINALIZADO para órdenes con 100% de fallas resueltas; 4) Reingreso automático a EN_REPARACION y en_taller = True al retomar trabajo de un bus liberado; 5) Conmutación de DATABASE_URL en .env hacia PostgreSQL local (narbus_taller_db) y aplicación de migraciones Alembic 006 a 012 (012_refactor_estados_solicitud_liberado.py); 6) Actualización de métricas de supervisión (liberadas en lugar de pendiente_reasignacion); 7) Aprobación de 155 de 155 pruebas automatizadas (100% de éxito).",
+  "scope": {
+    "planned": [
+      "Configurar DATABASE_URL en .env apuntando a PostgreSQL local (narbus_taller_db)",
+      "Crear migración Alembic 012_refactor_estados_solicitud_liberado.py migrando PENDIENTE_REASIGNACION a PENDIENTE",
+      "Ejecutar alembic upgrade head en la base de datos local",
+      "Actualizar enum canónico EstadoSolicitud en app/modules/mantencion/constants.py",
+      "Actualizar comentarios y docstrings en TallerSolicitud y CambiarEstadoSolicitudDTO",
+      "Refactorizar MantencionService: liberar_turno y desasignar_mecanico a PENDIENTE",
+      "Refactorizar finalizar_solicitud y liberar_solicitud para asignar LIBERADO ante fallas no resueltas",
+      "Refactorizar tomar_trabajo y autoasignar_fallas para reingresar buses LIBERADO a EN_REPARACION",
+      "Refactorizar cambiar_estado_solicitud para soportar transiciones hacia y desde LIBERADO",
+      "Actualizar consultas de listado de pendientes en MantencionRepository y router",
+      "Actualizar SupervisionRepository, DTOs y constantes para reemplazar pendiente_reasignacion por liberadas",
+      "Actualizar y expandir suite de pruebas unitarias, de integración y e2e",
+      "Verificar 100% de pruebas verdes",
+      "Actualizar trazabilidad (01_ESTADO_ACTUAL_PROYECTO.md, 05_CONTRATOS_API_FRONTEND.md, 06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md)"
+    ],
+    "completed": [
+      "Configurar DATABASE_URL en .env apuntando a PostgreSQL local (narbus_taller_db)",
+      "Crear migración Alembic 012_refactor_estados_solicitud_liberado.py migrando PENDIENTE_REASIGNACION a PENDIENTE",
+      "Ejecutar alembic upgrade head en la base de datos local",
+      "Actualizar enum canónico EstadoSolicitud en app/modules/mantencion/constants.py",
+      "Actualizar comentarios y docstrings en TallerSolicitud y CambiarEstadoSolicitudDTO",
+      "Refactorizar MantencionService: liberar_turno y desasignar_mecanico a PENDIENTE",
+      "Refactorizar finalizar_solicitud y liberar_solicitud para asignar LIBERADO ante fallas no resueltas",
+      "Refactorizar tomar_trabajo y autoasignar_fallas para reingresar buses LIBERADO a EN_REPARACION",
+      "Refactorizar cambiar_estado_solicitud para soportar transiciones hacia y desde LIBERADO",
+      "Actualizar consultas de listado de pendientes en MantencionRepository y router",
+      "Actualizar SupervisionRepository, DTOs y constantes para reemplazar pendiente_reasignacion por liberadas",
+      "Actualizar y expandir suite de pruebas unitarias, de integración y e2e",
+      "Verificar 100% de pruebas verdes (155/155 aprobadas)",
+      "Actualizar trazabilidad (01_ESTADO_ACTUAL_PROYECTO.md, 05_CONTRATOS_API_FRONTEND.md, 06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Conmutación de DATABASE_URL hacia PostgreSQL local narbus_taller_db en 127.0.0.1:5432."
+    },
+    {
+      "path": "alembic/versions/012_refactor_estados_solicitud_liberado.py",
+      "action": "created",
+      "summary": "Migración Alembic para migrar registros históricos de PENDIENTE_REASIGNACION a PENDIENTE en taller_solicitudes."
+    },
+    {
+      "path": "app/modules/mantencion/constants.py",
+      "action": "modified",
+      "summary": "Reemplazo de PENDIENTE_REASIGNACION por LIBERADO en enum canónico EstadoSolicitud."
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Actualización de documentación de columna estado con los 5 estados canónicos."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Actualización de descripciones de campos en CambiarEstadoSolicitudDTO."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Lógica de transiciones con soporte para LIBERADO en cierre parcial, PENDIENTE en liberación de turno y reingreso a EN_REPARACION."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Filtro de pendientes acotado a REPORTADO y PENDIENTE en CTE PostgreSQL y fallback SQLite."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Actualización de docstring de bandeja de pendientes en router."
+    },
+    {
+      "path": "app/modules/supervision/constants.py",
+      "action": "modified",
+      "summary": "Actualización de ESTADOS_VALIDOS_AUDITORIA con los 5 estados canónicos."
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "Sustitución de pendiente_reasignacion por liberadas en MetricasEstadoDTO."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Cálculo de métrica liberadas mediante CTE y fallback en SQLite."
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Ajuste de assert de liberar_turno a PENDIENTE e incorporación de pruebas para LIBERADO y reingreso."
+    },
+    {
+      "path": "tests/integration/test_fase4_checks_pauta_y_liberacion.py",
+      "action": "modified",
+      "summary": "Ajuste de assert a LIBERADO y fecha_cierre is None en prueba de cierre parcial."
+    },
+    {
+      "path": "tests/e2e/test_flujo_completo_taller_e2e.py",
+      "action": "modified",
+      "summary": "Ajuste de assert a PENDIENTE en entrega de turno."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Documentación del hito AV-0068 y actualización del modelo de estados."
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Actualización de tipos TypeScript para EstadoSolicitud y list_pendientes."
+    },
+    {
+      "path": "trazabilidad/06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md",
+      "action": "modified",
+      "summary": "Actualización del catálogo de endpoints y contratos REST para supervisión y mantención."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0070",
+      "title": "Erradicación de PENDIENTE_REASIGNACION en favor del estado canónico PENDIENTE",
+      "rationale": "Tener dos estados distintos (PENDIENTE y PENDIENTE_REASIGNACION) creaba redundancia operativa. Para el taller, ambas órdenes están esperando un mecánico disponible. El detalle histórico de quién entregó el turno, fecha y motivo queda preservado en la bitácora inmutable con tipo ENTREGA_TURNO.",
+      "consequences": "Simplifica el enum de estados, los filtros del Frontend y las consultas SQL del backend, reduciendo la complejidad ciclomática."
+    },
+    {
+      "id": "DEC-0071",
+      "title": "Introducción del estado LIBERADO para órdenes con fallas abiertas que egresan del taller",
+      "rationale": "Anteriormente, al realizar un cierre parcial con averías pendientes o falta de repuestos, el sistema pasaba la orden a FINALIZADO y en_taller = False. Esto falseaba la realidad operativa del taller haciendo parecer que el trabajo estaba concluido al 100%. Con el estado LIBERADO, el bus puede operar físicamente (en_taller = False) pero la orden permanece viva y trazable con sus fallas pendientes hasta su resolución total.",
+      "consequences": "Supervisión y taller pueden diferenciar inmediatamente los buses liberados con observaciones de aquellos 100% finalizados, garantizando estricto control de flota."
+    },
+    {
+      "id": "DEC-0072",
+      "title": "Conexión a PostgreSQL Local (narbus_taller_db) conforme a AGENTS.md",
+      "rationale": "En cumplimiento estricto con AGENTS.md (Entorno Local Estricto), se migró la configuración activa en .env hacia la instancia local de PostgreSQL en el puerto 5432, aplicando todas las migraciones acumuladas de Alembic (006 a 012).",
+      "consequences": "Desarrollo y pruebas 100% autónomas en local sin depender de latencia ni conectividad a Neon Cloud."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "Migraciones 006 a 012 aplicadas exitosamente en la base de datos local narbus_taller_db."
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit -v",
+      "result": "passed",
+      "evidence": "112 tests unitarios pasando exitosamente."
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/integration tests/e2e -v",
+      "result": "passed",
+      "evidence": "43 tests de integración y e2e pasando exitosamente."
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest",
+      "result": "passed",
+      "evidence": "155 de 155 tests verdes en 58.06s (100% de éxito)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Coordinar con el equipo de Frontend la actualización del enum TypeScript EstadoSolicitud a ['REPORTADO', 'PENDIENTE', 'EN_REPARACION', 'LIBERADO', 'FINALIZADO'].",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "La base de datos local narbus_taller_db se encuentra completamente actualizada en la revisión 012_refactor_estados_liberado.",
+    "El 100% de la suite de pruebas del backend (155 tests) está en verde."
+  ]
+}

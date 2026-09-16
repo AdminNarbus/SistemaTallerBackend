@@ -1,9 +1,9 @@
 # Especificación de Módulos y Arquitectura Narbus Taller
 
-> **Versión:** 3.0.0  
-> **Fecha:** 2026-09-09  
-> **Total Endpoints:** 43 endpoints RESTful activos  
-> **Arquitectura:** Clean Architecture en 3 capas (Router $\rightarrow$ Service $\rightarrow$ Repository) + Storage Provider (GCS / Local)
+> **Versión:** 3.1.0  
+> **Fecha:** 2026-09-15  
+> **Total Endpoints:** 48 endpoints RESTful activos  
+> **Arquitectura:** Clean Architecture en 4 capas (Router $\rightarrow$ Service $\rightarrow$ Repository $\rightarrow$ DTO) + Storage Provider (GCS / Local)
 
 ---
 
@@ -19,11 +19,14 @@
 ---
 
 ## 2. Módulo Buses (`/api/v1/buses`)
-- `GET /`: Catálogo de buses. Filtros: `solo_activos=true`, `solo_flota_taller=true` (`200 <= n_bus < 900`).
-- `GET /buscar`: Búsqueda rápida optimizada por prefijo/número. Retorna `List[BusSimpleDTO]` (`id`, `n_bus`, `patente`, `en_taller`).
+- `GET /`: Catálogo de buses. Filtros: `solo_activos=true`, `solo_flota_taller=true` (flota completa sin restricciones numéricas artificiales).
+- `GET /buscar`: Búsqueda rápida optimizada por prefijo/número. Retorna `List[str]`.
 - `GET /{id}`: Detalle de un bus por su ID primario.
 - `GET /numero/{n_bus}`: Detalle de un bus por su número de máquina (ej. `"330"`).
-- `PATCH /{id}/en-taller`: Actualización directa con `RETURNING` del flag físico `en_taller: bool`.
+- `POST /`: Creación y catalogación de nuevo bus (`BusCreateDTO`). Requiere rol supervisor o admin.
+- `PATCH /{id}/en-taller`: Actualización directa del flag físico `en_taller: bool`.
+- `PATCH /{id}/dar-de-baja` y `DELETE /{id}`: Baja lógica auditada con `fecha_baja`, `motivo_baja` y `usuario_baja_id` (valida OTs activas salvo `forzar=True`).
+- `PATCH /{id}/reactivar`: Reincorporación y reactivación de unidad dada de baja.
 
 ---
 
@@ -58,6 +61,7 @@
 ### Pauta Preventiva y Cierre
 - `GET /{id}/pauta`: Consulta el estado y progreso de la pauta preventiva de la orden.
 - `POST /{id}/pauta`: Registro y actualización batch de respuestas a la pauta preventiva en 1 sola transacción.
+- `PATCH /{id}/estado`: Cambio manual y libre de estado de OT con justificación opcional, tipo `CAMBIO_ESTADO` en bitácora inmutable, liberación condicional de taller (`liberar_bus_taller`) y reaperturas automáticas.
 - `POST /{id}/liberar`: Finaliza los trabajos, exige justificaciones condicionales de pauta incompleta o cierre parcial, y libera el bus (`en_taller = false`).
 - `POST /{id}/finalizar`: Alias de cierre operacional de la orden.
 
@@ -77,6 +81,9 @@
 - `GET /alertas`: Feed en tiempo real de alertas operacionales (`REPUESTO_FALTANTE`, `DEFECTO_PAUTA`, `BUS_SIN_MECANICOS`).
 - `GET /buses/taller`: Paginación y auditoría detallada de buses en taller con filtros por estado (`estado`) y búsqueda (`q`).
 - `GET /auditoria/buses-taller`: Auditoría analítica consolidada de trazabilidad histórica.
+- `PATCH /solicitudes/{id}/estado`: Cambio manual de estado de OT con justificación y bitácora inmutable.
+- `POST /buses`: Creación y alta de nuevo bus en el sistema (ruta delegada de conveniencia).
+- `PATCH /buses/{id}/dar-de-baja`: Retiro de circulación / baja lógica de bus con auditoría (ruta delegada).
 
 ---
 

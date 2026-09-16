@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 67,
+  "id": "AV-0067",
+  "timestamp": "2026-09-15T17:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUP-GESTION-BUSES-OT-1",
+    "name": "Capacidad de Cambio de Estados de OTs con Justificación y Gestión Completa de Buses para Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de dos capacidades operacionales críticas solicitadas para el rol de Supervisora/Admin: 1) Capacidad de cambiar el estado de cualquier Orden de Trabajo (TallerSolicitud) con registro obligatorio en la bitácora inmutable de comentarios (tipo CAMBIO_ESTADO), soporte para justificación u observación opcional (con glosa canónica por defecto), manejo de cierre con liberación condicional de taller (en_taller = False) y reapertura reactivando el bus en taller. 2) Gestión integral de flota de buses permitiendo creación (POST /api/v1/buses), baja o deshabilitación con auditoría completa (fecha_baja, motivo_baja, usuario_baja_id, y validación contra OTs activas salvo 'forzar=True'), reactivación (PATCH /api/v1/buses/{id}/reactivar) y eliminación del filtro estático numérico (200 <= n_bus < 900) para permitir catalogar cualquier bus presente o futuro. Se aplicó la migración Alembic 011_add_buses_audit_fields.py y se alcanzaron 154 de 154 tests verdes (100% de éxito).",
+  "scope": {
+    "planned": [
+      "Diseñar e implementar migración Alembic para campos de auditoría y baja en modelo Bus",
+      "Actualizar modelo Bus con fecha_creacion, fecha_baja, motivo_baja y usuario_baja_id",
+      "Crear DTOs BusCreateDTO, BusDarDeBajaDTO y actualizar BusBaseDTO",
+      "Actualizar BusRepository con get_by_patente, add_bus y count_solicitudes_activas_por_bus",
+      "Refactorizar BusService eliminando filtro numérico 200..900 e implementando create_bus, dar_de_baja_bus y reactivar_bus",
+      "Exponer endpoints en BusesRouter (POST /, PATCH /{id}/dar-de-baja, PATCH /{id}/reactivar, DELETE /{id})",
+      "Incorporar CAMBIO_ESTADO, ASIGNACION y ENTREGA_TURNO en TipoComentarioBitacora",
+      "Crear CambiarEstadoSolicitudDTO con normalización de mayúsculas y campos opcionales",
+      "Implementar cambiar_estado_solicitud en MantencionService con transiciones a FINALIZADO y reaperturas",
+      "Exponer PATCH /api/v1/mantencion/solicitudes/{id}/estado y PATCH /api/v1/supervision/solicitudes/{id}/estado",
+      "Exponer rutas delegadas de gestión de buses en SupervisionRouter",
+      "Actualizar pruebas unitarias y de integración de buses y supervisión",
+      "Ejecutar suite completa de pruebas verificando 100% verde",
+      "Actualizar documentación de trazabilidad y catálogo de contratos REST para Frontend"
+    ],
+    "completed": [
+      "Diseñar e implementar migración Alembic para campos de auditoría y baja en modelo Bus",
+      "Actualizar modelo Bus con fecha_creacion, fecha_baja, motivo_baja y usuario_baja_id",
+      "Crear DTOs BusCreateDTO, BusDarDeBajaDTO y actualizar BusBaseDTO",
+      "Actualizar BusRepository con get_by_patente, add_bus y count_solicitudes_activas_por_bus",
+      "Refactorizar BusService eliminando filtro numérico 200..900 e implementando create_bus, dar_de_baja_bus y reactivar_bus",
+      "Exponer endpoints en BusesRouter (POST /, PATCH /{id}/dar-de-baja, PATCH /{id}/reactivar, DELETE /{id})",
+      "Incorporar CAMBIO_ESTADO, ASIGNACION y ENTREGA_TURNO en TipoComentarioBitacora",
+      "Crear CambiarEstadoSolicitudDTO con normalización de mayúsculas y campos opcionales",
+      "Implementar cambiar_estado_solicitud en MantencionService con transiciones a FINALIZADO y reaperturas",
+      "Exponer PATCH /api/v1/mantencion/solicitudes/{id}/estado y PATCH /api/v1/supervision/solicitudes/{id}/estado",
+      "Exponer rutas delegadas de gestión de buses en SupervisionRouter",
+      "Actualizar pruebas unitarias y de integración de buses y supervisión",
+      "Ejecutar suite completa de pruebas verificando 100% verde (154/154)",
+      "Actualizar documentación de trazabilidad y catálogo de contratos REST para Frontend"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/011_add_buses_audit_fields.py",
+      "action": "created",
+      "summary": "Migración Alembic para agregar fecha_creacion, fecha_baja, motivo_baja y usuario_baja_id en tabla buses con FK a usuarios."
+    },
+    {
+      "path": "app/modules/buses/models/bus.py",
+      "action": "modified",
+      "summary": "Incorporación de campos de auditoría y baja con relación SQLAlchemy a Usuario (usuario_baja)."
+    },
+    {
+      "path": "app/modules/buses/dtos/bus_dto.py",
+      "action": "modified",
+      "summary": "Definición de BusCreateDTO, BusDarDeBajaDTO e incorporación de campos de auditoría en BusBaseDTO y BusResponseDTO."
+    },
+    {
+      "path": "app/modules/buses/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación explícita de nuevos DTOs en __all__."
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Implementación de get_by_patente, add_bus y count_solicitudes_activas_por_bus."
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "Eliminación del filtro numérico de flota 200..900 e implementación de create_bus, dar_de_baja_bus y reactivar_bus."
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Endpoints POST /, PATCH /{bus_id}/dar-de-baja, DELETE /{bus_id} y PATCH /{bus_id}/reactivar protegidos por rol supervisor/admin."
+    },
+    {
+      "path": "app/modules/mantencion/constants.py",
+      "action": "modified",
+      "summary": "Adición de CAMBIO_ESTADO, ASIGNACION y ENTREGA_TURNO en TipoComentarioBitacora."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Definición de CambiarEstadoSolicitudDTO con validación y normalización de mayúsculas."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación explícita de CambiarEstadoSolicitudDTO."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Implementación de cambiar_estado_solicitud con manejo de finalización, reaperturas, registro en bitácora e integridad de equipo activo."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Endpoint PATCH /solicitudes/{id}/estado con require_supervisor_or_admin."
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "modified",
+      "summary": "Función pura formatear_comentario_cambio_estado para glosas canónicas auditables."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Delegación de cambiar_estado_solicitud mediante DIP hacia mantencion_service."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Exposición de PATCH /solicitudes/{id}/estado y rutas de conveniencia para gestión de buses POST /buses y PATCH /buses/{bus_id}/dar-de-baja."
+    },
+    {
+      "path": "tests/unit/test_bus_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias de creación, baja, reactivación y eliminación de filtro numérico de flota (13 tests pasados)."
+    },
+    {
+      "path": "tests/integration/test_buses_api.py",
+      "action": "modified",
+      "summary": "Pruebas de integración HTTP de búsqueda completa y ciclo de vida de bus (6 tests pasados)."
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias de cambio de estado de solicitud, bitácora de auditoría y glosas canónicas (10 tests pasados)."
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Pruebas de integración HTTP de endpoints de supervisión incluyendo cambio de estado con RBAC y transiciones (5 tests pasados)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-067-1",
+      "title": "Comentarios canónicos automáticos y tipificación CAMBIO_ESTADO en Bitácora Inmutable",
+      "rationale": "Para garantizar la trazabilidad de cualquier intervención de la supervisora sobre los estados de las OTs sin imponer fricción innecesaria al usuario, el comentario explicativo se definió como opcional (Optional[str]), inyectando automáticamente una glosa canónica con timestamp, usuario supervisor y motivo predeterminado si no se provee. Además, se introdujo el nuevo tipo de bitácora CAMBIO_ESTADO en TipoComentarioBitacora para distinguir intervenciones administrativas de avances técnicos de mecánicos.",
+      "consequences": "Total auditabilidad en la base de datos sin requerir obligatoriamente texto en cada clic del frontend, manteniendo el historial limpio y categorizado."
+    },
+    {
+      "id": "DEC-067-2",
+      "title": "Eliminación del filtro estático de flota (200 <= n_bus < 900) y auditoría completa de buses",
+      "rationale": "El cliente planea repoblar la base de datos con los buses reales de la flota Narbus, los cuales pueden tener numeraciones fuera del rango histórico 200..900 (ej. buses 10, 905, etc.). Se eliminó la restricción numérica manteniendo la validación de formato alfanumérico limpio. Para resguardar la consistencia operacional al dar de baja una unidad, el servicio verifica que no existan OTs activas en taller antes de deshabilitarla, a menos que se invoque con forzar=True.",
+      "consequences": "Flexibilidad absoluta para catalogar toda la flota presente y futura, con integridad referencial protegida y auditoría de quién y cuándo dio de baja cada bus."
+    },
+    {
+      "id": "DEC-067-3",
+      "title": "Reapertura de OT y liberación física condicional de taller",
+      "rationale": "Al finalizar una orden de trabajo (FINALIZADO), la supervisora puede decidir si libera físicamente el bus de taller (en_taller = False) o lo mantiene para una revisión posterior. Por otro lado, si una OT finalizada requiere reabrirse (pasa a EN_REPARACION o PENDIENTE), el sistema revierte automáticamente la fecha de cierre y vuelve a marcar el bus como presente en taller.",
+      "consequences": "Reflejo fiel del estado físico del taller en tiempo real tanto en los KPIs como en la auditoría de vehículos estacionados en maestranza."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -q",
+      "result": "passed",
+      "evidence": "154 passed, 1 warning in 55.95s (100% de pruebas verdes en la suite completa del backend)."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_bus_service.py tests/integration/test_buses_api.py -v",
+      "result": "passed",
+      "evidence": "19 passed in 3.10s cubriendo ciclo completo de buses, filtros y RBAC."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_supervision_service.py tests/integration/test_supervision_api.py -v",
+      "result": "passed",
+      "evidence": "15 passed in 3.84s cubriendo cambio de estado de OTs, reaperturas y transiciones."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir los nuevos endpoints desde el Frontend de acuerdo a la Guía Técnica Detallada entregada.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Migración 011_add_buses_audit_fields ejecutada exitosamente contra base de datos local PostgreSQL.",
+    "Compatibilidad 100% con SQLite en memoria para tests y PostgreSQL para runtime local."
+  ]
+}

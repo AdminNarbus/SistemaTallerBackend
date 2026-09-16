@@ -1,11 +1,11 @@
 # Catálogo Exhaustivo de Endpoints, Payloads y Respuestas: Backend Taller Narbus
 
 > **Documento Oficial de Especificación de Interfaz REST API**  
-> **Versión:** 2.1.0  
-> **Fecha de Actualización:** 2026-09-03  
+> **Versión:** 2.2.0  
+> **Fecha de Actualización:** 2026-09-15  
 > **Proyecto:** Backend Taller Narbus (`FastAPI + SQLAlchemy Async + PostgreSQL`)  
 > **Base URL:** `http://localhost:8000/api/v1` (o `/api/v1` en producción)  
-> **Total de Endpoints:** 43 endpoints activos
+> **Total de Endpoints:** 48 endpoints activos
 
 ---
 
@@ -265,10 +265,10 @@ Códigos de error estándar:
 
 ### 4.1 `GET /api/v1/buses/buscar`
 - **Autenticación:** Pública.
-- **Propósito:** Autocompletado ágil de números de máquinas para cajas de texto en formularios de reporte. Devuelve un arreglo plano de strings.
+- **Propósito:** Autocompletado ágil de números de máquinas para cajas de texto en formularios de reporte. Devuelve un arreglo plano de strings con números de máquinas coincidentes.
 - **Parámetros Query:**
   - `query` *(string, opcional)*: Prefijo numérico (ej: `"30"`).
-  - `solo_flota_taller` *(boolean, opcional, default: true)*: Si es `true`, filtra estrictamente la flota operativa de taller en el rango `200 <= n_bus < 900`, excluyendo vehículos menores de auxilio o utilitarios.
+  - `solo_flota_taller` *(boolean, opcional, default: true)*: Si es `true`, filtra los buses operativos del taller (eliminada la restricción estática numérica 200..900 para abarcar la flota completa).
 - **Payload:** Ninguno.
 - **Respuesta (`List[str]` - 200 OK):**
 ```json
@@ -282,7 +282,7 @@ Códigos de error estándar:
 - **Propósito:** Catálogo general de buses con atributos básicos y flag de presencia física en taller.
 - **Parámetros Query:**
   - `solo_activos` *(boolean, opcional, default: true)*: Excluye buses dados de baja.
-  - `solo_flota_taller` *(boolean, opcional, default: true)*: Rango `200 <= n_bus < 900`.
+  - `solo_flota_taller` *(boolean, opcional, default: true)*: Filtra buses operativos del taller (sin restricciones numéricas artificiales).
 - **Payload:** Ninguno.
 - **Respuesta (`List[BusAutocompleteDTO]` - 200 OK):**
 ```json
@@ -338,6 +338,80 @@ Códigos de error estándar:
     - `en_taller` *(boolean, obligatorio)*: `true` si el bus entra físicamente al taller; `false` si egresa.
     - `motivo` *(string, opcional)*: Justificación u observación administrativa del movimiento del vehículo.
 - **Respuesta (`BusResponseDTO` - 200 OK):** Ficha del bus con el estado `en_taller` actualizado.
+
+---
+
+### 4.6 `POST /api/v1/buses`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Creación y catalogación de un nuevo bus en la flota.
+- **Payload (`BusCreateDTO` - `application/json`):**
+```json
+{
+  "patente": "KKL-909",
+  "n_bus": "909",
+  "marca": "Scania",
+  "modelo": "K360",
+  "tipo_bus": "Interurbano",
+  "anio": 2022,
+  "en_taller": false
+}
+```
+  - **Explicación de campos del Payload:**
+    - `patente` *(string, obligatorio, 6-10 caracteres)*: Placa patente del vehículo (se normaliza a mayúsculas automáticamente).
+    - `n_bus` *(string, obligatorio, 1-10 caracteres)*: Número identificador visible de la máquina.
+    - `marca` *(string, opcional)*: Marca del chasis/fabricante (ej: Scania, Mercedes-Benz, Volvo).
+    - `modelo` *(string, opcional)*: Modelo de la unidad (ej: K360, Paradiso 1200).
+    - `tipo_bus` *(string, opcional)*: Clasificación (ej: Doble Piso, Salón Cama, Clásico).
+    - `anio` *(integer, opcional, 1990-2050)*: Año de fabricación.
+    - `en_taller` *(boolean, opcional, default: false)*: Si el bus ingresa directamente al taller.
+- **Respuesta (`BusResponseDTO` - 201 Created):**
+```json
+{
+  "id": 45,
+  "patente": "KKL-909",
+  "n_bus": "909",
+  "marca": "Scania",
+  "modelo": "K360",
+  "tipo_bus": "Interurbano",
+  "anio": 2022,
+  "is_active": true,
+  "en_taller": false,
+  "fecha_creacion": "2026-09-15T17:20:00",
+  "fecha_baja": null,
+  "motivo_baja": null,
+  "usuario_baja_id": null
+}
+```
+- **Errores:** `409 Conflict` si la patente o el número de máquina ya existen; `403 Forbidden` si el usuario no es supervisor ni admin.
+
+---
+
+### 4.7 `PATCH /api/v1/buses/{bus_id}/dar-de-baja` y `DELETE /api/v1/buses/{bus_id}`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Dar de baja / retirar de circulación una máquina del sistema con auditoría completa (`is_active = False`).
+- **Parámetros Path:**
+  - `bus_id` *(integer, obligatorio, ge: 1)*: ID del bus.
+- **Payload (`BusDarDeBajaDTO` - `application/json`, opcional para DELETE):**
+```json
+{
+  "motivo": "Venta de unidad por renovación de flota",
+  "forzar": false
+}
+```
+  - **Explicación de campos del Payload:**
+    - `motivo` *(string, opcional)*: Razón o justificación de la baja de la unidad (ej: siniestro, venta, chatarrización).
+    - `forzar` *(boolean, opcional, default: false)*: Si es `false`, el sistema valida que no existan órdenes de trabajo activas en taller para este bus (`422 BusinessRuleException`). Si es `true`, permite dar de baja aun cuando existan OTs activas pendientes de cierre.
+- **Respuesta (`BusResponseDTO` - 200 OK):** Ficha del bus con `is_active: false`, `fecha_baja`, `motivo_baja` y `usuario_baja_id` registrados.
+
+---
+
+### 4.8 `PATCH /api/v1/buses/{bus_id}/reactivar`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Reincorporar y reactivar un bus previamente dado de baja (`is_active = True`, limpiando `fecha_baja` y `motivo_baja`).
+- **Parámetros Path:**
+  - `bus_id` *(integer, obligatorio, ge: 1)*: ID del bus.
+- **Payload:** Ninguno.
+- **Respuesta (`BusResponseDTO` - 200 OK):** Ficha del bus con `is_active: true`.
 
 ---
 
@@ -502,7 +576,7 @@ Códigos de error estándar:
 
 ### 6.5 `GET /api/v1/mantencion/pendientes`
 - **Autenticación:** Token Bearer (`require_mecanico_or_admin`).
-- **Propósito:** Bandeja principal de trabajo del mecánico (Pestaña 1). Lista todos los buses que están esperando atención en taller (estados `REPORTADO`, `PENDIENTE`, `PENDIENTE_REASIGNACION`).
+- **Propósito:** Bandeja principal de trabajo del mecánico (Pestaña 1). Lista todos los buses que están esperando atención en taller (estados `REPORTADO`, `PENDIENTE`).
 - **Payload:** Ninguno.
 - **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de solicitudes pendientes ordenadas cronológicamente.
 
@@ -716,7 +790,7 @@ Códigos de error estándar:
 
 ### 6.15 `POST /api/v1/mantencion/{id}/liberar-turno`
 - **Autenticación:** Token Bearer (`require_mecanico_or_admin`).
-- **Propósito:** Entrega masiva de turno del equipo completo ("Entregar / Pasar Turno"). Desasigna a todos los mecánicos activos y traslada la solicitud a `PENDIENTE_REASIGNACION`.
+- **Propósito:** Entrega masiva de turno del equipo completo ("Entregar / Pasar Turno"). Desasigna a todos los mecánicos activos y traslada la solicitud a `PENDIENTE`.
 - **Parámetros Path:**
   - `id` *(integer, obligatorio)*: ID de la solicitud.
 - **Payload (`LiberarTurnoDTO` - `application/json`):**
@@ -727,7 +801,7 @@ Códigos de error estándar:
 ```
   - **Explicación de campos del Payload:**
     - `comentario` *(string, opcional)*: Informe general de entrega para el turno entrante.
-- **Respuesta (`SolicitudDTO` - 200 OK):** Solicitud en estado `PENDIENTE_REASIGNACION`.
+- **Respuesta (`SolicitudDTO` - 200 OK):** Solicitud en estado `PENDIENTE`.
 
 ---
 
@@ -876,7 +950,7 @@ Códigos de error estándar:
 - **Propósito:** Tablero de auditoría y trazabilidad exhaustiva en vivo para supervisores y auditores. Permite inspeccionar el historial completo de solicitudes, cambios de turno cronometrados, resolución de averías y notas de bitácora.
 - **Parámetros Query:**
   - `n_bus` *(string, opcional)*: Filtrar por número de bus específico (ej: `"339"`).
-  - `estado` *(string, opcional)*: Filtrar por estado (`REPORTADO`, `EN_REPARACION`, `PENDIENTE`, `PENDIENTE_REASIGNACION`, `FINALIZADO`).
+  - `estado` *(string, opcional)*: Filtrar por estado (`REPORTADO`, `PENDIENTE`, `EN_REPARACION`, `LIBERADO`, `FINALIZADO`).
   - `mecanico_nombre` *(string, opcional)*: Búsqueda de órdenes donde haya participado un mecánico por su nombre, apellido o username.
 - **Payload:** Ninguno.
 - **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de solicitudes completas con todo su historial de auditoría.
@@ -896,7 +970,7 @@ Códigos de error estándar:
     "reportadas": 2,
     "pendientes": 4,
     "en_reparacion": 6,
-    "pendiente_reasignacion": 1,
+    "liberadas": 1,
     "finalizadas": 39,
     "buses_fisicamente_en_taller": 13,
     "fallas_bloqueadas_por_repuesto": 2
@@ -951,3 +1025,33 @@ Códigos de error estándar:
     - `detalles_ids` *(array de integers, obligatorio)*: Lista de IDs de fallas a atender.
     - `comentario` *(string, opcional)*: Instrucción u observación técnica.
 - **Respuesta (`SolicitudDTO` - 200 OK):** Solicitud actualizada con la asignación atómica.
+
+---
+
+### 7.5 `PATCH /api/v1/supervision/solicitudes/{id}/estado` y `PATCH /api/v1/mantencion/solicitudes/{id}/estado`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Permite a la supervisora o administrador cambiar manualmente el estado del ciclo de vida de una orden de trabajo (OT) a cualquier estado canónico, registrando obligatoriamente la acción en la bitácora inmutable de comentarios con tipo `CAMBIO_ESTADO`, permitiendo una justificación opcional, controlando la liberación física del bus del taller en cierres y manejando reaperturas limpias.
+- **Parámetros Path:**
+  - `id` *(integer, obligatorio)*: ID de la orden de trabajo (`TallerSolicitud`).
+- **Payload (`CambiarEstadoSolicitudDTO` - `application/json`):**
+```json
+{
+  "estado": "PENDIENTE",
+  "comentario": "Reasignando a turno vespertino por falta de tiempo",
+  "liberar_bus_taller": false
+}
+```
+  - **Explicación de campos del Payload:**
+    - `estado` *(string enum, obligatorio)*: Nuevo estado canónico. Valores permitidos:
+      - `"REPORTADO"`: Falla reportada sin iniciar atención.
+      - `"PENDIENTE"`: Falla en espera de turno o disponibilidad.
+      - `"EN_REPARACION"`: Falla en curso con mecánicos interviniendo.
+      - `"LIBERADO"`: Bus egresado del taller con averías o repuestos pendientes (`en_taller = false`, `fecha_cierre = null`).
+      - `"FINALIZADO"`: Orden concluida y cerrada al 100%.
+    - `comentario` *(string, opcional, max 1000 caracteres)*: Razón o justificación del cambio de estado ingresada por la supervisora. Si se omite o envía vacío (`null` o `""`), el backend genera automáticamente una glosa canónica auditable con timestamp y autor (ej: `"[CAMBIO DE ESTADO] Transición administrativa de REPORTADO a PENDIENTE ejecutada por Supervisora"`).
+    - `liberar_bus_taller` *(boolean, opcional, default: true)*: Aplica cuando `estado` es `"LIBERADO"` o `"FINALIZADO"`. Si es `true`, marca el bus con `en_taller = false` (egreso físico de maestranza). Si es `false`, mantiene el bus físicamente en taller.
+- **Respuesta (`SolicitudDTO` - 200 OK):** Solicitud completa actualizada con su nuevo estado, `fecha_cierre` (o `null` si fue reabierta) y el nuevo comentario registrado en el arreglo `comentarios`.
+- **Reglas de Negocio:**
+  - Si se intenta transicionar al mismo estado en que ya se encuentra la orden, retorna `422 BusinessRuleException`.
+  - Al transicionar a `"FINALIZADO"`, se setea `fecha_cierre = now()`, `mecanico_cierre_id = supervisor_id` y se desactivan automáticamente los mecánicos y asignaciones activas calculando sus duraciones.
+  - Al transicionar desde `"FINALIZADO"` a un estado activo, se limpia la `fecha_cierre = null` y se vuelve a marcar el bus con `en_taller = true`.

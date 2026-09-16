@@ -237,7 +237,7 @@ Content-Type: application/json
   * `limit`: int (default `50`, máx `100`).
   * `skip`: int (default `0`).
 * **Headers:** `Cache-Control: private, max-age=15, stale-while-revalidate=30`
-* **Respuesta (200 OK):** `List[SolicitudResumenDTO]` (solicitudes en `REPORTADO`, `PENDIENTE` o `PENDIENTE_REASIGNACION`).
+* **Respuesta (200 OK):** `List[SolicitudResumenDTO]` (solicitudes en `REPORTADO` o `PENDIENTE`).
 
 ### 7.2 `GET /api/v1/mantencion/mis-trabajos` (Trabajos Activos del Mecánico)
 * **Roles:** `MECANICO`, `ADMIN`.
@@ -488,7 +488,7 @@ export type EstadoSolicitud =
   | 'REPORTADO' 
   | 'PENDIENTE' 
   | 'EN_REPARACION' 
-  | 'PENDIENTE_REASIGNACION' 
+  | 'LIBERADO' 
   | 'FINALIZADO';
 
 export type EstadoItemPauta = 'OK' | 'DEFECTO' | 'NO_APLICA';

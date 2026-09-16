@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 70,
+  "id": "AV-0070",
+  "timestamp": "2026-09-16T11:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-13",
+    "name": "Ingreso Directo a Taller por Supervisora con Averías y OTs",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Habilitación completa para que las Supervisoras puedan ingresar buses al taller directamente mediante la creación de Órdenes de Trabajo (OT) con averías, catálogo y evidencias, sin depender de un reporte previo de conductor. Se actualizó automáticamente el estado físico del bus (bus.en_taller = true) al crear la orden por supervisión o con flag de ingreso inmediato, y se habilitó la adición de averías adicionales a OTs existentes.",
+  "scope": {
+    "planned": [
+      "Ampliar dependencias de autorización en router para permitir SUPERVISOR en creación de solicitudes y adición de detalles",
+      "Actualizar SolicitudCreateDTO con el campo opcional ingreso_inmediato_taller",
+      "Actualizar mantencion_service para activar bus.en_taller = True al crear solicitud por supervisora o con ingreso inmediato",
+      "Garantizar que agregar_falla no autoasigne a la supervisora como mecánico operativo",
+      "Optimizar get_usuario_by_id con joinedload(Usuario.rol_rel) para evitar MissingGreenlet en llamadas async",
+      "Pruebas unitarias e integración HTTP validando el flujo de creación por supervisora y visibilidad en pendientes de mecánicos"
+    ],
+    "completed": [
+      "Ampliar dependencias de autorización en router para permitir SUPERVISOR en creación de solicitudes y adición de detalles",
+      "Actualizar SolicitudCreateDTO con el campo opcional ingreso_inmediato_taller",
+      "Actualizar mantencion_service para activar bus.en_taller = True al crear solicitud por supervisora o con ingreso inmediato",
+      "Garantizar que agregar_falla no autoasigne a la supervisora como mecánico operativo",
+      "Optimizar get_usuario_by_id con joinedload(Usuario.rol_rel) para evitar MissingGreenlet en llamadas async",
+      "Pruebas unitarias e integración HTTP validando el flujo de creación por supervisora y visibilidad en pendientes de mecánicos (161/161 tests verdes)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend en repositorio ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/api/deps.py",
+      "action": "modified",
+      "summary": "Incorporación de dependencias require_conductor_or_supervisor_or_admin y require_mecanico_or_supervisor_or_admin"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Agregado campo ingreso_inmediato_taller a SolicitudCreateDTO"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "create_solicitud actualiza bus.en_taller = True cuando el creador es supervisor/admin o se solicita ingreso inmediato; agregar_falla condiciona autoasignación solo para roles operativos"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Optimización de get_usuario_by_id con joinedload(Usuario.rol_rel) previniendo MissingGreenlet"
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Actualización de dependencias de permisos en POST /solicitudes y POST /{id}/detalles"
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias test_supervisor_crea_solicitud_marca_bus_en_taller, test_conductor_crea_solicitud_no_marca_bus_en_taller y test_supervisor_agrega_falla_sin_autoasignar"
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Prueba de integración test_supervisor_crea_solicitud_e_ingreso_taller_endpoint verificando respuesta 201 y visibilidad para mecánicos"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0074",
+      "title": "Habilitación de rol SUPERVISOR para creación de Órdenes de Trabajo y adición de averías",
+      "rationale": "Anteriormente, la supervisora solo podía ejecutar PATCH /buses/{id}/en-taller, lo que alteraba un booleano en la flota pero no creaba ninguna Orden de Trabajo en el taller ni permitía ingresar averías, dejando al bus en un limbo operativo sin tareas para los mecánicos. Asimismo, POST /solicitudes exigía rol CONDUCTOR o ADMIN. Al permitir a la Supervisora crear solicitudes directamente con o sin catálogo de fallas, el taller adquiere control proactivo para mantenciones preventivas y detección en patio.",
+      "consequences": "La supervisora puede ingresar buses formalmente a taller con su respectiva OT y fallas asociadas; el bus queda inmediatamente en_taller = True y la orden pasa a estar disponible para que los mecánicos la tomen en /pendientes."
+    },
+    {
+      "id": "DEC-0075",
+      "title": "Eager loading de rol en get_usuario_by_id y prevención de lazy loading síncrono",
+      "rationale": "En sesiones asíncronas de SQLAlchemy, evaluar la propiedad u.rol desencadenaba una consulta síncrona sobre la relación rol_rel no cargada, disparando excepciones MissingGreenlet.",
+      "consequences": "get_usuario_by_id carga rol_rel mediante joinedload, y mantencion_service resuelve el rol de forma defensiva sin disparar I/O síncrono imprevisto."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_mantencion_service.py tests/integration/test_mantencion_api.py -v",
+      "result": "passed",
+      "evidence": "41 passed in 8.21s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -v",
+      "result": "passed",
+      "evidence": "161 passed, 1 warning in 59.08s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Coordinar con Frontend para que el botón 'Mandar a Taller' abra el modal de registro de OT con selección de fallas consumiendo POST /api/v1/mantencion/solicitudes.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "La suite completa de pruebas cuenta con 161 tests automatizados, todos en verde.",
+    "Se mantiene 100% de retrocompatibilidad con los reportes creados por conductores desde ruta."
+  ]
+}

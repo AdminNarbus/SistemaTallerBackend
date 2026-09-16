@@ -36,3 +36,10 @@
 - [x] Guía operativa y manual de despliegue (`GUIA_DEPLOY_GOOGLE_CLOUD_BUILD_RUN.md`).
 - [ ] Etiquetado de versión de release (Git Tagging para producción).
 - [ ] Despliegue y verificación en vivo con dominio asignado.
+
+## Fase 7: Gestión Integral de Flota de Buses y Control Administrativo de Estados de OTs (Supervisión)
+- [x] Migración Alembic 011 para campos de auditoría (`fecha_creacion`, `fecha_baja`, `motivo_baja`, `usuario_baja_id`).
+- [x] Eliminación de filtro estático numérico de flota (`200 <= n_bus < 900`) para catalogación y búsqueda integral de la flota completa.
+- [x] Endpoints para alta (`POST /api/v1/buses`), baja auditada (`PATCH /api/v1/buses/{id}/dar-de-baja`, `DELETE`) y reactivación (`PATCH /api/v1/buses/{id}/reactivar`).
+- [x] Transición administrativa de estados de OTs (`PATCH /api/v1/supervision/solicitudes/{id}/estado`) con bitácora `CAMBIO_ESTADO`, justificación opcional, liberación condicional de taller y reaperturas automáticas.
+- [x] Cobertura completa de tests unitarios y de integración (154/154 tests verdes al 100%).

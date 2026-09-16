@@ -23,6 +23,7 @@ from app.modules.supervision.repository.supervision_repository import (
 from app.modules.supervision.dtos import (
     ResumenTallerDTO,
     AlertaSupervisionDTO,
+    MecanicoCargaDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,12 @@ class SupervisionService:
         """Retorna exclusivamente las alertas operacionales activas de taller de forma directa."""
         logger.info("[SUPERVISION_SERVICE] Consultando centro de alertas operacionales activas directamente")
         return await self.repo.get_alertas_activas(db)
+
+    async def get_mecanicos_con_carga(self, db: AsyncSession) -> List[MecanicoCargaDTO]:
+        """Retorna la lista de mecánicos activos junto a su conteo de fallas asignadas y disponibilidad."""
+        logger.info("[SUPERVISION_SERVICE] Consultando carga y disponibilidad de mecánicos activos")
+        raw_rows = await self.repo.get_mecanicos_con_carga(db)
+        return [MecanicoCargaDTO(**row) for row in raw_rows]
 
     async def asignar_fallas_supervisora(
         self,

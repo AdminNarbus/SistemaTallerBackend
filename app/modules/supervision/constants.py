@@ -5,6 +5,8 @@ from typing import Final
 class TipoAlertaSupervision(StrEnum):
     """Tipos canónicos de alertas operacionales de taller."""
 
+    TIEMPO_EN_TALLER_EXCEDIDO = "TIEMPO_EN_TALLER_EXCEDIDO"
+    LIBERADO_TIEMPO_EXCEDIDO = "LIBERADO_TIEMPO_EXCEDIDO"
     REPUESTO_FALTANTE = "REPUESTO_FALTANTE"
     DEFECTO_PAUTA = "DEFECTO_PAUTA"
     BUS_SIN_MECANICOS = "BUS_SIN_MECANICOS"

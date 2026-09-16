@@ -18,7 +18,7 @@ from app.modules.supervision.constants import (
     MAX_PAGE_LIMIT,
     ESTADOS_VALIDOS_AUDITORIA,
 )
-from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO
+from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO, MecanicoCargaDTO
 from app.modules.supervision.services import supervision_service
 
 
@@ -34,11 +34,26 @@ async def get_alertas_taller(
 ):
     """
     Centro de Alertas de Taller para Supervisores:
-    Retorna alertas operacionales activas: fallas detenidas por falta de repuestos,
-    ítems de pauta preventiva detectados con defecto, y buses en reparación sin mecánicos activos.
+    Retorna alertas operacionales activas: buses estancados en taller, buses liberados en ruta
+    con fallas pendientes prolongadas, defectos de pauta y buses sin mecánicos asignados.
     """
     logger.info("[SUPERVISION] Consulta centro de alertas | supervisor_id=%s", current_user.id)
     return await supervision_service.get_alertas_taller(db)
+
+
+@router.get(
+    "/mecanicos/carga",
+    response_model=List[MecanicoCargaDTO],
+    summary="Carga de trabajo y disponibilidad de mecánicos",
+    description="Retorna la lista de mecánicos activos junto al conteo de fallas activas asignadas para balancear la carga de trabajo en la supervisión.",
+)
+async def get_mecanicos_con_carga(
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> List[MecanicoCargaDTO]:
+    """Consulta la carga de fallas activas de cada mecánico para apoyar la asignación en taller."""
+    logger.info("[SUPERVISION] Consulta carga de mecánicos | supervisor_id=%s", current_user.id)
+    return await supervision_service.get_mecanicos_con_carga(db)
 
 
 @router.get("/auditoria/buses-taller", response_model=List[SolicitudDTO])

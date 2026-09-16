@@ -381,6 +381,9 @@ class MantencionService:
             motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
+            fecha_liberacion=getattr(sol, "fecha_liberacion", None),
+            horas_en_taller=round((((sol.fecha_cierre or datetime.now(sol.fecha_creacion.tzinfo if hasattr(sol.fecha_creacion, "tzinfo") else None)) - sol.fecha_creacion).total_seconds() / 3600), 1) if sol.fecha_creacion else None,
+            reincidencias_30d=getattr(sol, "reincidencias_30d", 0),
             pauta_completada=len(pauta_dtos) >= TOTAL_ITEMS_PAUTA_PREVENTIVA,
             total_fallas=total_fallas,
             fallas_resueltas=fallas_resueltas,
@@ -505,6 +508,9 @@ class MantencionService:
             motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
             fecha_creacion=r["fecha_creacion"],
             fecha_cierre=r.get("fecha_cierre"),
+            fecha_liberacion=r.get("fecha_liberacion"),
+            horas_en_taller=r.get("horas_en_taller"),
+            reincidencias_30d=r.get("reincidencias_30d", 0),
             pauta_completada=pauta_completada,
             total_fallas=tot,
             fallas_resueltas=resueltos,
@@ -1307,9 +1313,11 @@ class MantencionService:
         if len(fallas_no_resueltas) > 0:
             solicitud.estado = EstadoSolicitud.LIBERADO.value
             solicitud.fecha_cierre = None
+            solicitud.fecha_liberacion = now
         else:
             solicitud.estado = EstadoSolicitud.FINALIZADO.value
             solicitud.fecha_cierre = now
+            solicitud.fecha_liberacion = None
 
         solicitud.mecanico_cierre_id = mecanico_cierre_id
         solicitud._mecanico_cierre_nombre_cached = mec_cierre_nom
@@ -1494,6 +1502,8 @@ class MantencionService:
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
         ]:
+            if solicitud.estado == EstadoSolicitud.LIBERADO.value:
+                solicitud.fecha_liberacion = None
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
             if solicitud.bus:
                 solicitud.bus.en_taller = True
@@ -1631,6 +1641,8 @@ class MantencionService:
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
         ]:
+            if solicitud.estado == EstadoSolicitud.LIBERADO.value:
+                solicitud.fecha_liberacion = None
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
             if solicitud.bus:
                 solicitud.bus.en_taller = True
@@ -1714,6 +1726,7 @@ class MantencionService:
         # 1. Transición hacia FINALIZADO
         if nuevo_estado == EstadoSolicitud.FINALIZADO.value:
             solicitud.fecha_cierre = now
+            solicitud.fecha_liberacion = None
             solicitud.mecanico_cierre_id = supervisor_id
             solicitud._mecanico_cierre_nombre_cached = sup_nom
 
@@ -1748,6 +1761,7 @@ class MantencionService:
         # 2. Transición hacia LIBERADO (cierre parcial / egreso con fallas o repuestos pendientes)
         elif nuevo_estado == EstadoSolicitud.LIBERADO.value:
             solicitud.fecha_cierre = None
+            solicitud.fecha_liberacion = now
             await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
                 db, solicitud_id=solicitud.id, fecha_desasignacion=now
             )
@@ -1776,9 +1790,10 @@ class MantencionService:
                     if bus:
                         bus.en_taller = False
 
-        # 3. Reapertura desde FINALIZADO a estado activo
-        elif estado_anterior == EstadoSolicitud.FINALIZADO.value and nuevo_estado != EstadoSolicitud.FINALIZADO.value:
+        # 3. Reapertura desde FINALIZADO o LIBERADO a estado activo
+        elif estado_anterior in (EstadoSolicitud.FINALIZADO.value, EstadoSolicitud.LIBERADO.value) and nuevo_estado not in (EstadoSolicitud.FINALIZADO.value, EstadoSolicitud.LIBERADO.value):
             solicitud.fecha_cierre = None
+            solicitud.fecha_liberacion = None
             solicitud.mecanico_cierre_id = None
             solicitud._mecanico_cierre_nombre_cached = None
             if nuevo_estado == EstadoSolicitud.EN_REPARACION.value:

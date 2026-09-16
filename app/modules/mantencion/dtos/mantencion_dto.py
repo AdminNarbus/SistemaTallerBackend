@@ -301,6 +301,9 @@ class SolicitudDTO(BaseModel):
     motivo_cierre_parcial: Optional[str] = None
     fecha_creacion: datetime
     fecha_cierre: Optional[datetime] = None
+    fecha_liberacion: Optional[datetime] = None
+    horas_en_taller: Optional[float] = None
+    reincidencias_30d: Optional[int] = 0
 
     pauta_completada: bool = False
     total_fallas: int = 0

@@ -51,6 +51,9 @@ class TallerSolicitud(Base):
     fecha_cierre: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    fecha_liberacion: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     motivo_incompleto_checklist: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )

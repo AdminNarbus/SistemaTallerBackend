@@ -22,12 +22,21 @@ class CategoriaFrecuenciaDTO(BaseModel):
     total_fallas: int
 
 
+class MecanicoCargaDTO(BaseModel):
+    id: int = Field(..., description="ID del mecánico")
+    nombre_completo: str = Field(..., description="Nombre y apellido del mecánico")
+    username: str = Field(..., description="Nombre de usuario del mecánico")
+    fallas_activas_count: int = Field(0, description="Cantidad de fallas activas asignadas")
+    disponible: bool = Field(True, description="True si no tiene fallas activas asignadas")
+
+
 class AlertaSupervisionDTO(BaseModel):
-    tipo: TipoAlertaSupervision | str = Field(..., description="REPUESTO_FALTANTE | TIEMPO_EXCEDIDO | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
+    tipo: TipoAlertaSupervision | str = Field(..., description="TIEMPO_EN_TALLER_EXCEDIDO | LIBERADO_TIEMPO_EXCEDIDO | REPUESTO_FALTANTE | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
     severidad: SeveridadAlerta | str = Field(SeveridadAlerta.MEDIA, description="BAJA | MEDIA | ALTA | CRITICA")
     solicitud_id: int
     n_bus: str
     mensaje: str
+    horas_acumuladas: Optional[float] = Field(None, description="Horas acumuladas en el estado o en taller")
     detalle_id: Optional[int] = None
     fecha_deteccion: datetime = Field(default_factory=datetime.now)
 

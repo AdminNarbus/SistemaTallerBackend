@@ -69,6 +69,12 @@ class Settings(BaseSettings):
 
     CORS_ORIGIN_REGEX: Optional[str] = None
 
+    # Supervisión: Umbrales de permanencia y alertas operacionales (horas configurables)
+    SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA: int = 48   # 2 días en taller
+    SUPERVISION_UMBRAL_TALLER_HORAS_ALTA: int = 96    # 4 días en taller
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA: int = 72  # 3 días liberado en ruta
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA: int = 168  # 7 días liberado en ruta
+
     @field_validator("PROJECT_NAME", "VERSION", mode="before")
     @classmethod
     def clean_quoted_strings(cls, v: str) -> str:

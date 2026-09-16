@@ -10,7 +10,7 @@ class MetricasEstadoDTO(BaseModel):
     reportadas: int = Field(0, description="Solicitudes en estado REPORTADO")
     pendientes: int = Field(0, description="Solicitudes en estado PENDIENTE")
     en_reparacion: int = Field(0, description="Solicitudes en estado EN_REPARACION")
-    pendiente_reasignacion: int = Field(0, description="Solicitudes en estado PENDIENTE_REASIGNACION")
+    liberadas: int = Field(0, description="Solicitudes en estado LIBERADO con averías pendientes")
     finalizadas: int = Field(0, description="Solicitudes en estado FINALIZADO")
     buses_fisicamente_en_taller: int = Field(0, description="Buses de la flota marcados con en_taller = True")
     fallas_bloqueadas_por_repuesto: int = Field(0, description="Fallas activas que reportan falta de repuestos")

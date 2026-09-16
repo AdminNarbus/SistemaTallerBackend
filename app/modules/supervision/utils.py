@@ -68,3 +68,17 @@ def construir_alerta_supervision(
         mensaje=mensaje,
         detalle_id=detalle_id,
     )
+
+
+def formatear_comentario_cambio_estado(
+    supervisor_nombre: str,
+    estado_anterior: str,
+    nuevo_estado: str,
+    motivo: Optional[str] = None,
+) -> str:
+    """Construye el texto descriptivo canónico para la bitácora inmutable al cambiar el estado de una OT."""
+    base = f"Supervisora {supervisor_nombre} cambió el estado de {estado_anterior} a {nuevo_estado}"
+    if motivo and motivo.strip():
+        return f"{base}. Motivo: {motivo.strip()}"
+    return f"{base}."
+

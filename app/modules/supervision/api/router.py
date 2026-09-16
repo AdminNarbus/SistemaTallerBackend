@@ -1,11 +1,17 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
-from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
+from app.modules.buses.dtos import BusCreateDTO, BusDarDeBajaDTO, BusResponseDTO
+from app.modules.buses.services.bus_service import bus_service
+from app.modules.mantencion.dtos.mantencion_dto import (
+    AsignarFallasSupervisoraDTO,
+    CambiarEstadoSolicitudDTO,
+    SolicitudDTO,
+)
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -14,6 +20,7 @@ from app.modules.supervision.constants import (
 )
 from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO
 from app.modules.supervision.services import supervision_service
+
 
 logger = logging.getLogger(__name__)
 
@@ -106,4 +113,75 @@ async def asignar_fallas_supervisora(
     return await supervision_service.asignar_fallas_supervisora(
         db, solicitud_id=id, dto=dto, supervisor_id=current_user.id
     )
+
+
+@router.patch("/solicitudes/{id}/estado", response_model=SolicitudDTO)
+async def cambiar_estado_solicitud(
+    id: int,
+    dto: CambiarEstadoSolicitudDTO,
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Cambio de estado administrativo de una Orden de Trabajo (OT) por parte de la supervisora o administradores.
+    Permite transicionar la OT registrando un comentario justificativo en la bitácora inmutable.
+    """
+    logger.info(
+        "[SUPERVISION] Supervisora %s cambiando estado de solicitud_id=%s a %s",
+        current_user.id,
+        id,
+        dto.estado,
+    )
+    return await supervision_service.cambiar_estado_solicitud(
+        db,
+        solicitud_id=id,
+        dto=dto,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+    )
+
+
+@router.post(
+    "/buses",
+    response_model=BusResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar nuevo bus desde panel de supervisión",
+    description="Permite a la supervisora o administradores dar de alta un nuevo bus en el sistema.",
+)
+async def crear_bus_supervision(
+    payload: BusCreateDTO = Body(...),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[SUPERVISION] Supervisora %s registrando nuevo bus patente='%s', n_bus='%s'",
+        current_user.id,
+        payload.patente,
+        payload.n_bus,
+    )
+    return await bus_service.create_bus(db, dto=payload, usuario_id=current_user.id)
+
+
+@router.patch(
+    "/buses/{bus_id}/dar-de-baja",
+    response_model=BusResponseDTO,
+    summary="Dar de baja a un bus desde panel de supervisión",
+    description="Permite a la supervisora desactivar un bus de la flota registrando marcas de tiempo y motivo.",
+)
+async def dar_de_baja_bus_supervision(
+    bus_id: int = Path(..., description="ID numérico del bus", ge=1),
+    payload: BusDarDeBajaDTO = Body(default_factory=BusDarDeBajaDTO),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[SUPERVISION] Supervisora %s dando de baja bus_id=%s | motivo='%s'",
+        current_user.id,
+        bus_id,
+        payload.motivo,
+    )
+    return await bus_service.dar_de_baja_bus(
+        db, bus_id=bus_id, dto=payload, usuario_id=current_user.id
+    )
+
 

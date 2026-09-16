@@ -29,7 +29,8 @@ CATEGORIA_SIN_ASIGNAR_NOMBRE: Final[str] = "Personalizada / Sin Categoría"
 
 ESTADOS_VALIDOS_AUDITORIA: Final[tuple[str, ...]] = (
     "REPORTADO",
+    "PENDIENTE",
     "EN_REPARACION",
-    "PENDIENTE_REASIGNACION",
+    "LIBERADO",
     "FINALIZADO",
 )

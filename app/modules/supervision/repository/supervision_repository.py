@@ -208,7 +208,7 @@ class SupervisionRepository:
                         COUNT(*) FILTER (WHERE estado = 'REPORTADO')::int as reportadas,
                         COUNT(*) FILTER (WHERE estado = 'PENDIENTE')::int as pendientes,
                         COUNT(*) FILTER (WHERE estado = 'EN_REPARACION')::int as en_reparacion,
-                        COUNT(*) FILTER (WHERE estado = 'PENDIENTE_REASIGNACION')::int as pendiente_reasignacion,
+                        COUNT(*) FILTER (WHERE estado = 'LIBERADO')::int as liberadas,
                         COUNT(*) FILTER (WHERE estado = 'FINALIZADO')::int as finalizadas
                     FROM taller_solicitudes
                 ),
@@ -313,7 +313,7 @@ class SupervisionRepository:
                     e.reportadas,
                     e.pendientes,
                     e.en_reparacion,
-                    e.pendiente_reasignacion,
+                    e.liberadas,
                     e.finalizadas,
                     bt.buses_en_taller,
                     al.fallas_bloqueadas,
@@ -336,7 +336,7 @@ class SupervisionRepository:
                 rep = row["reportadas"] or 0
                 pen = row["pendientes"] or 0
                 en_rep = row["en_reparacion"] or 0
-                pen_reasig = row["pendiente_reasignacion"] or 0
+                lib = row["liberadas"] or 0
                 fin = row["finalizadas"] or 0
                 bus_t = row["buses_en_taller"] or 0
                 bloq = row["fallas_bloqueadas"] or 0
@@ -363,7 +363,7 @@ class SupervisionRepository:
                         reportadas=rep,
                         pendientes=pen,
                         en_reparacion=en_rep,
-                        pendiente_reasignacion=pen_reasig,
+                        liberadas=lib,
                         finalizadas=fin,
                         buses_fisicamente_en_taller=bus_t,
                         fallas_bloqueadas_por_repuesto=bloq,
@@ -382,7 +382,7 @@ class SupervisionRepository:
         reportadas = conteos_estado.get("REPORTADO", 0)
         pendientes = conteos_estado.get("PENDIENTE", 0)
         en_reparacion = conteos_estado.get("EN_REPARACION", 0)
-        pendiente_reasignacion = conteos_estado.get("PENDIENTE_REASIGNACION", 0)
+        liberadas = conteos_estado.get("LIBERADO", 0)
         finalizadas = conteos_estado.get("FINALIZADO", 0)
 
         buses_en_taller_count = await self.get_total_buses_en_taller(db)
@@ -398,7 +398,7 @@ class SupervisionRepository:
             reportadas=reportadas,
             pendientes=pendientes,
             en_reparacion=en_reparacion,
-            pendiente_reasignacion=pendiente_reasignacion,
+            liberadas=liberadas,
             finalizadas=finalizadas,
             buses_fisicamente_en_taller=buses_en_taller_count,
             fallas_bloqueadas_por_repuesto=fallas_bloqueadas_por_repuesto,

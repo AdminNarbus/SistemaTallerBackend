@@ -8,8 +8,10 @@ from app.modules.mantencion.services.mantencion_service import (
 )
 from app.modules.mantencion.dtos.mantencion_dto import (
     AsignarFallasSupervisoraDTO,
+    CambiarEstadoSolicitudDTO,
     SolicitudDTO,
 )
+
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -104,5 +106,33 @@ class SupervisionService:
             db, solicitud_id=solicitud_id, dto=dto, supervisor_id=supervisor_id
         )
 
+    async def cambiar_estado_solicitud(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: CambiarEstadoSolicitudDTO,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """
+        Caso de uso de supervisión: Cambio de estado de una OT por parte de la supervisora
+        con justificación en la bitácora inmutable.
+        Coordina con MantencionService para la ejecución de las reglas de taller.
+        """
+        logger.info(
+            "[SUPERVISION_SERVICE] Cambiando estado de solicitud | supervisor_id=%s | solicitud_id=%s | nuevo_estado=%s",
+            supervisor_id,
+            solicitud_id,
+            dto.estado.value,
+        )
+        return await self.mantencion.cambiar_estado_solicitud(
+            db,
+            solicitud_id=solicitud_id,
+            dto=dto,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
 
 supervision_service = SupervisionService()
+

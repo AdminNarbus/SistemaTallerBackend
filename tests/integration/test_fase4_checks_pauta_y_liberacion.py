@@ -129,7 +129,8 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     )
     assert res_lib_ok.status_code == 200
     data_lib = res_lib_ok.json()
-    assert data_lib["estado"] == "FINALIZADO"
+    assert data_lib["estado"] == "LIBERADO"
+    assert data_lib["fecha_cierre"] is None
     assert data_lib["motivo_incompleto_checklist"] == "No se revisaron items 7 a 11 por urgencia de horario"
     assert data_lib["motivo_cierre_parcial"] == "Falla 2 postergada por repuesto de bomba en tránsito desde Santiago"
 

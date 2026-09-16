@@ -60,19 +60,14 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
     assert det1["mecanicos_asignados"][0]["id"] == 2
     assert det1["mecanicos_asignados"][0]["origen"] == "AUTOASIGNACION"
 
-    # 3. Mecánico 2 se autoasigna también Falla 1 (CO-RESPONSABILIDAD)
+    # 3. Mecánico 2 intenta autoasignarse Falla 1 ya tomada -> BLOQUEO ESTRICTO (422 BUSINESS_RULE_VIOLATION)
     res_auto2_falla1 = await client.post(
         f"/api/v1/mantencion/{sol_id}/autoasignar",
         json={"detalles_ids": [det1_id], "comentario": "Apoyando en purga de sistema"},
         headers=auth_headers_mecanico2,
     )
-    assert res_auto2_falla1.status_code == 200
-    data_coresp = res_auto2_falla1.json()
-    det1_coresp = next(d for d in data_coresp["detalles"] if d["id"] == det1_id)
-    # Deben estar AMBOS mecánicos activos en la Falla 1
-    mec_ids_falla1 = [m["id"] for m in det1_coresp["mecanicos_asignados"]]
-    assert 2 in mec_ids_falla1
-    assert 3 in mec_ids_falla1
+    assert res_auto2_falla1.status_code == 422
+    assert "ya se encuentra tomada activamente" in res_auto2_falla1.json()["error"]["message"]
 
     # 4. Mecánico 2 se autoasigna Falla 2
     res_auto2_falla2 = await client.post(

@@ -358,3 +358,63 @@ async def test_crear_solicitud_con_fotos_urls_json(client, auth_headers_conducto
     assert res_data["evidencias"][0]["url"] == "/uploads/solicitudes/img1.jpg"
     assert res_data["evidencias"][1]["url"] == "/uploads/solicitudes/img2.jpg"
 
+
+@pytest.mark.asyncio
+async def test_supervisor_crea_solicitud_e_ingreso_taller_endpoint(
+    client, auth_headers_supervisor, auth_headers_mecanico1, db_session, seed_test_data
+):
+    """Verifica que la supervisora pueda crear directamente una OT vía HTTP y que los mecánicos la visualicen en pendientes."""
+    from app.modules.buses.models.bus import Bus
+
+    # Sembrar bus previamente fuera de taller
+    bus = Bus(n_bus="BUS-SUP-INT-1", patente="SPI-100", is_active=True, en_taller=False)
+    db_session.add(bus)
+    await db_session.commit()
+    await db_session.refresh(bus)
+
+    falla1_id = seed_test_data["falla1"].id
+    falla2_id = seed_test_data["falla2"].id
+
+    payload = {
+        "bus_id": bus.id,
+        "n_bus": bus.n_bus,
+        "descripcion_general": "Bus derivado a taller por la supervisora",
+        "detalles": [
+            {"falla_id": falla1_id, "descripcion_personalizada": "Revisar pérdida de fuerza"}
+        ],
+    }
+
+    # 1. Supervisora crea la OT vía endpoint (antes daba 403 Forbidden)
+    res = await client.post("/api/v1/mantencion/solicitudes", json=payload, headers=auth_headers_supervisor)
+    assert res.status_code == 201
+    data = res.json()
+    sol_id = data["id"]
+    assert data["bus_id"] == bus.id
+    assert len(data["detalles"]) == 1
+
+    # 2. El bus queda automáticamente marcado con en_taller = True en BD
+    await db_session.refresh(bus)
+    assert bus.en_taller is True
+
+    # 3. Mecánico visualiza la OT en su bandeja de pendientes
+    pendientes_res = await client.get("/api/v1/mantencion/pendientes", headers=auth_headers_mecanico1)
+    assert pendientes_res.status_code == 200
+    pends = pendientes_res.json()
+    assert any(p["id"] == sol_id for p in pends)
+
+    # 4. Supervisora agrega una segunda falla a la OT en curso (antes daba 403 Forbidden)
+    agregar_falla_payload = {
+        "falla_id": falla2_id,
+        "descripcion_personalizada": "Pastillas desgastadas detectadas al subir a fosa",
+        "autoasignar": False,
+    }
+    add_falla_res = await client.post(
+        f"/api/v1/mantencion/{sol_id}/detalles",
+        json=agregar_falla_payload,
+        headers=auth_headers_supervisor,
+    )
+    assert add_falla_res.status_code == 201
+    updated_data = add_falla_res.json()
+    assert len(updated_data["detalles"]) == 2
+
+

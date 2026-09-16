@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 import pytest
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import BusinessRuleException, ConflictException, NotFoundException
+from app.modules.buses.dtos import BusCreateDTO, BusDarDeBajaDTO
 from app.modules.buses.models.bus import Bus
 from app.modules.buses.repository.bus_repository import BusRepository
 from app.modules.buses.services.bus_service import (
@@ -13,25 +14,26 @@ from app.modules.mantencion.services.mantencion_service import mantencion_servic
 from app.modules.mantencion.dtos.mantencion_dto import SolicitudCreateDTO
 
 
+
 # ==============================================================================
 # 1. Pruebas Unitarias Puras: Reglas de Dominio (es_bus_operativo_taller)
 # ==============================================================================
 
 def test_es_bus_operativo_taller_valores_limite_y_casos_borde():
-    """Valida la regla de negocio del rango operativo de taller (200 <= n_bus < 900)."""
+    """Valida la regla de dominio sin rango artificial: cualquier n_bus no vacío es válido."""
     # Arrange & Assert
-    assert es_bus_operativo_taller("199") is False
+    assert es_bus_operativo_taller("10") is True
+    assert es_bus_operativo_taller("199") is True
     assert es_bus_operativo_taller("200") is True
     assert es_bus_operativo_taller("339") is True
     assert es_bus_operativo_taller("899") is True
-    assert es_bus_operativo_taller("900") is False
-    assert es_bus_operativo_taller("950") is False
+    assert es_bus_operativo_taller("900") is True
+    assert es_bus_operativo_taller("950") is True
 
     # Con espacios en blanco
     assert es_bus_operativo_taller(" 339 ") is True
 
-    # Entradas no numéricas o inválidas
-    assert es_bus_operativo_taller("AUX-01") is False
+    # Entradas vacías o nulas
     assert es_bus_operativo_taller("") is False
     assert es_bus_operativo_taller(None) is False
 
@@ -46,10 +48,8 @@ async def test_buscar_sugerencias_buses_unitario_con_mock():
     # Arrange
     mock_repo = AsyncMock(spec=BusRepository)
     mock_repo.buscar_por_prefijo.return_value = [
-        Bus(id=1, n_bus="10", patente="AA1010", is_active=True, en_taller=False),
         Bus(id=2, n_bus="342", patente="DD3422", is_active=True, en_taller=False),
         Bus(id=3, n_bus="301", patente="BB3001", is_active=True, en_taller=False),
-        Bus(id=4, n_bus="900", patente="FF9000", is_active=True, en_taller=False),
     ]
     service = BusService(repository=mock_repo)
     mock_db = MagicMock()
@@ -63,10 +63,11 @@ async def test_buscar_sugerencias_buses_unitario_con_mock():
     mock_repo.buscar_por_prefijo.assert_awaited_once_with(
         mock_db, prefix="3", solo_activos=True, limit=None
     )
-    # Excluye 10 (<200) y 900 (>=900), y ordena numéricamente: [301, 342]
+    # Ordena numéricamente: [301, 342]
     assert [b.n_bus for b in resultados] == ["301", "342"]
     assert resultados[0].id == 3
     assert resultados[1].id == 2
+
 
 
 @pytest.mark.asyncio
@@ -173,13 +174,14 @@ async def test_bus_service_search_and_get_integration(db_session):
     assert resultados_3[0].id == 2
     assert resultados_3[0].patente == "BB3001"
 
-    # Búsqueda de todos los activos en catálogo de taller (excluye 10 < 200 y 900 >= 900)
+    # Búsqueda de todos los activos en catálogo de taller (incluye toda la flota activa)
     todos_taller = await bus_service.buscar_sugerencias_buses(db_session, query=None)
-    assert [b.n_bus for b in todos_taller] == ["301", "339", "342"]
+    assert [b.n_bus for b in todos_taller] == ["10", "301", "339", "342", "900"]
 
     # Búsqueda sin filtro de flota (todos los activos en BD)
     todos_completo = await bus_service.buscar_sugerencias_buses(db_session, query=None, solo_flota_taller=False)
     assert [b.n_bus for b in todos_completo] == ["10", "301", "339", "342", "900"]
+
 
     # Obtener por ID
     bus_dto = await bus_service.get_bus_by_id(db_session, bus_id=3)
@@ -226,3 +228,121 @@ async def test_crear_solicitud_auto_asigna_bus_id(db_session, seed_test_data):
     assert solicitud.n_bus == "339"
     assert solicitud.bus_id == 7
     assert solicitud.bus_patente == "GH3399"
+
+
+# ==============================================================================
+# 4. Pruebas Unitarias de Gestión de Buses (Creación, Baja y Reactivación)
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_crear_bus_exitoso(db_session):
+    """Verifica la creación exitosa de un bus con marcas de tiempo."""
+    dto = BusCreateDTO(
+        patente="TEST-11",
+        n_bus="711",
+        marca="Mercedes-Benz",
+        modelo="O500",
+        anio="2022",
+    )
+    bus_res = await bus_service.create_bus(db_session, dto=dto, usuario_id=1)
+
+    assert bus_res.id is not None
+    assert bus_res.patente == "TEST-11"
+    assert bus_res.n_bus == "711"
+    assert bus_res.is_active is True
+    assert bus_res.en_taller is False
+    assert bus_res.fecha_creacion is not None
+
+
+@pytest.mark.asyncio
+async def test_crear_bus_patente_duplicada_lanza_conflict(db_session):
+    """Verifica que no se permita registrar un bus con patente ya existente."""
+    dto1 = BusCreateDTO(patente="DUP-01", n_bus="712")
+    await bus_service.create_bus(db_session, dto=dto1)
+
+    dto2 = BusCreateDTO(patente="dup-01", n_bus="713")
+    with pytest.raises(ConflictException) as exc_info:
+        await bus_service.create_bus(db_session, dto=dto2)
+    assert "patente" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_crear_bus_n_bus_duplicado_lanza_conflict(db_session):
+    """Verifica que no se permita registrar un bus con n_bus ya existente."""
+    dto1 = BusCreateDTO(patente="DUP-02", n_bus="714")
+    await bus_service.create_bus(db_session, dto=dto1)
+
+    dto2 = BusCreateDTO(patente="DUP-03", n_bus="714")
+    with pytest.raises(ConflictException) as exc_info:
+        await bus_service.create_bus(db_session, dto=dto2)
+    assert "máquina" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_dar_de_baja_y_reactivar_bus(db_session):
+    """Verifica el ciclo de vida completo: dar de baja (soft-delete) y reactivación."""
+    dto = BusCreateDTO(patente="BAJA-01", n_bus="715")
+    bus_creado = await bus_service.create_bus(db_session, dto=dto)
+
+    # 1. Dar de baja
+    dto_baja = BusDarDeBajaDTO(motivo="Venta de unidad fuera de servicio")
+    bus_baja = await bus_service.dar_de_baja_bus(
+        db_session, bus_id=bus_creado.id, dto=dto_baja, usuario_id=2
+    )
+
+    assert bus_baja.is_active is False
+    assert bus_baja.en_taller is False
+    assert bus_baja.fecha_baja is not None
+    assert bus_baja.motivo_baja == "Venta de unidad fuera de servicio"
+    assert bus_baja.usuario_baja_id == 2
+
+    # Intentar dar de baja nuevamente lanza error
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await bus_service.dar_de_baja_bus(db_session, bus_id=bus_creado.id, dto=dto_baja)
+    assert "ya se encuentra dado de baja" in str(exc_info.value)
+
+    # 2. Reactivar bus
+    bus_reactivado = await bus_service.reactivar_bus(
+        db_session, bus_id=bus_creado.id, usuario_id=2
+    )
+    assert bus_reactivado.is_active is True
+    assert bus_reactivado.fecha_baja is None
+    assert bus_reactivado.motivo_baja is None
+    assert bus_reactivado.usuario_baja_id is None
+
+    # Intentar reactivar cuando ya está activo lanza error
+    with pytest.raises(BusinessRuleException) as exc_info2:
+        await bus_service.reactivar_bus(db_session, bus_id=bus_creado.id)
+    assert "ya se encuentra activo" in str(exc_info2.value)
+
+
+@pytest.mark.asyncio
+async def test_dar_de_baja_bus_con_ots_abiertas_requiere_forzar(db_session, seed_test_data):
+    """Verifica que dar de baja un bus con OTs en taller requiera 'forzar=True'."""
+    conductor = seed_test_data["conductor"]
+    dto = BusCreateDTO(patente="BAJA-OT", n_bus="716")
+    bus = await bus_service.create_bus(db_session, dto=dto)
+
+    solicitud = TallerSolicitud(
+        n_bus="716",
+        bus_id=bus.id,
+        usuario_creador_id=conductor.id,
+        estado="EN_REPARACION",
+        descripcion_general="OT en curso",
+    )
+    db_session.add(solicitud)
+    await db_session.commit()
+
+    # Sin forzar -> error
+    dto_baja = BusDarDeBajaDTO(motivo="Retiro de flota", forzar=False)
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await bus_service.dar_de_baja_bus(db_session, bus_id=bus.id, dto=dto_baja)
+    assert "orden(es) de trabajo abierta(s)" in str(exc_info.value)
+
+    # Con forzar -> éxito
+    dto_baja_forzada = BusDarDeBajaDTO(motivo="Retiro forzado de flota", forzar=True)
+    bus_dado_baja = await bus_service.dar_de_baja_bus(
+        db_session, bus_id=bus.id, dto=dto_baja_forzada, usuario_id=1
+    )
+    assert bus_dado_baja.is_active is False
+

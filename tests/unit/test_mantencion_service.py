@@ -17,6 +17,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     LiberarTurnoDTO,
     SolicitudCreateDTO,
     SolicitudDetalleCreateDTO,
+    TerminarAvanceDTO,
     TomarTrabajoDTO,
 )
 from app.modules.mantencion.services.mantencion_service import (
@@ -359,11 +360,11 @@ async def test_workflow_tomar_liberar_y_finalizar_trabajo(db_session, seed_test_
     assert dto_checked.resuelto is True
     assert dto_checked.detalle_id == detalle_id
 
-    # 4. Liberar turno
+    # 4. Liberar turno (pasa a PENDIENTE, eliminando el estado redundante PENDIENTE_REASIGNACION)
     sol_liberada = await mantencion_service.liberar_turno(
         db_session, solicitud.id, mecanico1_id, LiberarTurnoDTO(comentario="Turno terminado, resta prueba en ruta")
     )
-    assert sol_liberada.estado == "PENDIENTE_REASIGNACION"
+    assert sol_liberada.estado == "PENDIENTE"
 
     # 5. Mecánico 2 toma el trabajo liberado y lo finaliza
     sol_re_tomada = await mantencion_service.tomar_trabajo(
@@ -379,6 +380,51 @@ async def test_workflow_tomar_liberar_y_finalizar_trabajo(db_session, seed_test_
 
 
 @pytest.mark.asyncio
+async def test_liberar_solicitud_con_fallas_pendientes_pasa_a_liberado(db_session, seed_test_data):
+    """Verifica que una orden con fallas sin resolver pase a LIBERADO con motivo_cierre_parcial y libere el bus."""
+    from app.modules.mantencion.dtos.mantencion_dto import LiberarSolicitudDTO
+
+    conductor_id = seed_test_data["conductor"].id
+    mecanico1_id = seed_test_data["mecanico1"].id
+    falla_id = seed_test_data["falla1"].id
+
+    solicitud = await mantencion_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-LIB-1",
+            descripcion_general="Falla de compresor",
+            detalles=[SolicitudDetalleCreateDTO(falla_id=falla_id)],
+        ),
+        conductor_id,
+    )
+
+    # Tomar trabajo
+    await mantencion_service.tomar_trabajo(
+        db_session, solicitud.id, mecanico1_id, TomarTrabajoDTO(comentario_inicial="Revisando compresor")
+    )
+
+    # Liberar solicitud con cierre parcial (falla abierta)
+    dto_liberar = LiberarSolicitudDTO(
+        motivo_cierre_parcial="Falta repuesto de diafragma, bus liberado para turno local",
+        liberar_bus_taller=True,
+    )
+    sol_liberada = await mantencion_service.liberar_solicitud(
+        db_session, solicitud.id, dto_liberar, mecanico1_id, "Mecánico 1"
+    )
+
+    assert sol_liberada.estado == "LIBERADO"
+    assert sol_liberada.fecha_cierre is None
+    assert sol_liberada.motivo_cierre_parcial == "Falta repuesto de diafragma, bus liberado para turno local"
+
+    # Reingreso de bus liberado al taller: tomar trabajo lo devuelve a EN_REPARACION
+    sol_retomada = await mantencion_service.tomar_trabajo(
+        db_session, solicitud.id, mecanico1_id, TomarTrabajoDTO(comentario_inicial="Llegó repuesto, reparando")
+    )
+    assert sol_retomada.estado == "EN_REPARACION"
+
+
+
+@pytest.mark.asyncio
 async def test_desasignacion_mecanico_individual_exception(db_session, seed_test_data):
     """Prueba que intentar desasignar a un mecánico no activo lance BusinessRuleException."""
     conductor_id = seed_test_data["conductor"].id
@@ -391,3 +437,232 @@ async def test_desasignacion_mecanico_individual_exception(db_session, seed_test
     with pytest.raises(BusinessRuleException) as exc_info:
         await mantencion_service.desasignar_mecanico(db_session, solicitud.id, mecanico1_id)
     assert "no está asignado activamente" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_autoasignar_falla_ocupada_bloquea_con_business_rule(db_session, seed_test_data):
+    """Verifica que un mecánico no pueda autoasignarse una falla que ya está tomada por otro mecánico activo."""
+    conductor_id = seed_test_data["conductor"].id
+    mecanico1_id = seed_test_data["mecanico1"].id
+    mecanico2_id = seed_test_data["mecanico2"].id
+    falla1 = seed_test_data["falla1"]
+    falla2 = seed_test_data["falla2"]
+
+    sol = await mantencion_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-999",
+            descripcion_general="Doble falla",
+            detalles=[
+                SolicitudDetalleCreateDTO(falla_id=falla1.id, descripcion_personalizada="Falla 1"),
+                SolicitudDetalleCreateDTO(falla_id=falla2.id, descripcion_personalizada="Falla 2"),
+            ],
+        ),
+        conductor_id,
+    )
+    falla_1_id = sol.detalles[0].id
+    falla_2_id = sol.detalles[1].id
+
+    # Mecánico 1 toma Falla 1
+    await mantencion_service.autoasignar_fallas(
+        db_session,
+        solicitud_id=sol.id,
+        dto=AutoasignarFallasDTO(detalles_ids=[falla_1_id]),
+        mecanico_id=mecanico1_id,
+        mecanico_nombre="Mecánico 1",
+    )
+
+    # Mecánico 2 intenta tomar la misma Falla 1 -> Debe ser BLOQUEADO con BusinessRuleException
+    with pytest.raises(BusinessRuleException) as exc_info:
+        await mantencion_service.autoasignar_fallas(
+            db_session,
+            solicitud_id=sol.id,
+            dto=AutoasignarFallasDTO(detalles_ids=[falla_1_id]),
+            mecanico_id=mecanico2_id,
+            mecanico_nombre="Mecánico 2",
+        )
+    assert "ya se encuentra tomada activamente" in str(exc_info.value)
+
+    # Mecánico 2 toma la Falla 2 (libre) -> Debe ser EXITOSO
+    sol_actualizada = await mantencion_service.autoasignar_fallas(
+        db_session,
+        solicitud_id=sol.id,
+        dto=AutoasignarFallasDTO(detalles_ids=[falla_2_id]),
+        mecanico_id=mecanico2_id,
+        mecanico_nombre="Mecánico 2",
+    )
+    assert sol_actualizada.estado == "EN_REPARACION"
+
+
+@pytest.mark.asyncio
+async def test_terminar_avance_aislado_por_mecanico(db_session, seed_test_data):
+    """Verifica que terminar_avance solo libere el trabajo del mecánico emisor y mantenga activo a sus compañeros."""
+    conductor_id = seed_test_data["conductor"].id
+    mecanico1_id = seed_test_data["mecanico1"].id
+    mecanico2_id = seed_test_data["mecanico2"].id
+    falla1 = seed_test_data["falla1"]
+    falla2 = seed_test_data["falla2"]
+
+    sol = await mantencion_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-888",
+            descripcion_general="Trabajo colaborativo",
+            detalles=[
+                SolicitudDetalleCreateDTO(falla_id=falla1.id, descripcion_personalizada="Falla A"),
+                SolicitudDetalleCreateDTO(falla_id=falla2.id, descripcion_personalizada="Falla B"),
+            ],
+        ),
+        conductor_id,
+    )
+    falla_a_id = sol.detalles[0].id
+    falla_b_id = sol.detalles[1].id
+
+    # Mecánico 1 toma Falla A
+    await mantencion_service.autoasignar_fallas(
+        db_session, sol.id, AutoasignarFallasDTO(detalles_ids=[falla_a_id]), mecanico1_id, "Mecánico 1"
+    )
+    # Mecánico 2 toma Falla B
+    await mantencion_service.autoasignar_fallas(
+        db_session, sol.id, AutoasignarFallasDTO(detalles_ids=[falla_b_id]), mecanico2_id, "Mecánico 2"
+    )
+
+    # Mecánico 1 termina su avance globalmente (sin especificar IDs de fallas)
+    sol_post_m1 = await mantencion_service.terminar_avance(
+        db_session,
+        solicitud_id=sol.id,
+        dto=TerminarAvanceDTO(comentario="Mecánico 1 terminó su parte"),
+        mecanico_id=mecanico1_id,
+        mecanico_nombre="Mecánico 1",
+    )
+
+    # El bus/OT DEBE permanecer en EN_REPARACION porque Mecánico 2 sigue en Falla B
+    assert sol_post_m1.estado == "EN_REPARACION"
+
+    # Falla B debe seguir con Mecánico 2 asignado
+    detalle_b = next(d for d in sol_post_m1.detalles if d.id == falla_b_id)
+    assert any(m.id == mecanico2_id for m in detalle_b.mecanicos_asignados)
+
+    # Falla A no debe tener asignado a Mecánico 1
+    detalle_a = next(d for d in sol_post_m1.detalles if d.id == falla_a_id)
+    assert not any(m.id == mecanico1_id for m in detalle_a.mecanicos_asignados)
+
+    # Ahora Mecánico 2 termina su avance
+    sol_post_m2 = await mantencion_service.terminar_avance(
+        db_session,
+        solicitud_id=sol.id,
+        dto=TerminarAvanceDTO(comentario="Mecánico 2 terminó"),
+        mecanico_id=mecanico2_id,
+        mecanico_nombre="Mecánico 2",
+    )
+
+    # Al no quedar ningún mecánico activo, la OT pasa a PENDIENTE
+    assert sol_post_m2.estado == "PENDIENTE"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_test_data):
+    """Verifica que una solicitud creada por la supervisora marque automáticamente al bus como en_taller = True."""
+    from app.modules.buses.models.bus import Bus
+
+    bus = Bus(n_bus="BUS-SUP-1", patente="SUP-001", is_active=True, en_taller=False)
+    db_session.add(bus)
+    await db_session.commit()
+    await db_session.refresh(bus)
+
+    supervisor = seed_test_data["supervisor"]
+    falla1 = seed_test_data["falla1"]
+
+    dto = SolicitudCreateDTO(
+        bus_id=bus.id,
+        n_bus=bus.n_bus,
+        descripcion_general="Ingreso directo por supervisora",
+        detalles=[SolicitudDetalleCreateDTO(falla_id=falla1.id, descripcion_personalizada="Revisión fosa 1")],
+    )
+
+    solicitud = await mantencion_service.create_solicitud(
+        db_session,
+        dto=dto,
+        creador_id=supervisor.id,
+        creador_nombre=supervisor.nombre_completo,
+        creador_rol="SUPERVISOR",
+    )
+
+    assert solicitud.bus_id == bus.id
+    assert solicitud.estado == "REPORTADO"
+    # El bus debe haber quedado con en_taller = True automáticamente
+    await db_session.refresh(bus)
+    assert bus.en_taller is True
+
+
+@pytest.mark.asyncio
+async def test_conductor_crea_solicitud_no_marca_bus_en_taller(db_session, seed_test_data):
+    """Verifica que un reporte de conductor en ruta no fuerce indebidamente bus.en_taller a True."""
+    from app.modules.buses.models.bus import Bus
+
+    bus = Bus(n_bus="BUS-COND-1", patente="CND-001", is_active=True, en_taller=False)
+    db_session.add(bus)
+    await db_session.commit()
+    await db_session.refresh(bus)
+
+    conductor = seed_test_data["conductor"]
+    falla1 = seed_test_data["falla1"]
+
+    dto = SolicitudCreateDTO(
+        bus_id=bus.id,
+        n_bus=bus.n_bus,
+        descripcion_general="Reporte en trayecto",
+        detalles=[SolicitudDetalleCreateDTO(falla_id=falla1.id)],
+    )
+
+    solicitud = await mantencion_service.create_solicitud(
+        db_session,
+        dto=dto,
+        creador_id=conductor.id,
+        creador_nombre=conductor.nombre_completo,
+        creador_rol="CONDUCTOR",
+    )
+
+    assert solicitud.bus_id == bus.id
+    await db_session.refresh(bus)
+    assert bus.en_taller is False
+
+
+@pytest.mark.asyncio
+async def test_supervisor_agrega_falla_sin_autoasignar(db_session, seed_test_data):
+    """Verifica que cuando una supervisora agrega una falla a una OT, no se autoasigne como mecánico operativo."""
+    from app.modules.mantencion.dtos.mantencion_dto import AgregarFallaDTO
+
+    conductor = seed_test_data["conductor"]
+    supervisor = seed_test_data["supervisor"]
+    falla1 = seed_test_data["falla1"]
+    falla2 = seed_test_data["falla2"]
+
+    sol = await mantencion_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-SUP-FALLA",
+            descripcion_general="OT inicial",
+            detalles=[SolicitudDetalleCreateDTO(falla_id=falla1.id)],
+        ),
+        conductor.id,
+    )
+
+    # Supervisora agrega una segunda falla
+    sol_actualizada = await mantencion_service.agregar_falla(
+        db_session,
+        solicitud_id=sol.id,
+        mecanico_id=supervisor.id,
+        dto=AgregarFallaDTO(falla_id=falla2.id, descripcion_personalizada="Detectada por supervisión"),
+    )
+
+    assert len(sol_actualizada.detalles) == 2
+    falla_agregada = sol_actualizada.detalles[1]
+    assert falla_agregada.falla_id == falla2.id
+    # La supervisora NO debe quedar autoasignada a la avería
+    assert len(falla_agregada.mecanicos_asignados) == 0
+
+    # Bitácora registra a la supervisora
+    comentarios = sol_actualizada.comentarios
+    assert any("Supervisora" in c.comentario for c in comentarios)
+

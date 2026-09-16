@@ -1,4 +1,6 @@
 import pytest
+from app.modules.buses.models.bus import Bus
+from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
 
 
 @pytest.mark.asyncio
@@ -72,4 +74,101 @@ async def test_auditoria_buses_taller_paginacion(client, auth_headers_supervisor
     assert res_page2.status_code == 200
     data_page2 = res_page2.json()
     assert isinstance(data_page2, list)
+
+
+@pytest.mark.asyncio
+async def test_supervision_cambiar_estado_solicitud_flujo(
+    client, db_session, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    """Prueba completa del endpoint PATCH /api/v1/supervision/solicitudes/{id}/estado con RBAC y transiciones."""
+    conductor = seed_test_data["conductor"]
+
+    # 1. Sembrar bus y OT inicial
+    bus = Bus(id=50, n_bus="705", patente="PLOP-75", is_active=True, en_taller=True)
+    db_session.add(bus)
+    await db_session.flush()
+
+    ot = TallerSolicitud(
+        id=901,
+        n_bus="705",
+        usuario_creador_id=conductor.id,
+        estado="REPORTADO",
+        descripcion_general="Falla de compresor de aire",
+    )
+    db_session.add(ot)
+    await db_session.commit()
+
+    payload_valido = {
+        "estado": "PENDIENTE",
+        "comentario": "Se asignará a turno tarde",
+    }
+
+    # 2. Sin autenticación -> 401
+    res_unauth = await client.patch("/api/v1/supervision/solicitudes/901/estado", json=payload_valido)
+    assert res_unauth.status_code == 401
+
+    # 3. Conductor (no supervisor/admin) -> 403
+    res_cond = await client.patch(
+        "/api/v1/supervision/solicitudes/901/estado",
+        json=payload_valido,
+        headers=auth_headers_conductor,
+    )
+    assert res_cond.status_code == 403
+
+    # 4. Solicitud inexistente -> 404
+    res_404 = await client.patch(
+        "/api/v1/supervision/solicitudes/99999/estado",
+        json=payload_valido,
+        headers=auth_headers_supervisor,
+    )
+    assert res_404.status_code == 404
+
+    # 5. Transición exitosa REPORTADO -> PENDIENTE
+    res_ok = await client.patch(
+        "/api/v1/supervision/solicitudes/901/estado",
+        json=payload_valido,
+        headers=auth_headers_supervisor,
+    )
+    assert res_ok.status_code == 200
+    data_ok = res_ok.json()
+    assert data_ok["id"] == 901
+    assert data_ok["estado"] == "PENDIENTE"
+    assert any("Se asignará a turno tarde" in c["comentario"] for c in data_ok["comentarios"])
+
+    # 6. Intentar cambiar al mismo estado -> 422 BusinessRuleException
+    res_same = await client.patch(
+        "/api/v1/supervision/solicitudes/901/estado",
+        json={"estado": "PENDIENTE"},
+        headers=auth_headers_supervisor,
+    )
+    assert res_same.status_code == 422
+
+    # 7. Cambiar a FINALIZADO con liberar_bus_taller=True
+    res_fin = await client.patch(
+        "/api/v1/supervision/solicitudes/901/estado",
+        json={
+            "estado": "FINALIZADO",
+            "comentario": "Reparación concluida y verificada",
+            "liberar_bus_taller": True,
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_fin.status_code == 200
+    data_fin = res_fin.json()
+    assert data_fin["estado"] == "FINALIZADO"
+    assert data_fin["fecha_cierre"] is not None
+
+    # 8. Reabrir solicitud FINALIZADO -> EN_REPARACION
+    res_reopen = await client.patch(
+        "/api/v1/supervision/solicitudes/901/estado",
+        json={
+            "estado": "EN_REPARACION",
+            "comentario": "Reapertura por observación en prueba de ruta",
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_reopen.status_code == 200
+    data_reopen = res_reopen.json()
+    assert data_reopen["estado"] == "EN_REPARACION"
+    assert data_reopen["fecha_cierre"] is None
 

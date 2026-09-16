@@ -31,15 +31,16 @@ async def test_buses_buscar_endpoint(client, db_session):
     assert response_33.status_code == 200
     assert [item["n_bus"] for item in response_33.json()] == ["339"]
 
-    # Buscar sin query (por defecto solo flota taller: excluye '10' que es < 200)
+    # Buscar sin query (incluye todos los activos en catálogo)
     response_default = await client.get("/api/v1/buses/buscar")
     assert response_default.status_code == 200
-    assert [item["n_bus"] for item in response_default.json()] == ["301", "339", "342", "405"]
+    assert [item["n_bus"] for item in response_default.json()] == ["10", "301", "339", "342", "405"]
 
     # Buscar sin query con solo_flota_taller=false (incluye todos)
     response_all = await client.get("/api/v1/buses/buscar?solo_flota_taller=false")
     assert response_all.status_code == 200
     assert [item["n_bus"] for item in response_all.json()] == ["10", "301", "339", "342", "405"]
+
 
 
 @pytest.mark.asyncio
@@ -123,5 +124,72 @@ async def test_buses_listar_con_paginacion(client, db_session):
     data_b = res_b.json()
     assert len(data_b) == 1
     assert data_b[0]["n_bus"] == "501"
+
+
+@pytest.mark.asyncio
+async def test_buses_crear_dar_de_baja_y_reactivar_endpoints(
+    client, db_session, auth_headers_supervisor, auth_headers_conductor
+):
+    """Prueba POST /api/v1/buses, PATCH /{id}/dar-de-baja y PATCH /{id}/reactivar con RBAC."""
+    payload = {
+        "patente": "KKL-909",
+        "n_bus": "909",
+        "marca": "Scania",
+        "modelo": "K360",
+    }
+
+    # 1. Sin auth -> 401
+    res_unauth = await client.post("/api/v1/buses", json=payload)
+    assert res_unauth.status_code == 401
+
+    # 2. Conductor -> 403
+    res_cond = await client.post("/api/v1/buses", json=payload, headers=auth_headers_conductor)
+    assert res_cond.status_code == 403
+
+    # 3. Supervisor -> 201 Created
+    res_sup = await client.post("/api/v1/buses", json=payload, headers=auth_headers_supervisor)
+    assert res_sup.status_code == 201
+    bus_data = res_sup.json()
+    assert bus_data["patente"] == "KKL-909"
+    assert bus_data["n_bus"] == "909"
+    assert bus_data["is_active"] is True
+    assert bus_data["fecha_creacion"] is not None
+    bus_id = bus_data["id"]
+
+    # 4. Dar de baja con supervisor -> 200 OK
+    payload_baja = {"motivo": "Fin de vida útil"}
+    res_baja = await client.patch(
+        f"/api/v1/buses/{bus_id}/dar-de-baja", json=payload_baja, headers=auth_headers_supervisor
+    )
+    assert res_baja.status_code == 200
+    baja_data = res_baja.json()
+    assert baja_data["is_active"] is False
+    assert baja_data["motivo_baja"] == "Fin de vida útil"
+    assert baja_data["fecha_baja"] is not None
+
+    # 5. Reactivar con supervisor -> 200 OK
+    res_reactivar = await client.patch(
+        f"/api/v1/buses/{bus_id}/reactivar", headers=auth_headers_supervisor
+    )
+    assert res_reactivar.status_code == 200
+    assert res_reactivar.json()["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_supervision_buses_rutas_delegadas(client, db_session, auth_headers_supervisor):
+    """Prueba endpoints delegados POST /api/v1/supervision/buses y PATCH /api/v1/supervision/buses/{id}/dar-de-baja."""
+    payload = {"patente": "SUP-888", "n_bus": "888", "marca": "Volvo"}
+    res = await client.post("/api/v1/supervision/buses", json=payload, headers=auth_headers_supervisor)
+    assert res.status_code == 201
+    bus_id = res.json()["id"]
+
+    res_baja = await client.patch(
+        f"/api/v1/supervision/buses/{bus_id}/dar-de-baja",
+        json={"motivo": "Baja administrativa"},
+        headers=auth_headers_supervisor,
+    )
+    assert res_baja.status_code == 200
+    assert res_baja.json()["is_active"] is False
+
 
 

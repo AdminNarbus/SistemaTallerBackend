@@ -6,7 +6,11 @@ from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicit
 from app.modules.mantencion.models.falla_taller import FallaTaller
 from app.modules.mantencion.models.categoria_falla import CategoriaFalla
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
-from app.modules.mantencion.dtos.mantencion_dto import AsignarFallasSupervisoraDTO, SolicitudDTO
+from app.modules.mantencion.dtos.mantencion_dto import (
+    AsignarFallasSupervisoraDTO,
+    CambiarEstadoSolicitudDTO,
+    SolicitudDTO,
+)
 from app.modules.supervision.services import supervision_service, SupervisionService
 from app.modules.supervision.repository import supervision_repository, SupervisionRepository
 from app.modules.supervision.constants import (
@@ -25,7 +29,9 @@ from app.modules.supervision.utils import (
     formatear_mensaje_alerta_pauta,
     formatear_mensaje_alerta_bus_sin_mecanicos,
     construir_alerta_supervision,
+    formatear_comentario_cambio_estado,
 )
+
 
 
 @pytest.mark.asyncio
@@ -367,3 +373,111 @@ async def test_supervision_service_asignar_fallas_aislado():
         dto=dto,
         supervisor_id=10,
     )
+
+
+def test_supervision_utils_formatear_comentario_cambio_estado():
+    """Valida la función pura de formateo de comentarios de bitácora para cambio de estado."""
+    # Con motivo
+    texto_con_motivo = formatear_comentario_cambio_estado(
+        supervisor_nombre="Laura Rojas",
+        estado_anterior="REPORTADO",
+        nuevo_estado="EN_REPARACION",
+        motivo="Ingreso urgente a fosa 2",
+    )
+    assert texto_con_motivo == "Supervisora Laura Rojas cambió el estado de REPORTADO a EN_REPARACION. Motivo: Ingreso urgente a fosa 2"
+
+    # Sin motivo
+    texto_sin_motivo = formatear_comentario_cambio_estado(
+        supervisor_nombre="Laura Rojas",
+        estado_anterior="EN_REPARACION",
+        nuevo_estado="PENDIENTE",
+        motivo=None,
+    )
+    assert texto_sin_motivo == "Supervisora Laura Rojas cambió el estado de EN_REPARACION a PENDIENTE."
+
+
+@pytest.mark.asyncio
+async def test_supervision_service_cambiar_estado_aislado():
+    """Verifica que cambiar_estado_solicitud coordine con mantencion_service aplicando DIP."""
+    mock_mantencion = AsyncMock()
+    mock_db = AsyncMock()
+    dto = CambiarEstadoSolicitudDTO(estado="PENDIENTE", comentario="Pausa operacional")
+    dummy_solicitud = MagicMock(spec=SolicitudDTO)
+    dummy_solicitud.id = 555
+    mock_mantencion.cambiar_estado_solicitud.return_value = dummy_solicitud
+
+    service = SupervisionService(mantencion_srv=mock_mantencion)
+
+    resultado = await service.cambiar_estado_solicitud(
+        db=mock_db,
+        solicitud_id=555,
+        dto=dto,
+        supervisor_id=1,
+        supervisor_nombre="Jefa Taller",
+    )
+
+    assert resultado is dummy_solicitud
+    mock_mantencion.cambiar_estado_solicitud.assert_awaited_once_with(
+        mock_db,
+        solicitud_id=555,
+        dto=dto,
+        supervisor_id=1,
+        supervisor_nombre="Jefa Taller",
+    )
+
+
+@pytest.mark.asyncio
+async def test_cambiar_estado_solicitud_flujo_completo(db_session, seed_test_data):
+    """Verifica el ciclo de vida de cambio de estado en BD: REPORTADO -> FINALIZADO -> EN_REPARACION."""
+    conductor = seed_test_data["conductor"]
+    supervisor = seed_test_data["supervisor"]
+
+    bus = Bus(id=81, n_bus="881", patente="SUP881", marca="Scania", is_active=True, en_taller=True)
+    db_session.add(bus)
+    await db_session.flush()
+
+    sol = TallerSolicitud(
+        id=781,
+        n_bus="881",
+        bus_id=81,
+        usuario_creador_id=conductor.id,
+        estado="REPORTADO",
+        descripcion_general="Prueba cambio de estado",
+    )
+    db_session.add(sol)
+    await db_session.commit()
+
+    # 1. Cambiar de REPORTADO a FINALIZADO
+    dto_finalizar = CambiarEstadoSolicitudDTO(
+        estado="FINALIZADO",
+        comentario="Cierre directo por supervisión",
+        liberar_bus_taller=True,
+    )
+    res_fin = await supervision_service.cambiar_estado_solicitud(
+        db_session,
+        solicitud_id=781,
+        dto=dto_finalizar,
+        supervisor_id=supervisor.id,
+        supervisor_nombre=supervisor.nombre_completo,
+    )
+    assert res_fin.estado == "FINALIZADO"
+    assert res_fin.fecha_cierre is not None
+    assert bus.en_taller is False
+    assert any(c.tipo == "CAMBIO_ESTADO" for c in res_fin.comentarios)
+
+    # 2. Reabrir desde FINALIZADO a EN_REPARACION
+    dto_reabrir = CambiarEstadoSolicitudDTO(
+        estado="EN_REPARACION",
+        comentario="Reapertura: falla persiste",
+    )
+    res_reabierta = await supervision_service.cambiar_estado_solicitud(
+        db_session,
+        solicitud_id=781,
+        dto=dto_reabrir,
+        supervisor_id=supervisor.id,
+        supervisor_nombre=supervisor.nombre_completo,
+    )
+    assert res_reabierta.estado == "EN_REPARACION"
+    assert res_reabierta.fecha_cierre is None
+    assert bus.en_taller is True
+

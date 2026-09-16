@@ -91,7 +91,7 @@ async def test_flujo_completo_taller_e2e(
         headers=auth_headers_mecanico1,
     )
     assert res_liberar.status_code == 200
-    assert res_liberar.json()["estado"] == "PENDIENTE_REASIGNACION"
+    assert res_liberar.json()["estado"] == "PENDIENTE"
 
     # -------------------------------------------------------------------------
     # PASO 6: Mecánico 2 toma el turno nocturno como Líder

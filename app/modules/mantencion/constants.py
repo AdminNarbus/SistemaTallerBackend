@@ -5,9 +5,9 @@ from typing import Final
 class EstadoSolicitud(str, Enum):
     """Estados canónicos del ciclo de vida de una Solicitud de Mantención en Taller."""
     REPORTADO = "REPORTADO"
-    EN_REPARACION = "EN_REPARACION"
     PENDIENTE = "PENDIENTE"
-    PENDIENTE_REASIGNACION = "PENDIENTE_REASIGNACION"
+    EN_REPARACION = "EN_REPARACION"
+    LIBERADO = "LIBERADO"
     FINALIZADO = "FINALIZADO"
 
 
@@ -24,6 +24,10 @@ class TipoComentarioBitacora(str, Enum):
     AVANCE = "AVANCE"
     CIERRE = "CIERRE"
     SISTEMA = "SISTEMA"
+    CAMBIO_ESTADO = "CAMBIO_ESTADO"
+    ASIGNACION = "ASIGNACION"
+    ENTREGA_TURNO = "ENTREGA_TURNO"
+
 
 
 class EstadoItemPauta(str, Enum):

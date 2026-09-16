@@ -12,6 +12,8 @@ from app.api.deps import (
     require_supervisor_or_admin,
     require_mecanico_or_admin,
     require_conductor_or_admin,
+    require_conductor_or_supervisor_or_admin,
+    require_mecanico_or_supervisor_or_admin,
 )
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.mantencion.services.mantencion_service import mantencion_service
@@ -29,7 +31,9 @@ from app.modules.mantencion.dtos import (
     AgregarColaboradorDTO,
     AutoasignarFallasDTO,
     AsignarFallasSupervisoraDTO,
+    CambiarEstadoSolicitudDTO,
     TerminarAvanceDTO,
+
     ReportarRepuestoDTO,
     PautaTallerItemDTO,
     PautaEstadoResumenDTO,
@@ -127,7 +131,7 @@ async def get_fallas(
 @router.post("/solicitudes", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
 async def create_solicitud(
     request: Request,
-    current_user: UsuarioResponseDTO = Depends(require_conductor_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_conductor_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """
@@ -152,8 +156,9 @@ async def create_solicitud(
         raise RequestValidationError(ve.errors())
 
     logger.info(
-        "[MANTENCION] Creando solicitud de mantención | conductor_id=%s | n_bus='%s' | cant_fotos_adjuntas=%s",
+        "[MANTENCION] Creando solicitud de mantención | creador_id=%s | rol='%s' | n_bus='%s' | cant_fotos_adjuntas=%s",
         current_user.id,
+        current_user.rol,
         dto.n_bus,
         len(fotos_files),
     )
@@ -162,6 +167,7 @@ async def create_solicitud(
         dto,
         creador_id=current_user.id,
         creador_nombre=current_user.nombre_completo,
+        creador_rol=current_user.rol,
         foto=foto_file,
         fotos=fotos_files,
     )
@@ -175,7 +181,7 @@ async def list_pendientes(
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE / PENDIENTE_REASIGNACION)."""
+    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
     return await mantencion_service.list_pendientes(db, limit=limit, skip=skip)
 
@@ -283,7 +289,34 @@ async def asignar_fallas_supervisora(
     )
 
 
+@router.patch("/{id}/estado", response_model=SolicitudDTO)
+async def cambiar_estado_solicitud(
+    id: int,
+    dto: CambiarEstadoSolicitudDTO,
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """
+    Cambio de estado administrativo de una Orden de Trabajo (OT) exclusivo para supervisores y administradores.
+    Permite transicionar entre cualquier estado canónico registrando un comentario justificativo en la bitácora inmutable.
+    """
+    logger.info(
+        "[MANTENCION] Supervisora id=%s cambiando estado de solicitud_id=%s a %s",
+        current_user.id,
+        id,
+        dto.estado,
+    )
+    return await mantencion_service.cambiar_estado_solicitud(
+        db,
+        solicitud_id=id,
+        dto=dto,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+    )
+
+
 @router.post("/{id}/terminar-avance", response_model=SolicitudDTO)
+
 async def terminar_avance(
     id: int,
     dto: TerminarAvanceDTO,
@@ -375,7 +408,7 @@ async def liberar_turno(
 async def agregar_falla(
     id: int,
     dto: AgregarFallaDTO,
-    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Permite a un mecánico o supervisor agregar una nueva avería detectada durante la atención."""

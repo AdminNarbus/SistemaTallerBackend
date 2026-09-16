@@ -12,6 +12,7 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     SolicitudCreateDTO,
     AutoasignarFallasDTO,
     AsignarFallasSupervisoraDTO,
+    CambiarEstadoSolicitudDTO,
     TerminarAvanceDTO,
     ReportarRepuestoDTO,
     PautaTallerItemDTO,
@@ -45,6 +46,7 @@ __all__ = [
     "SolicitudCreateDTO",
     "AutoasignarFallasDTO",
     "AsignarFallasSupervisoraDTO",
+    "CambiarEstadoSolicitudDTO",
     "TerminarAvanceDTO",
     "ReportarRepuestoDTO",
     "PautaTallerItemDTO",
@@ -63,3 +65,4 @@ __all__ = [
     "DetalleUpdateDTO",
     "ComentarioAddedDTO",
 ]
+

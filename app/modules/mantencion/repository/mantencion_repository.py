@@ -197,7 +197,13 @@ class MantencionRepository:
         return await db.get(Bus, bus_id)
 
     async def get_usuario_by_id(self, db: AsyncSession, usuario_id: int) -> Optional[Usuario]:
-        return await db.get(Usuario, usuario_id)
+        stmt = (
+            select(Usuario)
+            .options(joinedload(Usuario.rol_rel))
+            .where(Usuario.id == usuario_id)
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
 
     async def get_solicitud_by_id(self, db: AsyncSession, solicitud_id: int) -> Optional[TallerSolicitud]:
         """
@@ -557,7 +563,7 @@ class MantencionRepository:
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
                     FROM taller_solicitudes s
-                    WHERE s.estado IN ('REPORTADO', 'PENDIENTE', 'PENDIENTE_REASIGNACION')
+                    WHERE s.estado IN ('REPORTADO', 'PENDIENTE')
                     ORDER BY s.id DESC, s.fecha_creacion DESC
                     LIMIT :limit OFFSET :skip
                 ),
@@ -694,7 +700,7 @@ class MantencionRepository:
         # Fallback ORM para entornos SQLite (testing)
         stmt = (
             select(TallerSolicitud)
-            .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE", "PENDIENTE_REASIGNACION"]))
+            .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"]))
             .order_by(TallerSolicitud.id.desc(), TallerSolicitud.fecha_creacion.desc())
             .options(
                 joinedload(TallerSolicitud.bus),
@@ -1120,10 +1126,14 @@ class MantencionRepository:
         detalles_ids: Optional[List[int]] = None,
         mecanicos_ids: Optional[List[int]] = None,
     ) -> List[TallerAsignacionFalla]:
-        stmt = select(TallerAsignacionFalla).where(
-            and_(
-                TallerAsignacionFalla.solicitud_id == solicitud_id,
-                TallerAsignacionFalla.is_activo == True,
+        stmt = (
+            select(TallerAsignacionFalla)
+            .options(joinedload(TallerAsignacionFalla.mecanico))
+            .where(
+                and_(
+                    TallerAsignacionFalla.solicitud_id == solicitud_id,
+                    TallerAsignacionFalla.is_activo == True,
+                )
             )
         )
         if detalles_ids:
@@ -1260,6 +1270,32 @@ class MantencionRepository:
         if flush:
             await db.flush()
         return mecs
+
+    async def desactivar_asignaciones_por_mecanicos(
+        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: Set[int], fecha_desasignacion: datetime, flush: bool = False
+    ) -> List[TallerAsignacionFalla]:
+        """
+        Método atómico de persistencia: Desactiva asignaciones activas de fallas para mecánicos específicos.
+        """
+        if not mecanicos_ids:
+            return []
+        stmt = select(TallerAsignacionFalla).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.mecanico_id.in_(mecanicos_ids),
+                TallerAsignacionFalla.is_activo == True,
+            )
+        )
+        res = await db.execute(stmt)
+        asigs = list(res.scalars().all())
+        for a in asigs:
+            a.is_activo = False
+            a.fecha_desasignacion = fecha_desasignacion
+            if a.fecha_asignacion:
+                a.duracion_minutos = _calcular_duracion_minutos(a.fecha_asignacion, fecha_desasignacion)
+        if flush:
+            await db.flush()
+        return asigs
 
     async def desactivar_todas_asignaciones_activas(
         self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime, flush: bool = False

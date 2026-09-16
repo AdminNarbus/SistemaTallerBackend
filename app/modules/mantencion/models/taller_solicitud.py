@@ -40,7 +40,7 @@ class TallerSolicitud(Base):
 
     estado: Mapped[str] = mapped_column(
         String(50), default="REPORTADO", nullable=False, index=True
-    )  # REPORTADO, EN_REPARACION, PENDIENTE_REASIGNACION, FINALIZADO
+    )  # REPORTADO, PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO
 
     descripcion_general: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     foto_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

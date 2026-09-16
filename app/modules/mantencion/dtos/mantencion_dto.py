@@ -1,6 +1,9 @@
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+from typing import Any, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.modules.mantencion.constants import EstadoSolicitud
+
 
 
 # --- Categoria Falla DTOs ---
@@ -149,6 +152,10 @@ class SolicitudCreateDTO(BaseModel):
     foto_url: Optional[str] = None
     fotos_urls: Optional[List[str]] = None
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
+    ingreso_inmediato_taller: Optional[bool] = Field(
+        None,
+        description="Indica si el bus ingresa inmediatamente al taller físico (bus.en_taller = True). Por defecto True si lo crea un supervisor o admin.",
+    )
 
     @model_validator(mode="after")
     def check_bus_identifier(self):
@@ -170,7 +177,31 @@ class AsignarFallasSupervisoraDTO(BaseModel):
     comentario: Optional[str] = None
 
 
+class CambiarEstadoSolicitudDTO(BaseModel):
+    estado: EstadoSolicitud = Field(
+        ...,
+        description="Nuevo estado canónico de la solicitud (REPORTADO, PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO)",
+    )
+    comentario: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description="Justificación u observación opcional del cambio de estado por la supervisora",
+    )
+    liberar_bus_taller: Optional[bool] = Field(
+        None,
+        description="Opcional: Si se pasa a LIBERADO o FINALIZADO, indica si se libera el bus de taller (en_taller = False). Por defecto True.",
+    )
+
+    @field_validator("estado", mode="before")
+    @classmethod
+    def normalizar_estado(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.upper().strip()
+        return v
+
+
 class TerminarAvanceDTO(BaseModel):
+
     detalles_ids: Optional[List[int]] = None
     comentario: Optional[str] = None
 

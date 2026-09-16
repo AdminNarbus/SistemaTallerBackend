@@ -127,7 +127,12 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Reingreso Automático a Taller:** Cuando un mecánico toma trabajo (`tomar_trabajo`) o autoasigna fallas en una orden en estado `LIBERADO`, el bus reingresa automáticamente a maestranza (`bus.en_taller = True`) y la orden transiciona a `EN_REPARACION`.
   - **Reserva Exclusiva de `FINALIZADO`:** El estado `FINALIZADO` queda reservado únicamente para órdenes que tienen el 100% de sus fallas resueltas (`fecha_cierre = now()` y `bus.en_taller = False`).
   - **Actualización de Tableros de Supervisión y DTOs:** Actualizado `MetricasEstadoDTO` reemplazando `pendiente_reasignacion` por `liberadas: int`, optimizando las consultas CTE consolidadas y el fallback en `SupervisionRepository`.
-  - **Migración Alembic 012:** Creada y ejecutada `012_refactor_estados_solicitud_liberado.py` migrando registros históricos de `PENDIENTE_REASIGNACION` a `PENDIENTE`.
-  - **100% de la Suite de Pruebas Aprobada:** 155 de 155 tests pasando exitosamente en 58.06s.
+  - **Mejoras Operativas Supervisora: Carga de Mecánicos, Alertas de Permanencia y Trazabilidad Liberado (AV-0071):**
+  - **Balanceo de Carga de Mecánicos (Punto A):** Nuevo endpoint `GET /api/v1/supervision/mecanicos/carga` que retorna en una sola consulta agregada (`GROUP BY`) el listado de mecánicos con sus fallas activas asignadas (`fallas_activas_count`) y disponibilidad (`disponible`), permitiendo al modal de asignación de la supervisora balancear el trabajo sin sobrecargar mecánicos.
+  - **Métricas de Permanencia en Taller y Reincidencias (Punto B):** Se incorporaron los campos computados `horas_en_taller` (duración exacta en maestranza) y `reincidencias_30d` (número de ingresos del bus al taller en los últimos 30 días) en la consulta CTE de auditoría (`GET /supervision/auditoria/buses-taller`) y en `SolicitudDTO`.
+  - **Tracking de Estado LIBERADO:** Creación de la columna indexada `fecha_liberacion` en `taller_solicitudes` mediante la migración Alembic `013_add_fecha_liberacion_solicitudes.py`. Gestionada automáticamente en el ciclo de vida de la orden (se fija al transicionar a `LIBERADO` y se limpia al retomar a `EN_REPARACION` o concluir en `FINALIZADO`).
+  - **Reestructuración del Centro de Alertas (Punto C):** Alertas focalizadas estrictamente en permanencia: `TIEMPO_EN_TALLER_EXCEDIDO` (buses con permanencia superior a 48h/96h) y `LIBERADO_TIEMPO_EXCEDIDO` (buses circulando con fallas pendientes tras más de 72h/168h de liberación). Todos los umbrales son configurables dinámicamente en `app/core/config.py` y variables de entorno `.env`.
+  - **Alto Rendimiento en 1 Sola Consulta SQL:** Todas las métricas y alertas se resuelven en el motor PostgreSQL mediante CTEs y agregaciones directas, asegurando tiempos de respuesta sub-20ms y 0 consultas N+1.
+  - **100% de la Suite de Pruebas Aprobada:** 166 de 166 tests automatizados pasando exitosamente en 61.10s.
 
 

@@ -1,11 +1,11 @@
 # Catálogo Exhaustivo de Endpoints, Payloads y Respuestas: Backend Taller Narbus
 
 > **Documento Oficial de Especificación de Interfaz REST API**  
-> **Versión:** 2.2.0  
-> **Fecha de Actualización:** 2026-09-15  
+> **Versión:** 2.3.0  
+> **Fecha de Actualización:** 2026-09-16  
 > **Proyecto:** Backend Taller Narbus (`FastAPI + SQLAlchemy Async + PostgreSQL`)  
 > **Base URL:** `http://localhost:8000/api/v1` (o `/api/v1` en producción)  
-> **Total de Endpoints:** 48 endpoints activos
+> **Total de Endpoints:** 49 endpoints activos
 
 ---
 
@@ -1055,3 +1055,37 @@ Códigos de error estándar:
   - Si se intenta transicionar al mismo estado en que ya se encuentra la orden, retorna `422 BusinessRuleException`.
   - Al transicionar a `"FINALIZADO"`, se setea `fecha_cierre = now()`, `mecanico_cierre_id = supervisor_id` y se desactivan automáticamente los mecánicos y asignaciones activas calculando sus duraciones.
   - Al transicionar desde `"FINALIZADO"` a un estado activo, se limpia la `fecha_cierre = null` y se vuelve a marcar el bus con `en_taller = true`.
+
+---
+
+### 7.6 `GET /api/v1/supervision/mecanicos/carga`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Permite a la supervisora consultar la carga laboral activa de cada mecánico en una sola consulta consolidada (`GROUP BY`). Diseñado específicamente para alimentar el modal de asignación de fallas (`ModalAsignarFallas`) y balancear las tareas sin sobrecargar al personal técnico.
+- **Parámetros Query:** Ninguno.
+- **Payload:** Ninguno.
+- **Respuesta (`List[MecanicoCargaDTO]` - 200 OK):**
+```json
+[
+  {
+    "id": 2,
+    "nombre_completo": "Juan Mecanico Perez",
+    "username": "mecanico1@narbus.cl",
+    "fallas_activas_count": 3,
+    "disponible": true
+  },
+  {
+    "id": 3,
+    "nombre_completo": "Pedro Mecanico Soto",
+    "username": "mecanico2@narbus.cl",
+    "fallas_activas_count": 0,
+    "disponible": true
+  }
+]
+```
+- **Campos de Respuesta:**
+  - `id` *(integer)*: ID de usuario del mecánico.
+  - `nombre_completo` *(string)*: Nombre y apellidos para visualización.
+  - `username` *(string)*: Correo o identificador de acceso.
+  - `fallas_activas_count` *(integer)*: Conteo de averías asignadas activamente en solicitudes abiertas (no finalizadas).
+  - `disponible` *(boolean)*: Estado activo del usuario en el sistema.
+

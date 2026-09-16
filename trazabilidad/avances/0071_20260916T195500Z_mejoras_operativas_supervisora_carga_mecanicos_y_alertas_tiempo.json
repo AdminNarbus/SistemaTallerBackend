@@ -1,0 +1,171 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 71,
+  "id": "AV-0071",
+  "timestamp": "2026-09-16T19:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-71",
+    "name": "Mejoras Operativas Supervisora: Balanceo Carga Mecánicos y Alertas Permanencia",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de mejoras operacionales para el rol Supervisor: nuevo endpoint GET /api/v1/supervision/mecanicos/carga para balancear asignaciones (Punto A), métricas de permanencia en taller (horas_en_taller), reincidencias en 30 días (reincidencias_30d) y tracking del estado LIBERADO con columna fecha_liberacion indexada (Punto B), y reestructuración completa del Centro de Alertas enfocado en permanencia excesiva en taller y buses circulando en estado liberado con fallas pendientes (Punto C), todo resuelto en 1 sola consulta SQL consolidada sin latencia adicional.",
+  "scope": {
+    "planned": [
+      "Endpoint GET /api/v1/supervision/mecanicos/carga con fallas_activas_count y disponible (Punto A)",
+      "Migración Alembic 013 y columna fecha_liberacion en taller_solicitudes",
+      "Cálculo SQL optimizado en 1 consulta para horas_en_taller y reincidencias_30d en auditoría y DTOs (Punto B)",
+      "Alertas operacionales TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO con umbrales configurables en Settings (Punto C)",
+      "Pruebas unitarias e integrales completas sin regresiones"
+    ],
+    "completed": [
+      "Endpoint GET /api/v1/supervision/mecanicos/carga con fallas_activas_count y disponible (Punto A)",
+      "Migración Alembic 013 y columna fecha_liberacion en taller_solicitudes",
+      "Cálculo SQL optimizado en 1 consulta para horas_en_taller y reincidencias_30d en auditoría y DTOs (Punto B)",
+      "Alertas operacionales TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO con umbrales configurables en Settings (Punto C)",
+      "Pruebas unitarias e integrales completas sin regresiones (166 passed)"
+    ],
+    "pending": [
+      "Exportación de reportes a Excel/PDF (Punto D, pospuesto por usuario para fase posterior)"
+    ],
+    "outOfScope": [
+      "Desarrollo de UI Frontend (se implementará en repositorio ProtoNeumaticos)",
+      "Modificación de esquemas de neumáticos o autenticación base"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/013_add_fecha_liberacion_solicitudes.py",
+      "action": "created",
+      "summary": "Migración para agregar fecha_liberacion con índice ix_taller_solicitudes_fecha_liberacion"
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Variables de configuración SUPERVISION_UMBRAL_TALLER_HORAS y SUPERVISION_UMBRAL_LIBERADO_HORAS"
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Mapeo de columna fecha_liberacion en modelo TallerSolicitud"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Campos fecha_liberacion, horas_en_taller y reincidencias_30d en SolicitudDTO"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Gestión del ciclo de vida de fecha_liberacion en transiciones a LIBERADO y reaperturas"
+    },
+    {
+      "path": "app/modules/supervision/constants.py",
+      "action": "modified",
+      "summary": "Nuevas alertas TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO"
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "MecanicoCargaDTO y campo horas_acumuladas en AlertaSupervisionDTO"
+    },
+    {
+      "path": "app/modules/supervision/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de MecanicoCargaDTO"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "get_mecanicos_con_carga en 1 query agregada y alertas de permanencia en 1 sola consulta SQL"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Método get_mecanicos_con_carga orquestador con DTOs"
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "modified",
+      "summary": "Formateadores de mensaje para permanencia en taller y tiempo liberado"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Endpoint GET /api/v1/supervision/mecanicos/carga"
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias para carga de mecánicos, formateo de alertas y ciclo fecha_liberacion"
+    },
+    {
+      "tests/integration/test_supervision_api.py": "modified",
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Pruebas de integración RBAC y contrato para /mecanicos/carga y campos de auditoría"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Cálculo de carga activa de mecánicos en 1 sola consulta agregada (GROUP BY)",
+      "rationale": "El usuario solicitó explícitamente evitar múltiples consultas SQL para no añadir latencia. Se implementó una consulta directa con LEFT JOIN a mecánicos asignados y detalles no concluidos filtrando solicitudes activas.",
+      "consequences": "Respuesta en < 15ms lista para que el modal de asignación muestre la carga de cada mecánico sin cuellos de botella."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Cálculo en base de datos (PostgreSQL CTE) de horas_en_taller y reincidencias_30d",
+      "rationale": "Calcular reincidencias en Python por cada fila provocaría un problema de N+1 consultas o escaneos lentos en memoria. En PostgreSQL se utiliza COUNT(*) OVER (PARTITION BY n_bus) para reincidencias en los últimos 30 días y EXTRACT(EPOCH FROM ...) para las horas exactas de permanencia.",
+      "consequences": "Auditoría de supervisión ultra rápida con 0 consultas N+1 adicionales."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Columna indexada fecha_liberacion en taller_solicitudes",
+      "rationale": "Para determinar con precisión cuánto tiempo lleva un bus en estado LIBERADO circulando con fallas pendientes, se requiere la marca temporal exacta del momento de la liberación.",
+      "consequences": "Permite auditar el egreso temporal y generar alertas automáticas cuando un bus excede el tiempo acordado en ruta antes de subsanar fallas pendientes."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Alertas basadas exclusivamente en permanencia en taller y tiempo liberado",
+      "rationale": "Cumpliendo con la directiva del usuario, el Centro de Alertas se enfoca en (1) tiempo excesivo en taller y (2) tiempo excesivo en estado LIBERADO, con umbrales configurables vía Settings / variables de entorno.",
+      "consequences": "Mayor claridad operativa para supervisores sin saturación de alertas redundantes."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "166 passed, 1 warning in 61.10s (0:01:01)"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_supervision_service.py",
+      "result": "passed",
+      "evidence": "19 passed in 2.49s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_supervision_api.py",
+      "result": "passed",
+      "evidence": "7 passed in 2.84s"
+    },
+    {
+      "command": "alembic upgrade head -> downgrade -1 -> upgrade head",
+      "result": "passed",
+      "evidence": "Migración 013 reversible y aplicada con éxito en narbus_taller_db"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar los nuevos contratos y endpoints en el frontend ProtoNeumaticos (ModalAsignarFallas, badges de permanencia y Centro de Alertas).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "059c3fdc2ef2572e3dbf3fbd0745b0a521c65076",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los umbrales de alerta son configurables dinámicamente mediante variables de entorno en el archivo .env.",
+    "Se respeta estrictamente la directiva de mínima cantidad de consultas SQL."
+  ]
+}

@@ -28,6 +28,8 @@ from app.modules.supervision.utils import (
     formatear_mensaje_alerta_repuesto,
     formatear_mensaje_alerta_pauta,
     formatear_mensaje_alerta_bus_sin_mecanicos,
+    formatear_mensaje_tiempo_taller_excedido,
+    formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
     formatear_comentario_cambio_estado,
 )
@@ -479,5 +481,88 @@ async def test_cambiar_estado_solicitud_flujo_completo(db_session, seed_test_dat
     )
     assert res_reabierta.estado == "EN_REPARACION"
     assert res_reabierta.fecha_cierre is None
+    assert bus.en_taller is True
+
+
+@pytest.mark.asyncio
+async def test_get_mecanicos_con_carga_unit(db_session, seed_test_data):
+    """Verifica la consulta de carga de mecánicos activos y disponibilidad."""
+    mecanicos_carga = await supervision_service.get_mecanicos_con_carga(db_session)
+    assert isinstance(mecanicos_carga, list)
+    assert len(mecanicos_carga) >= 1
+    m1 = mecanicos_carga[0]
+    assert hasattr(m1, "id")
+    assert hasattr(m1, "nombre_completo")
+    assert hasattr(m1, "username")
+    assert hasattr(m1, "fallas_activas_count")
+    assert hasattr(m1, "disponible")
+    assert isinstance(m1.disponible, bool)
+
+
+@pytest.mark.asyncio
+async def test_alertas_formateo_tiempo_mensajes():
+    """Verifica los formateadores de mensajes para alertas operacionales de permanencia."""
+    msg_taller_horas = formatear_mensaje_tiempo_taller_excedido("101", 36.0, "EN_REPARACION")
+    assert "36 horas en taller (EN_REPARACION)" in msg_taller_horas
+
+    msg_taller_dias = formatear_mensaje_tiempo_taller_excedido("102", 72.0, "PENDIENTE")
+    assert "3.0 días en taller (PENDIENTE)" in msg_taller_dias
+
+    msg_liberado_dias = formatear_mensaje_liberado_tiempo_excedido("103", 96.0)
+    assert "4.0 días circulando en estado LIBERADO con fallas pendientes" in msg_liberado_dias
+
+
+@pytest.mark.asyncio
+async def test_ciclo_fecha_liberacion_en_cambio_estado(db_session, seed_test_data):
+    """Verifica que al transicionar a LIBERADO se asigne fecha_liberacion y se limpie al volver a EN_REPARACION."""
+    conductor = seed_test_data["conductor"]
+    supervisor = seed_test_data["supervisor"]
+
+    bus = Bus(id=82, n_bus="882", patente="SUP882", marca="Scania", is_active=True, en_taller=True)
+    db_session.add(bus)
+    await db_session.flush()
+
+    sol = TallerSolicitud(
+        id=782,
+        n_bus="882",
+        bus_id=82,
+        usuario_creador_id=conductor.id,
+        estado="EN_REPARACION",
+        descripcion_general="Prueba ciclo fecha_liberacion",
+    )
+    db_session.add(sol)
+    await db_session.commit()
+
+    # 1. Pasar a LIBERADO
+    dto_lib = CambiarEstadoSolicitudDTO(
+        estado="LIBERADO",
+        comentario="Egreso temporal con averías menores",
+        liberar_bus_taller=True,
+    )
+    res_lib = await supervision_service.cambiar_estado_solicitud(
+        db_session,
+        solicitud_id=782,
+        dto=dto_lib,
+        supervisor_id=supervisor.id,
+        supervisor_nombre=supervisor.nombre_completo,
+    )
+    assert res_lib.estado == "LIBERADO"
+    assert res_lib.fecha_liberacion is not None
+    assert bus.en_taller is False
+
+    # 2. Retomar a EN_REPARACION
+    dto_retomar = CambiarEstadoSolicitudDTO(
+        estado="EN_REPARACION",
+        comentario="Reingreso a maestranza para concluir reparación",
+    )
+    res_retomar = await supervision_service.cambiar_estado_solicitud(
+        db_session,
+        solicitud_id=782,
+        dto=dto_retomar,
+        supervisor_id=supervisor.id,
+        supervisor_nombre=supervisor.nombre_completo,
+    )
+    assert res_retomar.estado == "EN_REPARACION"
+    assert res_retomar.fecha_liberacion is None
     assert bus.en_taller is True
 

@@ -172,3 +172,44 @@ async def test_supervision_cambiar_estado_solicitud_flujo(
     assert data_reopen["estado"] == "EN_REPARACION"
     assert data_reopen["fecha_cierre"] is None
 
+
+@pytest.mark.asyncio
+async def test_supervision_mecanicos_carga_access_control(client, auth_headers_conductor, auth_headers_supervisor, seed_test_data):
+    """Prueba RBAC y contrato DTO de GET /api/v1/supervision/mecanicos/carga."""
+    # 1. Sin autenticación -> 401
+    res_unauth = await client.get("/api/v1/supervision/mecanicos/carga")
+    assert res_unauth.status_code == 401
+
+    # 2. Conductor (no supervisor/admin) -> 403
+    res_cond = await client.get("/api/v1/supervision/mecanicos/carga", headers=auth_headers_conductor)
+    assert res_cond.status_code == 403
+
+    # 3. Supervisor -> 200 OK con estructura MecanicoCargaDTO
+    res_sup = await client.get("/api/v1/supervision/mecanicos/carga", headers=auth_headers_supervisor)
+    assert res_sup.status_code == 200
+    mecanicos = res_sup.json()
+    assert isinstance(mecanicos, list)
+    assert len(mecanicos) >= 1
+    for m in mecanicos:
+        assert "id" in m
+        assert "nombre_completo" in m
+        assert "username" in m
+        assert "fallas_activas_count" in m
+        assert isinstance(m["fallas_activas_count"], int)
+        assert "disponible" in m
+        assert isinstance(m["disponible"], bool)
+
+
+@pytest.mark.asyncio
+async def test_supervision_auditoria_campos_operacionales(client, auth_headers_supervisor, seed_test_data):
+    """Prueba que el endpoint de auditoría incluya horas_en_taller, reincidencias_30d y fecha_liberacion."""
+    res = await client.get("/api/v1/supervision/auditoria/buses-taller", headers=auth_headers_supervisor)
+    assert res.status_code == 200
+    items = res.json()
+    assert isinstance(items, list)
+    for sol in items:
+        assert "horas_en_taller" in sol
+        assert "reincidencias_30d" in sol
+        assert "fecha_liberacion" in sol
+
+

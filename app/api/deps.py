@@ -92,3 +92,36 @@ async def require_conductor_or_admin(
             "Acceso denegado: Se requieren permisos de CONDUCTOR o ADMIN."
         )
     return current_user
+
+
+async def require_conductor_or_supervisor_or_admin(
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
+    """Exige que el usuario autenticado sea CONDUCTOR, SUPERVISOR o ADMIN; lanza PermissionException (403)."""
+    rol_upper = (current_user.rol or "").upper().strip()
+    if rol_upper not in [
+        RolUsuario.CONDUCTOR.value,
+        RolUsuario.SUPERVISOR.value,
+        RolUsuario.ADMIN.value,
+    ]:
+        raise PermissionException(
+            "Acceso denegado: Se requieren permisos de CONDUCTOR, SUPERVISOR o ADMIN."
+        )
+    return current_user
+
+
+async def require_mecanico_or_supervisor_or_admin(
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+) -> UsuarioResponseDTO:
+    """Exige que el usuario autenticado sea MECÁNICO, SUPERVISOR o ADMIN; lanza PermissionException (403)."""
+    rol_upper = (current_user.rol or "").upper().strip()
+    if rol_upper not in [
+        RolUsuario.MECANICO.value,
+        RolUsuario.SUPERVISOR.value,
+        RolUsuario.ADMIN.value,
+    ]:
+        raise PermissionException(
+            "Acceso denegado: Se requieren permisos de MECÁNICO, SUPERVISOR o ADMIN."
+        )
+    return current_user
+

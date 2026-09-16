@@ -1,6 +1,8 @@
 from app.modules.buses.dtos.bus_dto import (
     BusAutocompleteDTO,
     BusBaseDTO,
+    BusCreateDTO,
+    BusDarDeBajaDTO,
     BusResponseDTO,
     BusSimpleDTO,
     BusUpdateEnTallerDTO,
@@ -9,8 +11,11 @@ from app.modules.buses.dtos.bus_dto import (
 __all__ = [
     "BusAutocompleteDTO",
     "BusBaseDTO",
+    "BusCreateDTO",
+    "BusDarDeBajaDTO",
     "BusResponseDTO",
     "BusSimpleDTO",
     "BusUpdateEnTallerDTO",
 ]
+
 

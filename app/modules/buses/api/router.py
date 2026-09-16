@@ -7,10 +7,13 @@ from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.dtos import UsuarioResponseDTO
 from app.modules.buses.dtos import (
     BusAutocompleteDTO,
+    BusCreateDTO,
+    BusDarDeBajaDTO,
     BusResponseDTO,
     BusSimpleDTO,
     BusUpdateEnTallerDTO,
 )
+
 from app.modules.buses.services.bus_service import bus_service
 
 logger = logging.getLogger(__name__)
@@ -22,12 +25,12 @@ router = APIRouter()
     "/buscar",
     response_model=List[BusSimpleDTO],
     summary="Buscar sugerencias de buses por prefijo",
-    description="Devuelve una lista ordenada de BusSimpleDTO (id, n_bus, patente, en_taller) que inicien con el prefijo especificado en 'query'. Por defecto filtra vehículos fuera del rango 200 <= n_bus < 900.",
+    description="Devuelve una lista ordenada de BusSimpleDTO (id, n_bus, patente, en_taller) que inicien con el prefijo especificado en 'query'.",
 )
 async def buscar_buses(
     response: Response,
     query: Optional[str] = Query(None, description="Prefijo o término de búsqueda para n_bus"),
-    solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
+    solo_flota_taller: bool = Query(True, description="Filtrar vehículos con número de máquina asignado"),
     limit: Optional[int] = Query(None, ge=1, le=100, description="Tope de sugerencias a retornar"),
     db: AsyncSession = SessionDep,
 ) -> List[BusSimpleDTO]:
@@ -46,7 +49,8 @@ async def buscar_buses(
 async def listar_buses(
     response: Response,
     solo_activos: bool = Query(True, description="Filtrar solo buses activos"),
-    solo_flota_taller: bool = Query(True, description="Excluir vehículos fuera del rango 200 <= n_bus < 900"),
+    solo_flota_taller: bool = Query(True, description="Filtrar vehículos con número de máquina asignado"),
+
     skip: int = Query(0, ge=0, description="Cantidad de registros a omitir"),
     limit: Optional[int] = Query(None, ge=1, le=100, description="Límite de registros a retornar"),
     db: AsyncSession = SessionDep,
@@ -108,3 +112,91 @@ async def actualizar_en_taller(
     return await bus_service.actualizar_en_taller(
         db, bus_id=bus_id, en_taller=payload.en_taller, motivo=payload.motivo
     )
+
+
+@router.post(
+    "",
+    response_model=BusResponseDTO,
+    status_code=201,
+    summary="Agregar nuevo bus a la flota",
+    description="Permite a la supervisora o administradores registrar un nuevo bus con marcas de tiempo de creación.",
+)
+async def create_bus(
+    payload: BusCreateDTO = Body(...),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[BUSES] Registrando nuevo bus | patente='%s' | n_bus='%s' | supervisor_id=%s",
+        payload.patente,
+        payload.n_bus,
+        current_user.id,
+    )
+    return await bus_service.create_bus(db, dto=payload, usuario_id=current_user.id)
+
+
+@router.patch(
+    "/{bus_id}/dar-de-baja",
+    response_model=BusResponseDTO,
+    summary="Dar de baja a un bus",
+    description="Desactiva un bus de la flota (is_active=False) registrando motivo, fecha_baja y supervisor. Valida que no tenga OTs activas a menos que se fuerce.",
+)
+async def dar_de_baja_bus(
+    bus_id: int = Path(..., description="ID numérico del bus", ge=1),
+    payload: BusDarDeBajaDTO = Body(default_factory=BusDarDeBajaDTO),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[BUSES] Solicitud dar de baja bus | bus_id=%s | motivo='%s' | forzar=%s | supervisor_id=%s",
+        bus_id,
+        payload.motivo,
+        payload.forzar,
+        current_user.id,
+    )
+    return await bus_service.dar_de_baja_bus(
+        db, bus_id=bus_id, dto=payload, usuario_id=current_user.id
+    )
+
+
+@router.delete(
+    "/{bus_id}",
+    response_model=BusResponseDTO,
+    summary="Dar de baja a un bus (DELETE alias)",
+    description="Alias HTTP DELETE para dar de baja a un bus desactivándolo lógicamente.",
+)
+async def dar_de_baja_bus_delete(
+    bus_id: int = Path(..., description="ID numérico del bus", ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[BUSES] DELETE dar de baja bus | bus_id=%s | supervisor_id=%s",
+        bus_id,
+        current_user.id,
+    )
+    return await bus_service.dar_de_baja_bus(
+        db, bus_id=bus_id, dto=BusDarDeBajaDTO(), usuario_id=current_user.id
+    )
+
+
+@router.patch(
+    "/{bus_id}/reactivar",
+    response_model=BusResponseDTO,
+    summary="Reactivar un bus dado de baja",
+    description="Restaura un bus previamente dado de baja a estado activo (is_active=True) y limpia marcas de baja.",
+)
+async def reactivar_bus(
+    bus_id: int = Path(..., description="ID numérico del bus", ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> BusResponseDTO:
+    logger.info(
+        "[BUSES] Reactivando bus | bus_id=%s | supervisor_id=%s",
+        bus_id,
+        current_user.id,
+    )
+    return await bus_service.reactivar_bus(
+        db, bus_id=bus_id, usuario_id=current_user.id
+    )
+

@@ -1,9 +1,13 @@
-from typing import Optional
+from datetime import datetime
+from typing import Optional, TYPE_CHECKING
 from decimal import Decimal
-from sqlalchemy import Boolean, Integer, Numeric, SmallInteger, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.auth.models.usuario import Usuario
 
 
 class Bus(Base):
@@ -39,5 +43,22 @@ class Bus(Base):
     en_taller: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+
+    # Campos de trazabilidad y auditoría temporal
+    fecha_creacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    fecha_baja: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    motivo_baja: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    usuario_baja_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    usuario_baja: Mapped[Optional["Usuario"]] = relationship(
+        "Usuario", foreign_keys=[usuario_baja_id], lazy="selectin"
+    )
+
 
 

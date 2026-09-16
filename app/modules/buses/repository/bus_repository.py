@@ -84,5 +84,33 @@ class BusRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_by_patente(self, db: AsyncSession, patente: str) -> Optional[Bus]:
+        """Obtiene un bus buscando por patente normalizada en mayúsculas."""
+        from sqlalchemy import func
+
+        clean = patente.strip().upper()
+        stmt = select(Bus).where(func.upper(Bus.patente) == clean)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    def add_bus(self, db: AsyncSession, bus: Bus) -> None:
+        """Agrega una nueva entidad Bus a la sesión para persistencia atómica."""
+        db.add(bus)
+
+    async def count_solicitudes_activas_por_bus(
+        self, db: AsyncSession, bus_id: int
+    ) -> int:
+        """Cuenta la cantidad de órdenes de trabajo abiertas en taller para el bus dado."""
+        from sqlalchemy import func
+        from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+
+        stmt = select(func.count(TallerSolicitud.id)).where(
+            TallerSolicitud.bus_id == bus_id,
+            TallerSolicitud.estado != "FINALIZADO",
+        )
+        res = await db.execute(stmt)
+        return int(res.scalar() or 0)
+
 
 bus_repository = BusRepository()
+

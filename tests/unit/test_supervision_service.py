@@ -32,6 +32,7 @@ from app.modules.supervision.utils import (
     formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
     formatear_comentario_cambio_estado,
+    calcular_severidad_tiempo_permanencia,
 )
 
 
@@ -565,4 +566,38 @@ async def test_ciclo_fecha_liberacion_en_cambio_estado(db_session, seed_test_dat
     assert res_retomar.estado == "EN_REPARACION"
     assert res_retomar.fecha_liberacion is None
     assert bus.en_taller is True
+
+
+def test_alertas_escalonamiento_4_niveles_severidad():
+    """
+    Verifica el cálculo y escalonamiento de severidad de permanencia en 4 niveles canónicos:
+    - BAJA: 2 a 4 días (48h a 119h)
+    - MEDIA: 5 a 8 días (120h a 215h)
+    - ALTA: 9 a 12 días (216h a 311h)
+    - CRITICA: 13+ días (>= 312h)
+    """
+    # 1. Arrange & Act - Taller
+    sev_taller_baja = calcular_severidad_tiempo_permanencia(horas=72.0, es_liberado=False)     # 3 días
+    sev_taller_media = calcular_severidad_tiempo_permanencia(horas=144.0, es_liberado=False)   # 6 días
+    sev_taller_alta = calcular_severidad_tiempo_permanencia(horas=240.0, es_liberado=False)    # 10 días
+    sev_taller_critica = calcular_severidad_tiempo_permanencia(horas=336.0, es_liberado=False) # 14 días
+
+    # Assert - Taller
+    assert sev_taller_baja == SeveridadAlerta.BAJA
+    assert sev_taller_media == SeveridadAlerta.MEDIA
+    assert sev_taller_alta == SeveridadAlerta.ALTA
+    assert sev_taller_critica == SeveridadAlerta.CRITICA
+
+    # 2. Arrange & Act - Liberado
+    sev_lib_baja = calcular_severidad_tiempo_permanencia(horas=48.0, es_liberado=True)      # 2 días
+    sev_lib_media = calcular_severidad_tiempo_permanencia(horas=120.0, es_liberado=True)    # 5 días
+    sev_lib_alta = calcular_severidad_tiempo_permanencia(horas=216.0, es_liberado=True)     # 9 días
+    sev_lib_critica = calcular_severidad_tiempo_permanencia(horas=360.0, es_liberado=True)  # 15 días
+
+    # Assert - Liberado
+    assert sev_lib_baja == SeveridadAlerta.BAJA
+    assert sev_lib_media == SeveridadAlerta.MEDIA
+    assert sev_lib_alta == SeveridadAlerta.ALTA
+    assert sev_lib_critica == SeveridadAlerta.CRITICA
+
 

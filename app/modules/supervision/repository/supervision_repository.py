@@ -158,8 +158,10 @@ class SupervisionRepository:
             1,
         )
         sev_taller_expr = case(
+            (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_CRITICA, literal("CRITICA")),
             (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_ALTA, literal("ALTA")),
-            else_=literal("MEDIA"),
+            (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA, literal("MEDIA")),
+            else_=literal("BAJA"),
         )
         q_tiempo_taller = (
             select(
@@ -176,7 +178,7 @@ class SupervisionRepository:
             .where(
                 TallerSolicitud.estado.notin_(["FINALIZADO", "LIBERADO"]),
                 or_(Bus.en_taller == True, TallerSolicitud.estado.in_(["EN_REPARACION", "PENDIENTE"])),
-                horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA,
+                horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_BAJA,
             )
         )
 
@@ -187,8 +189,10 @@ class SupervisionRepository:
             1,
         )
         sev_liberado_expr = case(
+            (horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_CRITICA, literal("CRITICA")),
             (horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA, literal("ALTA")),
-            else_=literal("MEDIA"),
+            (horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA, literal("MEDIA")),
+            else_=literal("BAJA"),
         )
         q_tiempo_liberado = (
             select(
@@ -203,7 +207,7 @@ class SupervisionRepository:
             .select_from(TallerSolicitud)
             .where(
                 TallerSolicitud.estado == "LIBERADO",
-                horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA,
+                horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_BAJA,
             )
         )
 
@@ -399,8 +403,10 @@ class SupervisionRepository:
                     SELECT 
                         'TIEMPO_EN_TALLER_EXCEDIDO' as tipo,
                         CASE 
+                            WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_critica THEN 'CRITICA'
                             WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_alta THEN 'ALTA'
-                            ELSE 'MEDIA'
+                            WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_media THEN 'MEDIA'
+                            ELSE 'BAJA'
                         END as severidad,
                         s.id as solicitud_id,
                         COALESCE(s.n_bus, 'S/N') as n_bus,
@@ -413,15 +419,17 @@ class SupervisionRepository:
                     LEFT JOIN buses b ON b.id = s.bus_id
                     WHERE s.estado NOT IN ('FINALIZADO', 'LIBERADO')
                       AND (b.en_taller = true OR s.estado IN ('EN_REPARACION', 'PENDIENTE'))
-                      AND EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_media
+                      AND EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_baja
 
                     UNION ALL
 
                     SELECT 
                         'LIBERADO_TIEMPO_EXCEDIDO' as tipo,
                         CASE 
+                            WHEN EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_critica THEN 'CRITICA'
                             WHEN EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_alta THEN 'ALTA'
-                            ELSE 'MEDIA'
+                            WHEN EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_media THEN 'MEDIA'
+                            ELSE 'BAJA'
                         END as severidad,
                         s.id as solicitud_id,
                         COALESCE(s.n_bus, 'S/N') as n_bus,
@@ -432,7 +440,7 @@ class SupervisionRepository:
                         ROUND((EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600)::numeric, 1) as horas_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.estado = 'LIBERADO'
-                      AND EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_media
+                      AND EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_baja
 
                     UNION ALL
 
@@ -524,10 +532,14 @@ class SupervisionRepository:
                 CROSS JOIN alertas_agg al;
             """)
             params_resumen = {
+                "umbral_taller_baja": settings.SUPERVISION_UMBRAL_TALLER_HORAS_BAJA,
                 "umbral_taller_media": settings.SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA,
                 "umbral_taller_alta": settings.SUPERVISION_UMBRAL_TALLER_HORAS_ALTA,
+                "umbral_taller_critica": settings.SUPERVISION_UMBRAL_TALLER_HORAS_CRITICA,
+                "umbral_liberado_baja": settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_BAJA,
                 "umbral_liberado_media": settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA,
                 "umbral_liberado_alta": settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA,
+                "umbral_liberado_critica": settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_CRITICA,
             }
             res = await db.execute(sql, params_resumen)
             row = res.mappings().first()

@@ -70,6 +70,41 @@ def formatear_mensaje_liberado_tiempo_excedido(n_bus: str, horas: float) -> str:
     return f"Bus {bus_label} lleva {round(horas)} horas circulando en estado LIBERADO con fallas pendientes"
 
 
+def calcular_severidad_tiempo_permanencia(horas: float, es_liberado: bool = False) -> SeveridadAlerta:
+    """
+    Calcula el nivel canónico de severidad (BAJA, MEDIA, ALTA, CRITICA) en base a las horas transcurridas.
+    - BAJA: 2 a 4 días (48h - 119h)
+    - MEDIA: 5 a 8 días (120h - 215h)
+    - ALTA: 9 a 12 días (216h - 311h)
+    - CRITICA: 13+ días (312h+)
+    """
+    from app.core.config import settings
+
+    umbral_critica = (
+        settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_CRITICA
+        if es_liberado
+        else settings.SUPERVISION_UMBRAL_TALLER_HORAS_CRITICA
+    )
+    umbral_alta = (
+        settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA
+        if es_liberado
+        else settings.SUPERVISION_UMBRAL_TALLER_HORAS_ALTA
+    )
+    umbral_media = (
+        settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA
+        if es_liberado
+        else settings.SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA
+    )
+
+    if horas >= umbral_critica:
+        return SeveridadAlerta.CRITICA
+    if horas >= umbral_alta:
+        return SeveridadAlerta.ALTA
+    if horas >= umbral_media:
+        return SeveridadAlerta.MEDIA
+    return SeveridadAlerta.BAJA
+
+
 def construir_alerta_supervision(
     tipo: TipoAlertaSupervision | str,
     severidad: SeveridadAlerta | str,

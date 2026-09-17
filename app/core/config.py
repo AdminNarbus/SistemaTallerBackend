@@ -70,10 +70,15 @@ class Settings(BaseSettings):
     CORS_ORIGIN_REGEX: Optional[str] = None
 
     # Supervisión: Umbrales de permanencia y alertas operacionales (horas configurables)
-    SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA: int = 48   # 2 días en taller
-    SUPERVISION_UMBRAL_TALLER_HORAS_ALTA: int = 96    # 4 días en taller
-    SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA: int = 72  # 3 días liberado en ruta
-    SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA: int = 168  # 7 días liberado en ruta
+    # BAJA: 2-4 días | MEDIA: 5-8 días | ALTA: 9-12 días | CRITICA: 13+ días
+    SUPERVISION_UMBRAL_TALLER_HORAS_BAJA: int = 48     # 2 días en taller
+    SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA: int = 120   # 5 días en taller
+    SUPERVISION_UMBRAL_TALLER_HORAS_ALTA: int = 216    # 9 días en taller
+    SUPERVISION_UMBRAL_TALLER_HORAS_CRITICA: int = 312  # 13 días en taller
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_BAJA: int = 48    # 2 días liberado en ruta
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_MEDIA: int = 120  # 5 días liberado en ruta
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA: int = 216   # 9 días liberado en ruta
+    SUPERVISION_UMBRAL_LIBERADO_HORAS_CRITICA: int = 312 # 13 días liberado en ruta
 
     @field_validator("PROJECT_NAME", "VERSION", mode="before")
     @classmethod

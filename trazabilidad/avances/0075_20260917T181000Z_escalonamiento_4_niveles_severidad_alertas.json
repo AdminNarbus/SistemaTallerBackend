@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 75,
+  "id": "AV-0075",
+  "timestamp": "2026-09-17T18:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUP-ALERTAS-4TIER",
+    "name": "Escalonamiento de 4 Niveles de Severidad de Alertas Operacionales (Baja, Media, Alta, Crítica)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del modelo canónico de 4 niveles de severidad de alertas operacionales de permanencia (TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO): 1) Configuración de umbrales exactos en app/core/config.py: BAJA (2 a 4 días = 48h-119h), MEDIA (5 a 8 días = 120h-215h), ALTA (9 a 12 días = 216h-311h) y CRITICA (13+ días = >= 312h); 2) Actualización del repositorio SupervisionRepository con expresiones CASE expandidas a 4 ramas tanto para ORM (SQLite) como para SQL nativo consolidado de PostgreSQL con CTEs; 3) Ajuste de filtro WHERE a partir del umbral mínimo de 48h (BAJA); 4) Creación de función pura helper calcular_severidad_tiempo_permanencia en app/modules/supervision/utils.py siguiendo SRP y Clean Code; 5) Cobertura de pruebas unitarias con patrón AAA en tests/unit/test_supervision_service.py alcanzando 100% de aprobación en la suite completa (171/171 tests).",
+  "scope": {
+    "planned": [
+      "Configurar umbrales de severidad en config.py para BAJA (2-4 días), MEDIA (5-8 días), ALTA (9-12 días) y CRITICA (13+ días)",
+      "Actualizar expresiones CASE y filtros en SupervisionRepository para ORM y PostgreSQL CTE",
+      "Crear helper puro calcular_severidad_tiempo_permanencia en utils.py",
+      "Agregar pruebas unitarias específicas bajo patrón AAA y verificar suite completa"
+    ],
+    "completed": [
+      "Configurar umbrales de severidad en config.py para BAJA (2-4 días), MEDIA (5-8 días), ALTA (9-12 días) y CRITICA (13+ días)",
+      "Actualizar expresiones CASE y filtros en SupervisionRepository para ORM y PostgreSQL CTE",
+      "Crear helper puro calcular_severidad_tiempo_permanencia en utils.py",
+      "Agregar pruebas unitarias específicas bajo patrón AAA y verificar suite completa"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificación de componentes de interfaz frontend (manejado en repositorio desacoplado)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Definición de 8 constantes de configuración para umbrales de taller y liberado: SUPERVISION_UMBRAL_TALLER_HORAS_BAJA (48), MEDIA (120), ALTA (216), CRITICA (312), y equivalentes para LIBERADO."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Actualización de CASE WHEN y cláusulas WHERE en ORM y SQL nativo PostgreSQL para clasificar y retornar alertas con severidades BAJA, MEDIA, ALTA y CRITICA."
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "modified",
+      "summary": "Añadida función pura calcular_severidad_tiempo_permanencia para cálculo desacoplado y reutilizable de severidades según horas y tipo de permanencia."
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Añadida prueba unitaria test_alertas_escalonamiento_4_niveles_severidad validando los 4 niveles de severidad en taller y en ruta bajo patrón AAA."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Escalonamiento de 4 niveles de severidad con umbrales en horas",
+      "rationale": "El usuario solicitó que tiempo en taller y tiempo liberado categoricen en BAJA (2-4 días), MEDIA (5-8 días), ALTA (9-12 días) y CRITICA (13+ días). Se tradujeron estos rangos a horas exactas (48h, 120h, 216h, 312h) para preservar la precisión del motor analítico SQL.",
+      "consequences": "Las alertas operacionales ahora aprovechan los 4 valores canónicos del enum SeveridadAlerta, brindando granularidad completa al supervisor sin alterar contratos DTO existentes."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Helper puro calcular_severidad_tiempo_permanencia en utils",
+      "rationale": "Para evitar duplicación de lógica en validaciones o servicios y cumplir con SRP y Clean Code, se extrajo la determinación de nivel a una función pura.",
+      "consequences": "Facilita pruebas unitarias inmediatas sin acoplamiento a base de datos y provee un punto único de verdad en Python alineado con las consultas SQL."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_supervision_service.py",
+      "result": "passed",
+      "evidence": "20 passed in 2.53s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "171 passed, 1 warning in 64.14s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Sincronizar cambios en repositorio Git mediante commit atómico en develop.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "e667c2f",
+    "dirty": false
+  },
+  "notes": [
+    "Todas las alertas ahora contemplan los 4 niveles de severidad (BAJA, MEDIA, ALTA, CRITICA) definidos en el enum SeveridadAlerta."
+  ]
+}

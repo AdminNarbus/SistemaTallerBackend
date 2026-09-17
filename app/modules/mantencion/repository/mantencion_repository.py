@@ -17,6 +17,7 @@ from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolici
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.mantencion.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -553,7 +554,7 @@ class MantencionRepository:
         return res.scalar_one_or_none()
 
     async def list_pendientes(
-        self, db: AsyncSession, limit: Optional[int] = 50, skip: int = 0
+        self, db: AsyncSession, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
     ) -> List[dict] | List[TallerSolicitud]:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad consolidada con CTEs y agregación JSON
@@ -694,7 +695,7 @@ class MantencionRepository:
                 LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
                 ORDER BY fs.id DESC, fs.fecha_creacion DESC
             """)
-            res = await db.execute(sql, {"limit": limit or 50, "skip": skip or 0})
+            res = await db.execute(sql, {"limit": limit if limit is not None else DEFAULT_PAGE_LIMIT, "skip": skip or 0})
             return [dict(r) for r in res.mappings().all()]
 
         # Fallback ORM para entornos SQLite (testing)
@@ -721,8 +722,16 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def count_pendientes(self, db: AsyncSession) -> int:
+        """Retorna el conteo total de solicitudes en estado REPORTADO o PENDIENTE."""
+        stmt = select(func.count(TallerSolicitud.id)).where(
+            TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"])
+        )
+        res = await db.execute(stmt)
+        return res.scalar() or 0
+
     async def list_mis_trabajos(
-        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = 50, skip: int = 0
+        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
     ) -> List[dict] | List[TallerSolicitud]:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad para Mis Trabajos
@@ -863,7 +872,7 @@ class MantencionRepository:
                 LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
                 ORDER BY fs.fecha_creacion DESC
             """)
-            res = await db.execute(sql, {"mecanico_id": mecanico_id, "limit": limit or 50, "skip": skip or 0})
+            res = await db.execute(sql, {"mecanico_id": mecanico_id, "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT, "skip": skip or 0})
             return [dict(r) for r in res.mappings().all()]
 
         # Fallback ORM para entornos SQLite (testing)
@@ -911,6 +920,40 @@ class MantencionRepository:
             stmt = stmt.limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
+
+    async def count_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> int:
+        """Retorna el conteo total de solicitudes en estado EN_REPARACION asignadas al mecánico."""
+        if db.bind and db.bind.dialect.name == "postgresql":
+            sql = text("""
+                SELECT COUNT(*)::int
+                FROM taller_solicitudes s
+                WHERE s.estado = 'EN_REPARACION'
+                  AND (
+                      EXISTS (SELECT 1 FROM taller_solicitud_mecanicos sm WHERE sm.solicitud_id = s.id AND sm.mecanico_id = :mecanico_id AND sm.is_activo = true)
+                      OR
+                      EXISTS (SELECT 1 FROM taller_asignacion_fallas af WHERE af.solicitud_id = s.id AND af.mecanico_id = :mecanico_id AND af.is_activo = true)
+                  );
+            """)
+            res = await db.execute(sql, {"mecanico_id": mecanico_id})
+            return res.scalar() or 0
+
+        # Fallback ORM SQLite
+        sub_mec = select(1).where(
+            TallerSolicitudMecanico.solicitud_id == TallerSolicitud.id,
+            TallerSolicitudMecanico.mecanico_id == mecanico_id,
+            TallerSolicitudMecanico.is_activo == True,
+        )
+        sub_falla = select(1).where(
+            TallerAsignacionFalla.solicitud_id == TallerSolicitud.id,
+            TallerAsignacionFalla.mecanico_id == mecanico_id,
+            TallerAsignacionFalla.is_activo == True,
+        )
+        stmt = select(func.count(TallerSolicitud.id)).where(
+            TallerSolicitud.estado == "EN_REPARACION",
+            or_(sub_mec.exists(), sub_falla.exists()),
+        )
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
 
     async def list_auditoria(self, db: AsyncSession) -> List[TallerSolicitud]:

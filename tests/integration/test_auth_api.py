@@ -104,3 +104,44 @@ async def test_buscar_mecanicos_autocomplete(client, auth_headers_mecanico1, see
     res_alias = await client.get("/api/v1/auth/mecanicos?q=mecanico1", headers=auth_headers_mecanico1)
     assert res_alias.status_code == 200
     assert res_alias.json()[0]["username"] == "mecanico1@narbus.cl"
+    assert "X-Total-Count" in res_alias.headers
+
+
+@pytest.mark.asyncio
+async def test_listar_usuarios_paginacion_y_filtros(client, auth_headers_supervisor, seed_test_data):
+    """Prueba la paginación con default 20, cabecera X-Total-Count y filtros en GET /api/v1/auth/usuarios."""
+    res = await client.get("/api/v1/auth/usuarios", headers=auth_headers_supervisor)
+    assert res.status_code == 200
+    assert "X-Total-Count" in res.headers
+    total = int(res.headers["X-Total-Count"])
+    assert total >= 4
+    usuarios = res.json()
+    assert len(usuarios) <= 20
+
+    # Filtro por rol
+    res_rol = await client.get("/api/v1/auth/usuarios?rol=MECANICO", headers=auth_headers_supervisor)
+    assert res_rol.status_code == 200
+    assert "X-Total-Count" in res_rol.headers
+    for u in res_rol.json():
+        assert u["rol"] == "MECANICO"
+
+    # Filtro por término de búsqueda q
+    res_q = await client.get("/api/v1/auth/usuarios?q=supervisor", headers=auth_headers_supervisor)
+    assert res_q.status_code == 200
+    assert len(res_q.json()) >= 1
+    assert any("supervisor" in u["username"].lower() for u in res_q.json())
+
+
+@pytest.mark.asyncio
+async def test_supervision_usuarios_endpoint(client, auth_headers_supervisor, auth_headers_conductor):
+    """Prueba el nuevo endpoint GET /api/v1/supervision/usuarios para la vista del supervisor."""
+    # Conductor -> 403 Forbidden
+    res_forbidden = await client.get("/api/v1/supervision/usuarios", headers=auth_headers_conductor)
+    assert res_forbidden.status_code == 403
+
+    # Supervisor -> 200 OK con cabecera X-Total-Count y paginación
+    res_sup = await client.get("/api/v1/supervision/usuarios?skip=0&limit=20", headers=auth_headers_supervisor)
+    assert res_sup.status_code == 200
+    assert "X-Total-Count" in res_sup.headers
+    assert int(res_sup.headers["X-Total-Count"]) >= 1
+    assert len(res_sup.json()) <= 20

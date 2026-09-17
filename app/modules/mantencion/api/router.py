@@ -177,12 +177,14 @@ async def create_solicitud(
 async def list_pendientes(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
-    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar"),
+    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar (default: 20)"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE)."""
+    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE, default: 20 por página)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
+    total = await mantencion_service.count_pendientes(db)
+    response.headers["X-Total-Count"] = str(total)
     return await mantencion_service.list_pendientes(db, limit=limit, skip=skip)
 
 
@@ -190,12 +192,14 @@ async def list_pendientes(
 async def list_mis_trabajos(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
-    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar"),
+    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar (default: 20)"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta."""
+    """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta (default: 20 por página)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
+    total = await mantencion_service.count_mis_trabajos(db, mecanico_id=current_user.id)
+    response.headers["X-Total-Count"] = str(total)
     return await mantencion_service.list_mis_trabajos(db, mecanico_id=current_user.id, limit=limit, skip=skip)
 
 

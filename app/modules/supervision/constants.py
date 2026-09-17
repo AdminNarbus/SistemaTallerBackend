@@ -23,7 +23,7 @@ class SeveridadAlerta(StrEnum):
 
 
 DEFAULT_PAGE_SKIP: Final[int] = 0
-DEFAULT_PAGE_LIMIT: Final[int] = 50
+DEFAULT_PAGE_LIMIT: Final[int] = 20
 MAX_PAGE_LIMIT: Final[int] = 100
 
 BUS_SIN_NUMERO: Final[str] = "S/N"

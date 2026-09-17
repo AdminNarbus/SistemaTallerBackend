@@ -7,5 +7,5 @@ RANGO_MAX_BUS_OPERATIVO: Final[int] = 900
 
 # Parámetros canónicos de paginación para colecciones de buses
 DEFAULT_PAGE_SKIP: Final[int] = 0
-DEFAULT_PAGE_LIMIT: Final[int] = 100
+DEFAULT_PAGE_LIMIT: Final[int] = 20
 MAX_PAGE_LIMIT: Final[int] = 100

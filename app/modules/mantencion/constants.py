@@ -42,5 +42,5 @@ TOTAL_ITEMS_PAUTA_PREVENTIVA: Final[int] = 11
 
 # Parámetros estándar de paginación para consultas de listados de solicitudes
 DEFAULT_PAGE_SKIP: Final[int] = 0
-DEFAULT_PAGE_LIMIT: Final[int] = 50
+DEFAULT_PAGE_LIMIT: Final[int] = 20
 MAX_PAGE_LIMIT: Final[int] = 100

@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.buses.models.bus import Bus
@@ -43,6 +43,14 @@ class BusRepository:
 
         result = await db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_buses(self, db: AsyncSession, solo_activos: bool = True) -> int:
+        """Retorna el conteo total de buses registrados."""
+        stmt = select(func.count(Bus.id))
+        if solo_activos:
+            stmt = stmt.where(Bus.is_active == True)
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
     async def buscar_por_prefijo(
         self,

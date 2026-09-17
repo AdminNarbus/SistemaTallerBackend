@@ -951,5 +951,84 @@ class SupervisionRepository:
         logger.debug("[SUPERVISION_REPO] Solicitudes obtenidas: %s", len(solicitudes))
         return solicitudes
 
+    async def count_auditoria(
+        self,
+        db: AsyncSession,
+        n_bus: Optional[str] = None,
+        estado: Optional[str] = None,
+        mecanico_nombre: Optional[str] = None,
+    ) -> int:
+        """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
+        if db.bind and db.bind.dialect.name == "postgresql":
+            sql = text("""
+                SELECT COUNT(*)::int
+                FROM taller_solicitudes s
+                WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
+                  AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                  AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
+                      SELECT 1 FROM taller_solicitud_mecanicos sm
+                      JOIN usuarios um ON um.id = sm.mecanico_id
+                      WHERE sm.solicitud_id = s.id
+                        AND (um.nombre ILIKE CAST(:mec_pattern AS VARCHAR) OR um.apellido ILIKE CAST(:mec_pattern AS VARCHAR) OR um.username ILIKE CAST(:mec_pattern AS VARCHAR) OR CONCAT(um.nombre, ' ', um.apellido) ILIKE CAST(:mec_pattern AS VARCHAR))
+                  ) OR EXISTS (
+                      SELECT 1 FROM taller_solicitud_detalles sd
+                      JOIN usuarios ur ON ur.id = sd.mecanico_resolvio_id
+                      WHERE sd.solicitud_id = s.id
+                        AND (ur.nombre ILIKE CAST(:mec_pattern AS VARCHAR) OR ur.apellido ILIKE CAST(:mec_pattern AS VARCHAR) OR ur.username ILIKE CAST(:mec_pattern AS VARCHAR) OR CONCAT(ur.nombre, ' ', ur.apellido) ILIKE CAST(:mec_pattern AS VARCHAR))
+                  ));
+            """)
+            params = {
+                "n_bus": n_bus.strip() if n_bus and n_bus.strip() else None,
+                "n_bus_pattern": f"%{n_bus.strip()}%" if n_bus and n_bus.strip() else None,
+                "estado": estado.upper().strip() if estado and estado.strip() else None,
+                "mecanico_nombre": mecanico_nombre.strip() if mecanico_nombre and mecanico_nombre.strip() else None,
+                "mec_pattern": f"%{mecanico_nombre.strip()}%" if mecanico_nombre and mecanico_nombre.strip() else None,
+            }
+            res = await db.execute(sql, params)
+            return res.scalar() or 0
+
+        # Fallback ORM para SQLite
+        stmt = select(func.count(TallerSolicitud.id))
+        if n_bus and n_bus.strip():
+            stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))
+        if estado and estado.strip():
+            stmt = stmt.where(TallerSolicitud.estado == estado.upper().strip())
+        if mecanico_nombre and mecanico_nombre.strip():
+            pattern = f"%{mecanico_nombre.strip()}%"
+            u_mec = aliased(Usuario)
+            u_res = aliased(Usuario)
+            sub_mec = (
+                select(1)
+                .select_from(TallerSolicitudMecanico)
+                .join(u_mec, TallerSolicitudMecanico.mecanico_id == u_mec.id)
+                .where(
+                    TallerSolicitudMecanico.solicitud_id == TallerSolicitud.id,
+                    or_(
+                        u_mec.nombre.ilike(pattern),
+                        u_mec.apellido.ilike(pattern),
+                        u_mec.username.ilike(pattern),
+                        func.concat(u_mec.nombre, ' ', u_mec.apellido).ilike(pattern),
+                    ),
+                )
+            )
+            sub_res = (
+                select(1)
+                .select_from(TallerSolicitudDetalle)
+                .join(u_res, TallerSolicitudDetalle.mecanico_resolvio_id == u_res.id)
+                .where(
+                    TallerSolicitudDetalle.solicitud_id == TallerSolicitud.id,
+                    or_(
+                        u_res.nombre.ilike(pattern),
+                        u_res.apellido.ilike(pattern),
+                        u_res.username.ilike(pattern),
+                        func.concat(u_res.nombre, ' ', u_res.apellido).ilike(pattern),
+                    ),
+                )
+            )
+            stmt = stmt.where(or_(sub_mec.exists(), sub_res.exists()))
+
+        res = await db.execute(stmt)
+        return res.scalar() or 0
+
 
 supervision_repository = SupervisionRepository()

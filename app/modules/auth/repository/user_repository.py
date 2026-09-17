@@ -4,7 +4,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.constants import RolUsuario, DEFAULT_PAGE_LIMIT
+from app.modules.auth.constants import RolUsuario, DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
 
@@ -78,19 +78,62 @@ class UserRepository:
         users = await self.get_by_ids(db, user_ids)
         return {u.id: u for u in users}
 
+    def _aplicar_filtros_usuarios(
+        self,
+        stmt,
+        rol: Optional[str] = None,
+        q: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ):
+        """Aplica filtros comunes de rol, búsqueda por texto y estado activo a un query de Usuario."""
+        if rol and rol.strip():
+            stmt = stmt.join(Usuario.rol_rel).where(func.upper(Rol.nombre) == rol.upper().strip())
+        if is_active is not None:
+            stmt = stmt.where(Usuario.is_active == is_active)
+        if q and q.strip():
+            term = f"%{q.strip().lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(Usuario.nombre).ilike(term),
+                    func.lower(Usuario.apellido).ilike(term),
+                    func.lower(Usuario.username).ilike(term),
+                    func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(term),
+                )
+            )
+        return stmt
+
     async def get_all(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = DEFAULT_PAGE_SKIP,
+        limit: int = DEFAULT_PAGE_LIMIT,
+        rol: Optional[str] = None,
+        q: Optional[str] = None,
+        is_active: Optional[bool] = None,
     ) -> List[Usuario]:
-        """Lista todos los usuarios registrados con su rol en un solo JOIN."""
+        """Lista usuarios registrados con su rol aplicando paginación (default: 20) y filtros opcionales."""
         stmt = (
             select(Usuario)
             .options(joinedload(Usuario.rol_rel))
             .order_by(Usuario.id.asc())
-            .offset(skip)
-            .limit(limit)
         )
+        stmt = self._aplicar_filtros_usuarios(stmt, rol=rol, q=q, is_active=is_active)
+        stmt = stmt.offset(skip).limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
+
+    async def count_usuarios(
+        self,
+        db: AsyncSession,
+        rol: Optional[str] = None,
+        q: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> int:
+        """Retorna el conteo total de usuarios registrados bajo los filtros especificados."""
+        stmt = select(func.count(Usuario.id))
+        stmt = self._aplicar_filtros_usuarios(stmt, rol=rol, q=q, is_active=is_active)
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
     async def get_rol_by_nombre(
         self, db: AsyncSession, nombre_rol: str
@@ -216,13 +259,38 @@ class UserRepository:
         db: AsyncSession,
         q: Optional[str] = None,
         exclude_id: Optional[int] = None,
-        skip: int = 0,
+        skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[Usuario]:
-        """Busca usuarios activos con rol MECÁNICO con paginación y filtros opcionales."""
+        """Busca usuarios activos con rol MECÁNICO con paginación (default: 20) y filtros opcionales."""
         stmt = self._construir_stmt_mecanicos(q, exclude_id).offset(skip).limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
+
+    async def count_mecanicos(
+        self,
+        db: AsyncSession,
+        q: Optional[str] = None,
+        exclude_id: Optional[int] = None,
+    ) -> int:
+        """Retorna el conteo total de mecánicos activos bajo los filtros de búsqueda."""
+        stmt = (
+            select(func.count(Usuario.id))
+            .join(Rol, Usuario.rol_id == Rol.id)
+            .where(
+                and_(
+                    Usuario.is_active == True,
+                    Rol.nombre == RolUsuario.MECANICO.value,
+                )
+            )
+        )
+        filtro_q = self._construir_filtro_mecanico_q(q)
+        if filtro_q is not None:
+            stmt = stmt.where(filtro_q)
+        if exclude_id:
+            stmt = stmt.where(Usuario.id != exclude_id)
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
     def _construir_condiciones_mecanicos_nombres(self, nombres: List[str]):
         """Construye condiciones OR de búsqueda para listado de nombres o usernames."""

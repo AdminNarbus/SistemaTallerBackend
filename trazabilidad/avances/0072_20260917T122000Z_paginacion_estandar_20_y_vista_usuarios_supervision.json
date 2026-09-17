@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 72,
+  "id": "AV-0072",
+  "timestamp": "2026-09-17T12:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-72",
+    "name": "Estandarización de Paginación a 20 Elementos y Paginación en Vista de Usuarios para Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Estandarización de la paginación a 20 elementos por defecto en todos los módulos del backend (usuarios, órdenes de trabajo, mecánicos, buses y neumáticos). Incorporación de paginación canónica con filtros por rol, búsqueda de texto (q) y estado activo en la vista de usuarios (/auth/usuarios y /supervision/usuarios), junto con la exposición de la cabecera HTTP X-Total-Count para el conteo global de elementos en el frontend.",
+  "scope": {
+    "planned": [
+      "Estandarizar DEFAULT_PAGE_LIMIT a 20 en todos los módulos (auth, supervision, mantencion, buses, neumaticos)",
+      "Añadir paginación canónica y filtros (rol, q, is_active) en endpoint GET /api/v1/auth/usuarios",
+      "Crear endpoint específico GET /api/v1/supervision/usuarios con paginación de 20 por defecto y filtros",
+      "Exponer la cabecera HTTP X-Total-Count en CORSMiddleware y en todos los endpoints paginados",
+      "Añadir métodos count en repositorios y servicios para usuarios, órdenes de trabajo y buses",
+      "Validar suite completa de pruebas unitarias e integrales sin regresiones"
+    ],
+    "completed": [
+      "Estandarizar DEFAULT_PAGE_LIMIT a 20 en todos los módulos (auth, supervision, mantencion, buses, neumaticos)",
+      "Añadir paginación canónica y filtros (rol, q, is_active) en endpoint GET /api/v1/auth/usuarios",
+      "Crear endpoint específico GET /api/v1/supervision/usuarios con paginación de 20 por defecto y filtros",
+      "Exponer la cabecera HTTP X-Total-Count en CORSMiddleware y en todos los endpoints paginados",
+      "Añadir métodos count en repositorios y servicios para usuarios, órdenes de trabajo y buses",
+      "Validar suite completa de pruebas unitarias e integrales sin regresiones (168 passed)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Componentes visuales del frontend (repositorio ProtoNeumaticos)",
+      "Modificaciones de esquemas DDL de base de datos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/auth/constants.py",
+      "action": "modified",
+      "summary": "Actualización de DEFAULT_PAGE_LIMIT a 20 y definición de DEFAULT_PAGE_SKIP = 0"
+    },
+    {
+      "path": "app/modules/supervision/constants.py",
+      "action": "modified",
+      "summary": "Actualización de DEFAULT_PAGE_LIMIT a 20"
+    },
+    {
+      "path": "app/modules/mantencion/constants.py",
+      "action": "modified",
+      "summary": "Actualización de DEFAULT_PAGE_LIMIT a 20"
+    },
+    {
+      "path": "app/modules/buses/constants.py",
+      "action": "modified",
+      "summary": "Actualización de DEFAULT_PAGE_LIMIT a 20"
+    },
+    {
+      "path": "app/modules/neumaticos/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Actualización de limit por defecto a 20 en list_reportes"
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "Soporte de filtros (rol, q, is_active) y métodos count_usuarios y count_mecanicos"
+    },
+    {
+      "path": "app/modules/auth/services/auth_service.py",
+      "action": "modified",
+      "summary": "Métodos contar_usuarios y contar_mecanicos y propagación de filtros en listar_usuarios"
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "Inyección de Response con cabecera X-Total-Count y filtros en GET /usuarios y GET /mecanicos"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Método count_auditoria optimizado para contar OTs bajo filtros"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Método count_auditoria_solicitudes"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Endpoint GET /supervision/usuarios e inyección de X-Total-Count en GET /supervision/auditoria/buses-taller"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Métodos count_pendientes y count_mis_trabajos con soporte PostgreSQL nativo y SQLite"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Métodos count_pendientes y count_mis_trabajos en capa de servicio"
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Cabecera X-Total-Count en GET /pendientes y GET /mis-trabajos con límite por defecto 20"
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Método count_buses"
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "modified",
+      "summary": "Método count_buses en bus_service"
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Inyección de X-Total-Count en GET /buses y límite por defecto 20 en GET /buses/buscar"
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Exposición de cabecera X-Total-Count en CORSMiddleware"
+    },
+    {
+      "path": "tests/integration/test_auth_api.py",
+      "action": "modified",
+      "summary": "Pruebas de paginación, filtros y cabecera X-Total-Count en /auth/usuarios y /supervision/usuarios"
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Verificación de cabecera X-Total-Count en /supervision/auditoria/buses-taller"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Estandarización transversal de DEFAULT_PAGE_LIMIT = 20 en todo el backend",
+      "rationale": "El usuario solicitó que donde exista paginación se limite por default a 20 ítems por página (20 usuarios, 20 OTs, etc.). Se unificaron las constantes en auth, supervision, mantencion, buses y neumaticos.",
+      "consequences": "Cargas de página más ligeras en el frontend, menor consumo de memoria y tiempo de transferencia reducido a través de la red."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Exposición de conteo global mediante cabecera HTTP estándar X-Total-Count",
+      "rationale": "Permite mantener el contrato de respuesta List[DTO] (100% retrocompatible con frontend existente) mientras proporciona la información necesaria para los controles de paginación (páginas totales, total de registros).",
+      "consequences": "Cero disrupción en los clientes que esperan arrays JSON planos, con total compatibilidad para nuevos componentes paginados."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Disponibilidad dual de usuarios en /auth/usuarios y /supervision/usuarios",
+      "rationale": "Para que la vista del supervisor pueda consumir usuarios desde su propio módulo o desde el módulo auth de forma transparente con los mismos parámetros de paginación y filtros.",
+      "consequences": "Facilidad de integración en la navegación del supervisor y cumplimiento del principio de menor sorpresa."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "168 passed, 1 warning in 62.38s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_auth_api.py",
+      "result": "passed",
+      "evidence": "7 passed in 3.37s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_supervision_api.py",
+      "result": "passed",
+      "evidence": "7 passed in 2.86s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py tests/integration/test_buses_api.py",
+      "result": "passed",
+      "evidence": "17 passed in 5.94s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar la paginación de 20 ítems en los componentes de tabla del frontend (usuarios, auditoría y solicitudes).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "13d64c0",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los endpoints paginados exponen la cabecera X-Total-Count permitida por CORS.",
+    "Límite máximo permitido en todos los endpoints: 100 elementos por página."
+  ]
+}

@@ -76,6 +76,18 @@ class SupervisionService:
                 dtos.append(dto)
         return dtos
 
+    async def count_auditoria_solicitudes(
+        self,
+        db: AsyncSession,
+        n_bus: Optional[str] = None,
+        estado: Optional[str] = None,
+        mecanico_nombre: Optional[str] = None,
+    ) -> int:
+        """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
+        return await self.repo.count_auditoria(
+            db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre
+        )
+
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:
         """Calcula y retorna el resumen consolidado, KPIs y métricas generales del taller."""
         logger.info("[SUPERVISION_SERVICE] Calculando resumen y métricas generales del taller")

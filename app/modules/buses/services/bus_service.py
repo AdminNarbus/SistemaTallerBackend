@@ -141,6 +141,10 @@ class BusService:
 
         return [BusAutocompleteDTO.model_validate(b) for b in buses]
 
+    async def count_buses(self, db: AsyncSession, solo_activos: bool = True) -> int:
+        """Retorna el conteo total de buses activos en el sistema."""
+        return await self.repo.count_buses(db, solo_activos=solo_activos)
+
     async def actualizar_en_taller(
         self,
         db: AsyncSession,

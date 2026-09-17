@@ -566,7 +566,7 @@ class MantencionService:
         )
 
     async def list_pendientes(
-        self, db: AsyncSession, limit: Optional[int] = 50, skip: int = 0
+        self, db: AsyncSession, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
     ) -> List[SolicitudResumenDTO]:
         logger.debug("[MANTENCION] Listando solicitudes pendientes | limit=%s | skip=%s", limit, skip)
         solicitudes = await self.repo.list_pendientes(db, limit=limit, skip=skip)
@@ -578,8 +578,12 @@ class MantencionService:
                 results.append(SolicitudResumenDTO.model_validate(self._to_solicitud_dto(s)))
         return results
 
+    async def count_pendientes(self, db: AsyncSession) -> int:
+        """Retorna el conteo total de solicitudes pendientes en taller."""
+        return await self.repo.count_pendientes(db)
+
     async def list_mis_trabajos(
-        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = 50, skip: int = 0
+        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
     ) -> List[SolicitudResumenDTO]:
         logger.debug("[MANTENCION] Listando trabajos activos | mecanico_id=%s, limit=%s, skip=%s", mecanico_id, limit, skip)
         solicitudes = await self.repo.list_mis_trabajos(db, mecanico_id, limit=limit, skip=skip)
@@ -590,6 +594,10 @@ class MantencionService:
             else:
                 results.append(SolicitudResumenDTO.model_validate(self._to_solicitud_dto(s)))
         return results
+
+    async def count_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> int:
+        """Retorna el conteo total de trabajos activos del mecánico."""
+        return await self.repo.count_mis_trabajos(db, mecanico_id=mecanico_id)
 
 
     async def list_auditoria(self, db: AsyncSession) -> List[SolicitudDTO]:

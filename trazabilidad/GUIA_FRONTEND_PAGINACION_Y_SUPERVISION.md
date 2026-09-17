@@ -7,26 +7,31 @@ Para evitar tiempos de carga prolongados, consumo excesivo de datos móviles en 
 3. **Optimización del Resumen y KPIs de Taller** (`GET /api/v1/supervision/resumen-taller`), procesado mediante agregaciones analíticas directas en SQL.
 
 > [!NOTE]
-> **Compatibilidad Garantizada:** Si el Frontend llama a estos endpoints sin enviar `skip` ni `limit`, el backend responderá con los primeros 50 registros (`skip=0`, `limit=50`). No se romperán pantallas existentes.
+> **Compatibilidad Garantizada y Estándar de 20 Ítems:** Si el Frontend llama a los endpoints paginados sin enviar `skip` ni `limit`, el backend responderá con los primeros 20 registros (`skip=0`, `limit=20`, max: 100). Además, la respuesta incluye la cabecera HTTP `X-Total-Count` con el total absoluto de registros encontrados, permitiendo construir barras de paginación numéricas (`Página X de N`).
 
 ---
 
-## 2. Endpoints con Paginación (`skip` y `limit`)
+## 2. Endpoints con Paginación (`skip` y `limit`) y Cabecera `X-Total-Count`
 
-Los siguientes tres endpoints ahora aceptan parámetros estándar de paginación por Query String:
+Los siguientes endpoints aceptan parámetros estándar de paginación y devuelven la cabecera `X-Total-Count` (habilitada en CORS con `Access-Control-Expose-Headers`):
 
 | Endpoint | Rol / Acceso | Parámetros Query | Descripción |
 | :--- | :--- | :--- | :--- |
-| `GET /api/v1/mantencion/pendientes` | Mecánico / Admin | `skip` (default: 0)<br>`limit` (default: 50, max: 100) | Pestaña 1: Buses esperando atención en taller. |
-| `GET /api/v1/mantencion/mis-trabajos` | Mecánico / Admin | `skip` (default: 0)<br>`limit` (default: 50, max: 100) | Pestaña 2: Buses asignados activamente al mecánico autenticado. |
-| `GET /api/v1/supervision/auditoria/buses-taller` | Supervisor / Admin | `skip` (default: 0)<br>`limit` (default: 50, max: 100)<br>`n_bus`<br>`estado`<br>`mecanico_nombre` | Trazabilidad completa e historial de buses en taller con filtros. |
+| `GET /api/v1/supervision/usuarios` | Supervisor / Admin | `skip` (default: 0)<br>`limit` (default: 20, max: 100)<br>`rol`<br>`q`<br>`is_active` | Vista de usuarios para supervisión con filtros y conteo. |
+| `GET /api/v1/auth/usuarios` | Supervisor / Admin | `skip` (default: 0)<br>`limit` (default: 20, max: 100)<br>`rol`<br>`q`<br>`is_active` | Catálogo administrativo de usuarios. |
+| `GET /api/v1/mantencion/pendientes` | Mecánico / Admin | `skip` (default: 0)<br>`limit` (default: 20, max: 100) | Pestaña 1: Buses esperando atención en taller. |
+| `GET /api/v1/mantencion/mis-trabajos` | Mecánico / Admin | `skip` (default: 0)<br>`limit` (default: 20, max: 100) | Pestaña 2: Buses asignados activamente al mecánico. |
+| `GET /api/v1/supervision/auditoria/buses-taller` | Supervisor / Admin | `skip` (default: 0)<br>`limit` (default: 20, max: 100)<br>`n_bus`<br>`estado`<br>`mecanico_nombre` | Trazabilidad completa e historial de buses en taller con filtros. |
+| `GET /api/v1/buses` | Autenticado | `skip` (default: 0)<br>`limit` (default: 20, max: 100)<br>`solo_flota_taller`<br>`incluir_inactivos` | Flota y catálogo de buses con paginación. |
+| `GET /api/v1/auth/mecanicos` | Autenticado | `skip` (default: 0)<br>`limit` (default: 20, max: 100)<br>`q`<br>`exclude_id` | Lista paginada de mecánicos disponibles. |
 
 ### Significado de los Parámetros:
 * **`skip` (entero $\ge 0$):** Cantidad de registros a omitir desde el inicio.
   * Para la Página 1: `skip = 0`
-  * Para la Página 2 (con tamaño 20): `skip = 20`
+  * Para la Página 2: `skip = 20`
   * Fórmula general: `skip = (page - 1) * pageSize`
-* **`limit` (entero entre 1 y 100):** Cantidad de registros a traer por bloque o página (recomendado en frontend: `10`, `20` o `50`).
+* **`limit` (entero entre 1 y 100, default: 20):** Cantidad de registros por página.
+* **Cabecera `X-Total-Count`:** Entero en la cabecera HTTP de respuesta con el gran total de registros para el filtro aplicado. Leer con: `Number(response.headers['x-total-count'] || 0)`.
 
 ---
 

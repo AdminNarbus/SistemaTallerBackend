@@ -134,5 +134,11 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Reestructuración del Centro de Alertas (Punto C):** Alertas focalizadas estrictamente en permanencia: `TIEMPO_EN_TALLER_EXCEDIDO` (buses con permanencia superior a 48h/96h) y `LIBERADO_TIEMPO_EXCEDIDO` (buses circulando con fallas pendientes tras más de 72h/168h de liberación). Todos los umbrales son configurables dinámicamente en `app/core/config.py` y variables de entorno `.env`.
   - **Alto Rendimiento en 1 Sola Consulta SQL:** Todas las métricas y alertas se resuelven en el motor PostgreSQL mediante CTEs y agregaciones directas, asegurando tiempos de respuesta sub-20ms y 0 consultas N+1.
   - **100% de la Suite de Pruebas Aprobada:** 166 de 166 tests automatizados pasando exitosamente en 61.10s.
+- **Paginación Canónica Estándar (20 ítems por página), Cabecera X-Total-Count y Vista Paginada de Usuarios para Supervisión (AV-0072):**
+  - **Estandarización Universal a 20 Ítems:** Fijación de `DEFAULT_PAGE_LIMIT = 20` y `MAX_PAGE_LIMIT = 100` en los módulos `auth`, `supervision`, `mantencion`, `buses` y `neumaticos`, garantizando una carga rápida y uniforme en todas las vistas paginadas (20 usuarios, 20 OTs, 20 mecánicos, 20 buses por página).
+  - **Cabecera HTTP `X-Total-Count` Expuesta en CORS:** Inyección de `X-Total-Count` con el total de registros encontrados en endpoints paginados (`/usuarios`, `/mecanicos`, `/auditoria/buses-taller`, `/pendientes`, `/mis-trabajos`, `/buses`), configurada explícitamente en `CORSMiddleware` (`expose_headers=["X-Total-Count"]`) para permitir al frontend calcular páginas totales sin alterar la respuesta de listas JSON.
+  - **Vista Especializada de Supervisión:** Nuevo endpoint `GET /api/v1/supervision/usuarios` protegido por rol (`SUPERVISOR`/`ADMIN`) con filtros por rol, búsqueda de texto `q`, estado activo `is_active` y paginación (`skip`, `limit=20`).
+  - **100% de la Suite de Pruebas Aprobada:** 168 de 168 tests automatizados pasando exitosamente en 62.38s.
+
 
 

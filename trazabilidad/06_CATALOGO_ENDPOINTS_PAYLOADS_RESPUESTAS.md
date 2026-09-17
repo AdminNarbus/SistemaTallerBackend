@@ -1,11 +1,11 @@
 # Catálogo Exhaustivo de Endpoints, Payloads y Respuestas: Backend Taller Narbus
 
 > **Documento Oficial de Especificación de Interfaz REST API**  
-> **Versión:** 2.3.0  
-> **Fecha de Actualización:** 2026-09-16  
+> **Versión:** 2.4.0  
+> **Fecha de Actualización:** 2026-09-17  
 > **Proyecto:** Backend Taller Narbus (`FastAPI + SQLAlchemy Async + PostgreSQL`)  
 > **Base URL:** `http://localhost:8000/api/v1` (o `/api/v1` en producción)  
-> **Total de Endpoints:** 49 endpoints activos
+> **Total de Endpoints:** 50 endpoints activos
 
 ---
 
@@ -55,6 +55,12 @@ Códigos de error estándar:
 - `FORBIDDEN` (`403 Forbidden`): Usuario autenticado sin el rol necesario para la operación.
 - `HTTP_ERROR` (`401 Unauthorized`): Token ausente, inválido o expirado.
 - `VALIDATION_ERROR` (`422 Unprocessable Content`): Falla de esquema o tipo en el payload de Pydantic.
+
+### 1.3 Paginación Canónica y Cabecera `X-Total-Count`
+Para optimizar el rendimiento y la experiencia de usuario, todos los endpoints con soporte de paginación implementan el estándar unificado:
+- **Límite por defecto:** `20` ítems por página (`limit: int = Query(20, ge=1, le=100)`).
+- **Desplazamiento:** `skip: int = Query(0, ge=0)`.
+- **Cabecera de Conteo Total:** Las respuestas devuelven la cabecera HTTP `X-Total-Count: <total_registros>`, la cual está explícitamente expuesta en CORS (`Access-Control-Expose-Headers: X-Total-Count`). Esto permite a los clientes frontend (React, Axios, Fetch) leer el total de registros disponibles y construir controles numéricos de paginación (`Total Páginas = ceil(total / limit)`) sin alterar los contratos tipados de respuesta que devuelven listas `List[DTO]`.
 
 ---
 
@@ -209,10 +215,13 @@ Códigos de error estándar:
 
 ### 3.5 `GET /api/v1/auth/mecanicos/buscar` y `GET /api/v1/auth/mecanicos`
 - **Autenticación:** Token Bearer (`require_current_user`).
-- **Propósito:** Buscador y autocompletado de mecánicos activos para asignación de tareas, co-responsabilidad y entrega de turnos.
+- **Propósito:** Buscador y autocompletado de mecánicos activos para asignación de tareas, co-responsabilidad y entrega de turnos, con soporte de paginación canónica.
 - **Parámetros Query:**
   - `q` *(string, opcional, default: "")*: Texto de búsqueda por nombre, apellido o username. Si se envía vacío, retorna todos los mecánicos activos.
   - `exclude_id` *(integer, opcional)*: ID de usuario a excluir de la lista (útil para que el mecánico que busca colaboradores no se vea a sí mismo).
+  - `skip` *(integer, opcional, default: 0, ge: 0)*: Desplazamiento/offset de registros.
+  - `limit` *(integer, opcional, default: 20, ge: 1, le: 100)*: Cantidad máxima de mecánicos por página.
+- **Cabeceras de Respuesta:** `X-Total-Count: <total_mecanicos>` (expuesta en CORS).
 - **Payload:** Ninguno.
 - **Respuesta (`List[UsuarioResponseDTO]` - 200 OK):** Lista de mecánicos activos disponibles.
 
@@ -220,12 +229,16 @@ Códigos de error estándar:
 
 ### 3.6 `GET /api/v1/auth/usuarios`
 - **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
-- **Propósito:** Listado administrativo de todos los usuarios registrados en el sistema con soporte de paginación.
+- **Propósito:** Listado administrativo de todos los usuarios registrados en el sistema con soporte de paginación y filtros.
 - **Parámetros Query:**
   - `skip` *(integer, opcional, default: 0, ge: 0)*: Desplazamiento/offset de registros.
-  - `limit` *(integer, opcional, default: 100, ge: 1, le: 500)*: Cantidad máxima de usuarios a retornar.
+  - `limit` *(integer, opcional, default: 20, ge: 1, le: 100)*: Cantidad máxima de usuarios por página.
+  - `rol` *(string, opcional)*: Filtro exacto por rol de usuario (`CONDUCTOR`, `MECANICO`, `SUPERVISOR`, `ADMIN`).
+  - `q` *(string, opcional)*: Búsqueda flexible por coincidencia parcial en nombre, apellido o username.
+  - `is_active` *(boolean, opcional)*: Filtro por estado activo (`true`) o inactivo (`false`).
+- **Cabeceras de Respuesta:** `X-Total-Count: <total_usuarios>` (expuesta en CORS).
 - **Payload:** Ninguno.
-- **Respuesta (`List[UsuarioResponseDTO]` - 200 OK):** Lista de usuarios.
+- **Respuesta (`List[UsuarioResponseDTO]` - 200 OK):** Lista de usuarios coincidentes.
 
 ---
 
@@ -947,11 +960,14 @@ Códigos de error estándar:
 
 ### 7.2 `GET /api/v1/supervision/auditoria/buses-taller`
 - **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
-- **Propósito:** Tablero de auditoría y trazabilidad exhaustiva en vivo para supervisores y auditores. Permite inspeccionar el historial completo de solicitudes, cambios de turno cronometrados, resolución de averías y notas de bitácora.
+- **Propósito:** Tablero de auditoría y trazabilidad exhaustiva en vivo para supervisores y auditores con soporte de paginación canónica. Permite inspeccionar el historial completo de solicitudes, cambios de turno cronometrados, resolución de averías y notas de bitácora.
 - **Parámetros Query:**
   - `n_bus` *(string, opcional)*: Filtrar por número de bus específico (ej: `"339"`).
   - `estado` *(string, opcional)*: Filtrar por estado (`REPORTADO`, `PENDIENTE`, `EN_REPARACION`, `LIBERADO`, `FINALIZADO`).
   - `mecanico_nombre` *(string, opcional)*: Búsqueda de órdenes donde haya participado un mecánico por su nombre, apellido o username.
+  - `skip` *(integer, opcional, default: 0, ge: 0)*: Desplazamiento/offset de registros.
+  - `limit` *(integer, opcional, default: 20, ge: 1, le: 100)*: Cantidad máxima de solicitudes a retornar por página.
+- **Cabeceras de Respuesta:** `X-Total-Count: <total_solicitudes>` (expuesta en CORS).
 - **Payload:** Ninguno.
 - **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de solicitudes completas con todo su historial de auditoría.
 
@@ -1088,4 +1104,34 @@ Códigos de error estándar:
   - `username` *(string)*: Correo o identificador de acceso.
   - `fallas_activas_count` *(integer)*: Conteo de averías asignadas activamente en solicitudes abiertas (no finalizadas).
   - `disponible` *(boolean)*: Estado activo del usuario en el sistema.
+
+---
+
+### 7.7 `GET /api/v1/supervision/usuarios`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Vista especializada del módulo de supervisión para el listado, búsqueda y filtrado de usuarios (mecánicos, supervisores, choferes, etc.) con paginación canónica predeterminada en 20 ítems y entrega del conteo total.
+- **Parámetros Query:**
+  - `skip` *(integer, opcional, default: 0, ge: 0)*: Desplazamiento/offset de registros.
+  - `limit` *(integer, opcional, default: 20, ge: 1, le: 100)*: Cantidad máxima de usuarios a retornar por página.
+  - `rol` *(string, opcional)*: Filtro por rol exacto (`CONDUCTOR`, `MECANICO`, `SUPERVISOR`, `ADMIN`).
+  - `q` *(string, opcional)*: Búsqueda flexible por texto en nombre, apellido o username.
+  - `is_active` *(boolean, opcional)*: Filtro por estado activo (`true`) o inactivo (`false`).
+- **Cabeceras de Respuesta:** `X-Total-Count: <total_usuarios>` (expuesta en CORS).
+- **Payload:** Ninguno.
+- **Respuesta (`List[UsuarioResponseDTO]` - 200 OK):**
+```json
+[
+  {
+    "id": 2,
+    "nombre": "Juan",
+    "apellido": "Mecanico Perez",
+    "nombre_completo": "Juan Mecanico Perez",
+    "rut": "12.345.678-9",
+    "username": "mecanico1@narbus.cl",
+    "rol": "MECANICO",
+    "is_active": true
+  }
+]
+```
+
 

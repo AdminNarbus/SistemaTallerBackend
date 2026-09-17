@@ -1,10 +1,11 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
+from app.modules.auth.services.auth_service import auth_service
 from app.modules.buses.dtos import BusCreateDTO, BusDarDeBajaDTO, BusResponseDTO
 from app.modules.buses.services.bus_service import bus_service
 from app.modules.mantencion.dtos.mantencion_dto import (
@@ -56,8 +57,44 @@ async def get_mecanicos_con_carga(
     return await supervision_service.get_mecanicos_con_carga(db)
 
 
+@router.get(
+    "/usuarios",
+    response_model=List[UsuarioResponseDTO],
+    summary="Listado paginado de usuarios para Supervisores",
+    description="Retorna el listado de usuarios con soporte de paginación (default: 20 por página) y filtros opcionales. Expone X-Total-Count en cabecera.",
+)
+async def listar_usuarios_supervision(
+    response: Response,
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de usuarios a omitir para paginación"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de usuarios por página (default: 20)"),
+    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR)"),
+    q: Optional[str] = Query(None, description="Búsqueda por texto en nombre, apellido o username"),
+    is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> List[UsuarioResponseDTO]:
+    """
+    Vista del Supervisor para gestión y auditoría del personal:
+    Permite consultar los usuarios del sistema de forma paginada (20 por página por defecto),
+    con filtros por rol, término de búsqueda y estado activo.
+    """
+    total = await auth_service.contar_usuarios(db, rol=rol, q=q, is_active=is_active)
+    response.headers["X-Total-Count"] = str(total)
+    logger.info(
+        "[SUPERVISION] Consulta listado de usuarios | supervisor_id=%s | skip=%s | limit=%s | total=%s",
+        current_user.id,
+        skip,
+        limit,
+        total,
+    )
+    return await auth_service.listar_usuarios(
+        db, skip=skip, limit=limit, rol=rol, q=q, is_active=is_active
+    )
+
+
 @router.get("/auditoria/buses-taller", response_model=List[SolicitudDTO])
 async def get_auditoria_buses_taller(
+    response: Response,
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),
     estado: Optional[str] = Query(
         None,
@@ -65,7 +102,7 @@ async def get_auditoria_buses_taller(
     ),
     mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de registros a omitir para paginación"),
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite máximo de solicitudes a retornar"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite máximo de solicitudes a retornar (default: 20)"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
@@ -73,16 +110,21 @@ async def get_auditoria_buses_taller(
     Dashboard Auditor para Supervisores/Administradores:
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
-    y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico y paginación.
+    y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico y paginación (default: 20 OTs).
     """
+    total = await supervision_service.count_auditoria_solicitudes(
+        db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre
+    )
+    response.headers["X-Total-Count"] = str(total)
     logger.info(
-        "[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
+        "[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s | total=%s",
         current_user.id,
         n_bus,
         estado,
         mecanico_nombre,
         skip,
         limit,
+        total,
     )
     result = await supervision_service.get_auditoria_solicitudes(
         db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre, skip=skip, limit=limit

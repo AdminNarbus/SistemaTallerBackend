@@ -66,12 +66,14 @@ async def test_auditoria_buses_taller_paginacion(client, auth_headers_supervisor
     """Prueba que el endpoint de auditoría responda correctamente con parámetros de paginación skip y limit."""
     res_page1 = await client.get("/api/v1/supervision/auditoria/buses-taller?skip=0&limit=1", headers=auth_headers_supervisor)
     assert res_page1.status_code == 200
+    assert "X-Total-Count" in res_page1.headers
     data_page1 = res_page1.json()
     assert isinstance(data_page1, list)
     assert len(data_page1) <= 1
 
     res_page2 = await client.get("/api/v1/supervision/auditoria/buses-taller?skip=1&limit=1", headers=auth_headers_supervisor)
     assert res_page2.status_code == 200
+    assert "X-Total-Count" in res_page2.headers
     data_page2 = res_page2.json()
     assert isinstance(data_page2, list)
 

@@ -42,7 +42,7 @@ class NeumaticoRepository:
         return result.scalar_one_or_none()
 
     async def list_reportes(
-        self, db: AsyncSession, limit: int = 50, offset: int = 0
+        self, db: AsyncSession, limit: int = 20, offset: int = 0
     ) -> Sequence[ReporteNeumatico]:
         """Obtiene el listado paginado de reportes ordenados cronológicamente descendente."""
         stmt = (

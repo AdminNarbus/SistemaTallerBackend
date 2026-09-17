@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ from app.api.deps import (
     require_current_user,
     require_supervisor_or_admin,
 )
-from app.modules.auth.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+from app.modules.auth.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
@@ -98,17 +98,20 @@ async def get_me(
     summary="Listar/Buscar mecánicos activos (Autocomplete)",
 )
 async def buscar_mecanicos(
+    response: Response,
     q: Optional[str] = Query("", description="Texto a buscar por nombre, apellido o username. Si está vacío, retorna todos."),
     exclude_id: Optional[int] = Query(None, description="ID de usuario a excluir de los resultados (ej: el mecánico logueado)"),
-    skip: int = Query(0, ge=0, description="Número de registros a omitir para paginación"),
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de mecánicos a retornar"),
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de registros a omitir para paginación"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de mecánicos a retornar (default: 20)"),
     db: AsyncSession = SessionDep,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> List[UsuarioResponseDTO]:
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
     """
-    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | skip=%d | limit=%d | usuario_solicitante_id=%s", q, exclude_id, skip, limit, current_user.id)
+    total = await auth_service.contar_mecanicos(db, q=q, exclude_id=exclude_id)
+    response.headers["X-Total-Count"] = str(total)
+    logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | skip=%d | limit=%d | total=%d | usuario_solicitante_id=%s", q, exclude_id, skip, limit, total, current_user.id)
     return await auth_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id, skip=skip, limit=limit)
 
 
@@ -123,16 +126,25 @@ async def buscar_mecanicos(
     summary="Listar usuarios registrados (Solo SUPERVISOR o ADMIN)",
 )
 async def listar_usuarios(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    response: Response,
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de usuarios a omitir para paginación"),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de usuarios por página (default: 20)"),
+    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR)"),
+    q: Optional[str] = Query(None, description="Búsqueda por texto en nombre, apellido o username"),
+    is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
     db: AsyncSession = SessionDep,
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
 ) -> List[UsuarioResponseDTO]:
     """
-    Retorna la lista completa de usuarios del sistema.
+    Retorna la lista de usuarios del sistema con soporte de paginación (default: 20 por página)
+    y filtros opcionales. El total de registros coincidentes se expone en la cabecera X-Total-Count.
     Exige rol de SUPERVISOR o ADMIN.
     """
-    return await auth_service.listar_usuarios(db, skip=skip, limit=limit)
+    total = await auth_service.contar_usuarios(db, rol=rol, q=q, is_active=is_active)
+    response.headers["X-Total-Count"] = str(total)
+    return await auth_service.listar_usuarios(
+        db, skip=skip, limit=limit, rol=rol, q=q, is_active=is_active
+    )
 
 
 @router.post(

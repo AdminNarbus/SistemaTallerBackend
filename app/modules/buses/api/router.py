@@ -14,6 +14,11 @@ from app.modules.buses.dtos import (
     BusUpdateEnTallerDTO,
 )
 
+from app.modules.buses.constants import (
+    DEFAULT_PAGE_SKIP,
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+)
 from app.modules.buses.services.bus_service import bus_service
 
 logger = logging.getLogger(__name__)
@@ -31,7 +36,7 @@ async def buscar_buses(
     response: Response,
     query: Optional[str] = Query(None, description="Prefijo o término de búsqueda para n_bus"),
     solo_flota_taller: bool = Query(True, description="Filtrar vehículos con número de máquina asignado"),
-    limit: Optional[int] = Query(None, ge=1, le=100, description="Tope de sugerencias a retornar"),
+    limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Tope de sugerencias a retornar (default: 20)"),
     db: AsyncSession = SessionDep,
 ) -> List[BusSimpleDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
@@ -50,12 +55,13 @@ async def listar_buses(
     response: Response,
     solo_activos: bool = Query(True, description="Filtrar solo buses activos"),
     solo_flota_taller: bool = Query(True, description="Filtrar vehículos con número de máquina asignado"),
-
-    skip: int = Query(0, ge=0, description="Cantidad de registros a omitir"),
-    limit: Optional[int] = Query(None, ge=1, le=100, description="Límite de registros a retornar"),
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Cantidad de registros a omitir"),
+    limit: Optional[int] = Query(None, ge=1, le=MAX_PAGE_LIMIT, description="Límite de registros a retornar"),
     db: AsyncSession = SessionDep,
 ) -> List[BusAutocompleteDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
+    total = await bus_service.count_buses(db, solo_activos=solo_activos)
+    response.headers["X-Total-Count"] = str(total)
     return await bus_service.listar_buses(
         db,
         solo_activos=solo_activos,

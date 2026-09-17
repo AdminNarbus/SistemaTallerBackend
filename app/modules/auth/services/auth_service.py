@@ -10,6 +10,7 @@ from app.core.exceptions import (
 )
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.modules.auth.constants import (
+    DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
     ROLES_PERMITIDOS,
     RolUsuario,
@@ -170,25 +171,56 @@ class AuthService:
         return user_dto
 
     async def listar_usuarios(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        skip: int = DEFAULT_PAGE_SKIP,
+        limit: int = DEFAULT_PAGE_LIMIT,
+        rol: Optional[str] = None,
+        q: Optional[str] = None,
+        is_active: Optional[bool] = None,
     ) -> List[UsuarioResponseDTO]:
-        """Lista todos los usuarios registrados con soporte de paginación."""
-        usuarios = await user_repository.get_all(db, skip=skip, limit=limit)
+        """Lista todos los usuarios registrados con soporte de paginación (default: 20) y filtros opcionales."""
+        usuarios = await user_repository.get_all(
+            db, skip=skip, limit=limit, rol=rol, q=q, is_active=is_active
+        )
         return [UsuarioResponseDTO.model_validate(u) for u in usuarios]
+
+    async def contar_usuarios(
+        self,
+        db: AsyncSession,
+        rol: Optional[str] = None,
+        q: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> int:
+        """Retorna el conteo total de usuarios registrados aplicando los filtros opcionales."""
+        return await user_repository.count_usuarios(
+            db, rol=rol, q=q, is_active=is_active
+        )
 
     async def buscar_mecanicos(
         self,
         db: AsyncSession,
         q: Optional[str] = None,
         exclude_id: Optional[int] = None,
-        skip: int = 0,
+        skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[UsuarioResponseDTO]:
-        """Busca mecánicos activos con paginación y filtros opcionales."""
+        """Busca mecánicos activos con paginación (default: 20) y filtros opcionales."""
         mecanicos = await user_repository.buscar_mecanicos(
             db, q=q, exclude_id=exclude_id, skip=skip, limit=limit
         )
         return [UsuarioResponseDTO.model_validate(m) for m in mecanicos]
+
+    async def contar_mecanicos(
+        self,
+        db: AsyncSession,
+        q: Optional[str] = None,
+        exclude_id: Optional[int] = None,
+    ) -> int:
+        """Retorna el conteo total de mecánicos activos bajo los filtros de búsqueda."""
+        return await user_repository.count_mecanicos(
+            db, q=q, exclude_id=exclude_id
+        )
 
 
 auth_service = AuthService()

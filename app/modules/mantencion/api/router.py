@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Body, Depends, Query, Request, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,7 @@ from app.modules.mantencion.dtos import (
     PautaBatchUpdateDTO,
     LiberarSolicitudDTO,
     AgregarFallaDTO,
+    ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
     ComentarioAddedDTO,
 )
@@ -431,28 +432,41 @@ async def agregar_falla(
 async def check_detalle(
     id: int,
     detalle_id: int,
-    resuelto: bool = Query(..., description="True para marcar resuelto, False para desmarcar"),
+    resuelto: Optional[bool] = Query(None, description="True para marcar resuelto, False para desmarcar"),
     mecanico_id: Optional[int] = Query(None, description="ID del mecánico resolutor (opcional para supervisora o administrador)"),
+    payload: Optional[ResolverFallaSupervisoraDTO] = Body(None, description="Payload opcional para resolución desde modal o body JSON"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Marca o desmarca un check de falla resuelta guardando el timestamp y el ID del mecánico."""
+    resuelto_final = True
+    if payload is not None and payload.resuelto is not None:
+        resuelto_final = payload.resuelto
+    elif resuelto is not None:
+        resuelto_final = resuelto
+
+    mecanico_resolvio_final = None
+    if payload is not None and payload.effective_mecanico_id:
+        mecanico_resolvio_final = payload.effective_mecanico_id
+    elif mecanico_id is not None:
+        mecanico_resolvio_final = mecanico_id
+
     logger.info(
         "[MANTENCION] Check falla en solicitud_id=%s | detalle_id=%s | resuelto=%s | actor_id=%s | mecanico_id=%s",
         id,
         detalle_id,
-        resuelto,
+        resuelto_final,
         current_user.id,
-        mecanico_id,
+        mecanico_resolvio_final,
     )
     return await mantencion_service.check_detalle(
         db,
         solicitud_id=id,
         detalle_id=detalle_id,
         mecanico_id=current_user.id,
-        resuelto=resuelto,
+        resuelto=resuelto_final,
         mecanico_nombre=current_user.nombre_completo,
-        mecanico_resolvio_id=mecanico_id,
+        mecanico_resolvio_id=mecanico_resolvio_final,
     )
 
 

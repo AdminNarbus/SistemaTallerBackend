@@ -164,6 +164,18 @@ class MantencionService:
 
             mec_resolvio = _get_rel(det, "mecanico_resolvio")
             mec_resolvio_nombre = mec_resolvio.nombre_completo if mec_resolvio else None
+            if not mec_resolvio_nombre and det.mecanico_resolvio_id:
+                for asig_item in getattr(det, "asignaciones", []) or []:
+                    asig_u = _get_rel(asig_item, "mecanico")
+                    if asig_u and asig_u.id == det.mecanico_resolvio_id:
+                        mec_resolvio_nombre = asig_u.nombre_completo
+                        break
+                if not mec_resolvio_nombre:
+                    for mec_item in getattr(sol, "mecanicos", []) or []:
+                        u_m = _get_rel(mec_item, "mecanico")
+                        if u_m and u_m.id == det.mecanico_resolvio_id:
+                            mec_resolvio_nombre = u_m.nombre_completo
+                            break
 
             mecanicos_asignados = []
             historial_asignaciones = []
@@ -1228,6 +1240,8 @@ class MantencionService:
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
             detalle_target.fecha_resolucion = None
+
+        db.add(detalle_target)
 
         falla_nom = _describir_detalle(detalle_target)
 
@@ -2318,23 +2332,27 @@ class MantencionService:
         u_resolutor = None
         u_asig = None
 
-        if es_supervisor and dto.resuelto and dto.mecanico_resolvio_id:
-            u_resolutor = await self.repo.get_usuario_by_id(db, dto.mecanico_resolvio_id)
+        resolutor_id = dto.effective_resolutor_id
+        asignado_id = dto.effective_asignado_id
+
+        if es_supervisor and dto.resuelto and resolutor_id:
+            u_resolutor = await self.repo.get_usuario_by_id(db, resolutor_id)
             if not u_resolutor or not u_resolutor.is_active:
                 raise BusinessRuleException("El mecánico resolutor indicado no existe o se encuentra inactivo")
             nuevo_detalle.resuelto = True
-            nuevo_detalle.mecanico_resolvio_id = dto.mecanico_resolvio_id
+            nuevo_detalle.mecanico_resolvio_id = resolutor_id
             nuevo_detalle.mecanico_resolvio = u_resolutor
             nuevo_detalle.fecha_resolucion = now
+            db.add(nuevo_detalle)
             tipo_bitacora = "RESOLUCION"
-        elif es_supervisor and dto.mecanico_asignado_id:
-            u_asig = await self.repo.get_usuario_by_id(db, dto.mecanico_asignado_id)
+        elif es_supervisor and asignado_id:
+            u_asig = await self.repo.get_usuario_by_id(db, asignado_id)
             if not u_asig or not u_asig.is_active:
                 raise BusinessRuleException("El mecánico asignado indicado no existe o se encuentra inactivo")
             nueva_asig = TallerAsignacionFalla(
                 solicitud_id=solicitud.id,
                 detalle_id=nuevo_detalle.id,
-                mecanico_id=dto.mecanico_asignado_id,
+                mecanico_id=asignado_id,
                 asignado_por_id=mecanico_id,
                 origen="SUPERVISION",
                 is_activo=True,
@@ -2529,8 +2547,10 @@ class MantencionService:
         mec_nom = None
         u_mec = None
 
+        mec_id = dto.effective_mecanico_id
+
         if dto.resuelto:
-            if not dto.mecanico_id:
+            if not mec_id:
                 raise BusinessRuleException("Debe indicar el ID del mecánico que realizó la reparación de la avería")
 
             if getattr(detalle_target, "falta_repuesto", False):
@@ -2539,20 +2559,21 @@ class MantencionService:
                     "Debe registrarse primero la recepción/disponibilidad del repuesto."
                 )
 
-            u_mec = await self.repo.get_usuario_by_id(db, dto.mecanico_id)
+            u_mec = await self.repo.get_usuario_by_id(db, mec_id)
             if not u_mec or not u_mec.is_active:
                 raise BusinessRuleException("El mecánico indicado no existe o no se encuentra activo en el sistema")
 
             mec_nom = u_mec.nombre_completo
             detalle_target.resuelto = True
-            detalle_target.mecanico_resolvio_id = dto.mecanico_id
+            detalle_target.mecanico_resolvio_id = mec_id
             detalle_target.mecanico_resolvio = u_mec
             detalle_target.fecha_resolucion = now
+            db.add(detalle_target)
 
             # Si el mecánico tenía asignación activa en esta falla, marcarla como resuelta
             if hasattr(detalle_target, "asignaciones") and detalle_target.asignaciones:
                 for asig in detalle_target.asignaciones:
-                    if asig.mecanico_id == dto.mecanico_id and asig.is_activo:
+                    if asig.mecanico_id == mec_id and asig.is_activo:
                         asig.resuelto_en_esta_asignacion = True
 
             texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {mec_nom}"
@@ -2564,6 +2585,7 @@ class MantencionService:
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
             detalle_target.fecha_resolucion = None
+            db.add(detalle_target)
 
             texto_check = f"Supervisora {sup_nom} reabrió la falla '{falla_nom}'"
             if dto.comentario and dto.comentario.strip():

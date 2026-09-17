@@ -297,27 +297,41 @@ async def agregar_falla_supervision(
     summary="Registrar resolución de avería indicando qué mecánico la reparó",
     description="Permite a la supervisora marcar una falla como resuelta especificando explícitamente el mecánico que la arregló, o reabrirla, registrando el evento en la bitácora inmutable.",
 )
+@router.patch(
+    "/solicitudes/{id}/detalles/{detalle_id}/check",
+    response_model=DetalleUpdateDTO,
+    summary="Alias de resolución de avería para supervisión",
+    description="Alias compatible con /check para marcar o desmarcar resolución indicando el mecánico que arregló la avería.",
+)
 async def resolver_falla_supervision(
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
     detalle_id: int = Path(..., description="ID numérico del detalle de falla", ge=1),
-    dto: ResolverFallaSupervisoraDTO = Body(...),
+    dto: Optional[ResolverFallaSupervisoraDTO] = Body(None),
+    resuelto: Optional[bool] = Query(None, description="Parámetro query opcional para resuelto"),
+    mecanico_id: Optional[int] = Query(None, description="Parámetro query opcional para mecánico resolutor"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ) -> DetalleUpdateDTO:
     """Registra qué mecánico arregló una falla puntual desde la vista de detalle de la OT."""
+    final_dto = dto or ResolverFallaSupervisoraDTO()
+    if resuelto is not None and dto is None:
+        final_dto.resuelto = resuelto
+    if mecanico_id is not None and not final_dto.effective_mecanico_id:
+        final_dto.mecanico_id = mecanico_id
+
     logger.info(
         "[SUPERVISION] Supervisora %s registrando resolución de falla detalle_id=%s en solicitud_id=%s | resuelto=%s | mecanico_id=%s",
         current_user.id,
         detalle_id,
         id,
-        dto.resuelto,
-        dto.mecanico_id,
+        final_dto.resuelto,
+        final_dto.effective_mecanico_id,
     )
     return await supervision_service.resolver_falla(
         db,
         solicitud_id=id,
         detalle_id=detalle_id,
-        dto=dto,
+        dto=final_dto,
         supervisor_id=current_user.id,
         supervisor_nombre=current_user.nombre_completo,
     )

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 74,
+  "id": "AV-0074",
+  "timestamp": "2026-09-17T14:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUP-FALLAS-FIX",
+    "name": "Corrección de Persistencia de Mecánico Resolutor y Compatibilidad Body/Query",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección y robustecimiento integral de la persistencia del mecánico resolutor en la resolución de fallas desde la vista de supervisión y mantención: 1) DTOs flexibles en AgregarFallaDTO y ResolverFallaSupervisoraDTO admitiendo indistintamente mecanico_id, mecanico_resolvio_id o usuario_id; 2) Soporte dual transparente en routers de mantencion y supervision para recibir los datos vía Body JSON o Query parameters; 3) Creación de alias /check en supervision router idéntico a /resolver; 4) Inclusión de db.add(detalle_target) explícito antes de db.commit() en resolver_falla_supervisora y check_detalle para asegurar persistencia física en PostgreSQL/Neon; 5) Resolución segura de mecanico_resolvio_nombre en _to_solicitud_dto ante relaciones ORM deshidratadas; 6) 100% de pruebas aprobadas (171/171).",
+  "scope": {
+    "planned": [
+      "Garantizar que el ID y nombre del mecánico que resolvió la avería quede efectivamente persistido en base de datos",
+      "Soportar tanto Body JSON como Query Parameters en /check y /resolver",
+      "Soportar nombres de campo alternativos del frontend (mecanico_id, mecanico_resolvio_id, usuario_id)",
+      "Verificar con pruebas de integración y correr suite completa de pruebas"
+    ],
+    "completed": [
+      "Garantizar que el ID y nombre del mecánico que resolvió la avería quede efectivamente persistido en base de datos",
+      "Soportar tanto Body JSON como Query Parameters en /check y /resolver",
+      "Soportar nombres de campo alternativos del frontend (mecanico_id, mecanico_resolvio_id, usuario_id)",
+      "Verificar con pruebas de integración y correr suite completa de pruebas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de modelos o tablas relacionales de la BD (las columnas ya existen)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Incorporación de campos alternativos mecanico_resolvio_id, mecanico_id, usuario_id y propiedades computadas effective_resolutor_id y effective_mecanico_id en AgregarFallaDTO y ResolverFallaSupervisoraDTO."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Uso de effective_mecanico_id y effective_resolutor_id, db.add(detalle_target) explícito en check_detalle y resolver_falla_supervisora, y resolución de fallback para mec_resolvio_nombre en _to_solicitud_dto."
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Actualizado check_detalle para admitir Body JSON opcional (ResolverFallaSupervisoraDTO) junto con Query parameters de forma transparente."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Agregado alias de endpoint /solicitudes/{id}/detalles/{detalle_id}/check y soporte unificado de Body/Query para resolución de fallas."
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Añadidas pruebas de integración validando envío de Body JSON puro en mantención y supervisión con nombres alternativos y verificación de persistencia en GET /solicitudes/{id}."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0074-1",
+      "title": "Dualidad transparente Body JSON y Query Parameters en endpoints de check/resolución",
+      "rationale": "Diferentes componentes del Frontend o librerías HTTP (Axios vs Fetch vs llamadas reutilizadas) pueden invocar el endpoint de check pasando los parámetros en la URL (?resuelto=true&mecanico_id=5) o en el cuerpo HTTP ({ resuelto: true, mecanico_id: 5 }). Al permitir ambos en el router de FastAPI, el backend se vuelve inmune a discrepancias de serialización en el cliente.",
+      "consequences": "Total tolerancia y robustez en la API REST sin requerir cambios invasivos en el Frontend."
+    },
+    {
+      "id": "DEC-0074-2",
+      "title": "Propiedades computadas en DTOs para normalizar identificadores de mecánicos",
+      "rationale": "El cliente puede enviar 'mecanico_id', 'mecanico_resolvio_id' o 'usuario_id'. En lugar de acoplar la lógica de negocio a un único nombre arbitrario, los DTOs exponen effective_mecanico_id / effective_resolutor_id que resuelven el primer identificador no nulo.",
+      "consequences": "Garantiza que el ID del mecánico seleccionado por la supervisora nunca se descarte ni se pierda por descalce en la nomenclatura del payload."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_supervision_api.py -v",
+      "result": "passed",
+      "evidence": "10 passed in 4.30s"
+    },
+    {
+      "command": "pytest tests/ -q",
+      "result": "passed",
+      "evidence": "171 passed, 1 warning in 63.90s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Hacer git push en develop e integrar a main según GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "5a10c31",
+    "dirty": false
+  },
+  "notes": [
+    "Pruebas de regresión 100% aprobadas en entorno local."
+  ]
+}

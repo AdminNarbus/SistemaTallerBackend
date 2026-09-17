@@ -375,7 +375,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     assert det_reabierto["resuelto"] is False
     assert det_reabierto["mecanico_resolvio_id"] is None
 
-    # 6. Probar endpoint de mantención /detalles/{id}/check invocado por supervisora con mecanico_id
+    # 6. Probar endpoint de mantención /detalles/{id}/check invocado por supervisora con query params
     res_mant_check = await client.patch(
         f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check?resuelto=true&mecanico_id={mecanico1.id}",
         headers=auth_headers_supervisor,
@@ -383,6 +383,35 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     assert res_mant_check.status_code == 200
     assert res_mant_check.json()["resuelto"] is True
     assert res_mant_check.json()["mecanico_resolvio_id"] == mecanico1.id
+
+    # 7. Probar endpoint de mantención /detalles/{id}/check enviando Body JSON puro (sin query params)
+    res_mant_body = await client.patch(
+        f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check",
+        json={"resuelto": True, "mecanico_id": mecanico1.id},
+        headers=auth_headers_supervisor,
+    )
+    assert res_mant_body.status_code == 200
+    assert res_mant_body.json()["resuelto"] is True
+    assert res_mant_body.json()["mecanico_resolvio_id"] == mecanico1.id
+
+    # 8. Probar alias /check en módulo de supervisión con campo alternativo 'mecanico_resolvio_id'
+    res_sup_check = await client.patch(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/check",
+        json={"resuelto": True, "mecanico_resolvio_id": mecanico1.id},
+        headers=auth_headers_supervisor,
+    )
+    assert res_sup_check.status_code == 200
+    assert res_sup_check.json()["resuelto"] is True
+    assert res_sup_check.json()["mecanico_resolvio_id"] == mecanico1.id
+    assert res_sup_check.json()["mecanico_resolvio_nombre"] == mecanico1.nombre_completo
+
+    # 9. Verificar que GET /solicitudes/{id} retorne el detalle con mecanico_resolvio_id y mecanico_resolvio_nombre
+    res_ot_final = await client.get(f"/api/v1/supervision/solicitudes/{sol_id}", headers=auth_headers_supervisor)
+    assert res_ot_final.status_code == 200
+    ot_final_data = res_ot_final.json()
+    assert ot_final_data["detalles"][0]["resuelto"] is True
+    assert ot_final_data["detalles"][0]["mecanico_resolvio_id"] == mecanico1.id
+    assert ot_final_data["detalles"][0]["mecanico_resolvio_nombre"] == mecanico1.nombre_completo
 
 
 

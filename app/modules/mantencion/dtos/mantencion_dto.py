@@ -73,13 +73,29 @@ class AgregarFallaDTO(BaseModel):
     autoasignar: bool = True
     mecanico_asignado_id: Optional[int] = None
     mecanico_resolvio_id: Optional[int] = None
+    mecanico_id: Optional[int] = None
+    usuario_id: Optional[int] = None
     resuelto: bool = False
+
+    @property
+    def effective_resolutor_id(self) -> Optional[int]:
+        return self.mecanico_resolvio_id or self.mecanico_id or self.usuario_id
+
+    @property
+    def effective_asignado_id(self) -> Optional[int]:
+        return self.mecanico_asignado_id or (self.mecanico_id if not self.resuelto else None)
 
 
 class ResolverFallaSupervisoraDTO(BaseModel):
     resuelto: bool = True
     mecanico_id: Optional[int] = None
+    mecanico_resolvio_id: Optional[int] = None
+    usuario_id: Optional[int] = None
     comentario: Optional[str] = None
+
+    @property
+    def effective_mecanico_id(self) -> Optional[int]:
+        return self.mecanico_id or self.mecanico_resolvio_id or self.usuario_id
 
 
 class SolicitudDetalleDTO(BaseModel):

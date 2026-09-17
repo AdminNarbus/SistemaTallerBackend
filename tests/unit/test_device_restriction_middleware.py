@@ -94,6 +94,9 @@ async def test_middleware_mobile_only_allows_mobile_devices(app_with_restriction
 async def test_middleware_origin_check(app_with_restriction, monkeypatch):
     """Verifica el control estricto de origen web autorizado con ENFORCE_ORIGIN_CHECK=True (AAA)."""
     # Arrange
+    from app.core.config import AppEnvironment
+    monkeypatch.setattr(settings, "ENVIRONMENT", AppEnvironment.PRODUCTION)
+    monkeypatch.setattr(settings, "CORS_ORIGIN_REGEX", None)
     monkeypatch.setattr(settings, "ENFORCE_MOBILE_ONLY", False)
     monkeypatch.setattr(settings, "ENFORCE_ORIGIN_CHECK", True)
     monkeypatch.setattr(settings, "BACKEND_CORS_ORIGINS", ["https://mitaller.narbus.cl", "http://localhost:5173"])

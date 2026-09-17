@@ -74,7 +74,11 @@ class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
                     _extraer_origen_base(str(orig))
                     for orig in settings.BACKEND_CORS_ORIGINS
                 }
-                if origin_base not in allowed_origins:
+                match_regex = False
+                if settings.effective_cors_origin_regex:
+                    match_regex = bool(re.match(settings.effective_cors_origin_regex, origin_base))
+
+                if origin_base not in allowed_origins and not match_regex:
                     logger.warning(
                         "[SECURITY] Origen web denegado: '%s' no está en orígenes autorizados %s",
                         origin_base,

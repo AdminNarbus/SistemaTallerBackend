@@ -60,6 +60,7 @@ class Settings(BaseSettings):
 
     # CORS Settings
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
+        "https://sistematallerfront-100590754321.southamerica-east1.run.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -133,7 +134,8 @@ class Settings(BaseSettings):
             return self.CORS_ORIGIN_REGEX
         if self.ENVIRONMENT in (AppEnvironment.DEV_LAN, AppEnvironment.DEV_LOCAL):
             return r"^(https?://.*|http://.*|capacitor://.*)$"
-        return None
+        # En producción permite por defecto cualquier frontend alojado en Cloud Run o Firebase
+        return r"^(https://.*\.run\.app|https://.*\.web\.app|https://.*\.firebaseapp\.com)$"
 
 
     @property

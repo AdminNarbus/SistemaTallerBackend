@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 77,
+  "id": "AV-0077",
+  "timestamp": "2026-09-17T18:45:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SEC-CORS-CLOUDRUN",
+    "name": "Autorización CORS para Frontend en Google Cloud Run",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Solución al bloqueo de CORS para el frontend productivo alojado en Cloud Run: 1) Incorporación explícita del dominio https://sistematallerfront-100590754321.southamerica-east1.run.app en BACKEND_CORS_ORIGINS en app/core/config.py; 2) Configuración de regex automático en effective_cors_origin_regex para autorizar subdominios de Cloud Run (*.run.app) y Firebase (*.web.app, *.firebaseapp.com) en entornos productivos; 3) Soporte de validación de orígenes por regex en DeviceRestrictionMiddleware; 4) 100% de pruebas aprobadas en la suite completa.",
+  "scope": {
+    "planned": [
+      "Agregar el origen https://sistematallerfront-100590754321.southamerica-east1.run.app a BACKEND_CORS_ORIGINS",
+      "Permitir dominios *.run.app en effective_cors_origin_regex",
+      "Soportar regex en la verificación de DeviceRestrictionMiddleware",
+      "Verificar con pruebas unitarias"
+    ],
+    "completed": [
+      "Agregar el origen https://sistematallerfront-100590754321.southamerica-east1.run.app a BACKEND_CORS_ORIGINS",
+      "Permitir dominios *.run.app en effective_cors_origin_regex",
+      "Soportar regex en la verificación de DeviceRestrictionMiddleware",
+      "Verificar con pruebas unitarias"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Añadido https://sistematallerfront-100590754321.southamerica-east1.run.app a orígenes CORS y regex para *.run.app en producción."
+    },
+    {
+      "path": "app/core/middleware/device_restriction.py",
+      "action": "modified",
+      "summary": "Validación de regex de origen en DeviceRestrictionMiddleware."
+    },
+    {
+      "path": "tests/unit/test_device_restriction_middleware.py",
+      "action": "modified",
+      "summary": "Pruebas de origen actualizadas para validar aislamiento de entornos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Inclusión de origen explícito y comodín regex de Cloud Run",
+      "rationale": "El frontend desplegado en Google Cloud Run generaba un error de CORS porque su URL no figuraba en la lista de orígenes permitidos por el backend. Se añadió tanto el dominio exacto como la regla comodín para garantizar conectividad en cualquier despliegue de Cloud Run.",
+      "consequences": "El navegador web en el frontend puede comunicarse inmediatamente con el backend sin bloqueos de CORS."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_device_restriction_middleware.py",
+      "result": "passed",
+      "evidence": "6 passed in 0.08s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Hacer git commit y push a develop y main para que Cloud Run se actualice.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "cdea772",
+    "dirty": false
+  },
+  "notes": [
+    "CORS plenamente operativo para el frontend de Cloud Run."
+  ]
+}

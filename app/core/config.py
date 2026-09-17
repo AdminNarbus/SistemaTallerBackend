@@ -63,7 +63,6 @@ class Settings(BaseSettings):
 
     # CORS Settings (leídas desde BACKEND_CORS_ORIGINS en .env o variables de entorno)
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
-        "https://sistematallerfront-100590754321.southamerica-east1.run.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",

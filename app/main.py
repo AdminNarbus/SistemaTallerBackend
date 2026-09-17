@@ -22,6 +22,7 @@ from app.core.exceptions import (
 )
 from app.core.logging_config import setup_logging
 from app.core.seed import seed_initial_data
+from app.core.middleware.device_restriction import DeviceRestrictionMiddleware
 
 # ─── Inicialización del logging (debe ejecutarse antes del lifespan) ─────────
 setup_logging(environment=settings.ENVIRONMENT.value)
@@ -124,6 +125,8 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Total-Count"],
 )
+
+app.add_middleware(DeviceRestrictionMiddleware)
 
 
 @app.middleware("http")

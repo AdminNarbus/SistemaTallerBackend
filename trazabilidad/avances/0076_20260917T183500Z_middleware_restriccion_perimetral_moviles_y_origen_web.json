@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 76,
+  "id": "AV-0076",
+  "timestamp": "2026-09-17T18:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SEC-PERIMETRO-DISPOSITIVOS",
+    "name": "Restricción Perimetral de Acceso a Dispositivos Móviles y Origen Web Autorizado",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de arquitectura y middleware de seguridad perimetral para restringir el acceso a la API exclusivamente a dispositivos móviles (celulares/tablets) y al dominio web autorizado de la organización: 1) Creación de DeviceRestrictionMiddleware en app/core/middleware/device_restriction.py con regex de alta velocidad para detección de User-Agents móviles (Android, iOS, etc.), validación de Origin/Referer contra BACKEND_CORS_ORIGINS y soporte de clave secreta cliente (X-App-Client-Key); 2) Configuración de flags en app/core/config.py: ENFORCE_MOBILE_ONLY, ENFORCE_ORIGIN_CHECK y APP_CLIENT_SECRET; 3) Incorporación de variables configurables en .env; 4) Registro del middleware en la aplicación FastAPI en app/main.py manteniendo exenciones en rutas de salud (/health), documentación y preflight CORS (OPTIONS); 5) Cobertura completa de pruebas unitarias en tests/unit/test_device_restriction_middleware.py alcanzando 178/178 pruebas aprobadas (100%).",
+  "scope": {
+    "planned": [
+      "Implementar DeviceRestrictionMiddleware para validación de User-Agent móvil y Origin web",
+      "Agregar variables de configuración ENFORCE_MOBILE_ONLY, ENFORCE_ORIGIN_CHECK y APP_CLIENT_SECRET",
+      "Integrar middleware en app/main.py preservando CORS y rutas de salud",
+      "Crear suite de pruebas unitarias y verificar cobertura total de la aplicación"
+    ],
+    "completed": [
+      "Implementar DeviceRestrictionMiddleware para validación de User-Agent móvil y Origin web",
+      "Agregar variables de configuración ENFORCE_MOBILE_ONLY, ENFORCE_ORIGIN_CHECK y APP_CLIENT_SECRET",
+      "Integrar middleware en app/main.py preservando CORS y rutas de salud",
+      "Crear suite de pruebas unitarias y verificar cobertura total de la aplicación"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de reglas de firewall a nivel de red o balanceador (manejado en capa de infraestructura Cloud Run / CDN)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/middleware/device_restriction.py",
+      "action": "created",
+      "summary": "Middleware perimetral que valida User-Agent móvil, cabeceras Origin/Referer y cabecera de confianza X-App-Client-Key."
+    },
+    {
+      "path": "app/core/middleware/__init__.py",
+      "action": "created",
+      "summary": "Exportación del paquete de middlewares del core."
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Incorporación de ENFORCE_MOBILE_ONLY, ENFORCE_ORIGIN_CHECK y APP_CLIENT_SECRET en la configuración Settings."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Registro de DeviceRestrictionMiddleware en el pipeline ASGI de FastAPI."
+    },
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Añadidas variables de control perimetral documentadas para activación en entornos productivos."
+    },
+    {
+      "path": "tests/unit/test_device_restriction_middleware.py",
+      "action": "created",
+      "summary": "6 pruebas unitarias bajo patrón AAA verificando passthrough, bloqueo de escritorio, aceptación de Android/iPhone, verificación de origen y bypass por clave de cliente."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Middleware configurable mediante flags con bypass de salud y OPTIONS",
+      "rationale": "Para evitar disrupción en entornos de desarrollo local, pipelines CI/CD y verificaciones de liveness de Cloud Run, el middleware opera condicionado a ENFORCE_MOBILE_ONLY y ENFORCE_ORIGIN_CHECK, eximiendo siempre preflight CORS y /health.",
+      "consequences": "Permite habilitar la restricción en producción mediante variables de entorno sin modificar una sola línea de código fuente."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Cabecera de confianza X-App-Client-Key opcional",
+      "rationale": "Permite a aplicaciones móviles nativas o PWAs autorizadas autenticar su origen de cliente de forma precompartida, evitando falsos positivos de inspección de User-Agent.",
+      "consequences": "Mayor resiliencia y flexibilidad operacional para futuras aplicaciones del taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_device_restriction_middleware.py",
+      "result": "passed",
+      "evidence": "6 passed in 0.07s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe",
+      "result": "passed",
+      "evidence": "178 passed, 1 warning in 62.99s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Sincronizar cambios en rama develop.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "e87b2aa",
+    "dirty": false
+  },
+  "notes": [
+    "La restricción se activa cambiando ENFORCE_MOBILE_ONLY=true y ENFORCE_ORIGIN_CHECK=true en el archivo de variables de entorno."
+  ]
+}

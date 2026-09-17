@@ -69,6 +69,11 @@ class Settings(BaseSettings):
 
     CORS_ORIGIN_REGEX: Optional[str] = None
 
+    # Restricción perimetral: Solo móviles y origen web autorizado
+    ENFORCE_MOBILE_ONLY: bool = False
+    ENFORCE_ORIGIN_CHECK: bool = False
+    APP_CLIENT_SECRET: Optional[str] = None  # Header opcional X-App-Client-Key para bypass o clientes de confianza
+
     # Supervisión: Umbrales de permanencia y alertas operacionales (horas configurables)
     # BAJA: 2-4 días | MEDIA: 5-8 días | ALTA: 9-12 días | CRITICA: 13+ días
     SUPERVISION_UMBRAL_TALLER_HORAS_BAJA: int = 48     # 2 días en taller

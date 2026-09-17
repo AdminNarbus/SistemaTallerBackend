@@ -72,7 +72,7 @@ class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
                 origin_base = _extraer_origen_base(origin_header)
                 allowed_origins = {
                     _extraer_origen_base(str(orig))
-                    for orig in settings.BACKEND_CORS_ORIGINS
+                    for orig in settings.effective_cors_origins
                 }
                 match_regex = False
                 if settings.effective_cors_origin_regex:

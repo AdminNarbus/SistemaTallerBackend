@@ -58,7 +58,10 @@ class Settings(BaseSettings):
     GCS_SERVICE_ACCOUNT_EMAIL: Optional[str] = None  # Service account email para firma de blobs con ADC
     MAX_UPLOAD_SIZE_BYTES: int = DEFAULT_MAX_UPLOAD_SIZE_BYTES
 
-    # CORS Settings
+    # URL directa del Frontend (leída desde .env o variable de entorno de Cloud Run)
+    FRONTEND_URL: Optional[str] = None
+
+    # CORS Settings (leídas desde BACKEND_CORS_ORIGINS en .env o variables de entorno)
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
         "https://sistematallerfront-100590754321.southamerica-east1.run.app",
         "http://localhost:5173",
@@ -127,6 +130,15 @@ class Settings(BaseSettings):
     @property
     def is_reload_enabled(self) -> bool:
         return self.ENVIRONMENT != AppEnvironment.PRODUCTION
+
+    @property
+    def effective_cors_origins(self) -> List[str]:
+        origins = list(self.BACKEND_CORS_ORIGINS) if isinstance(self.BACKEND_CORS_ORIGINS, (list, tuple, set)) else [self.BACKEND_CORS_ORIGINS]
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip():
+            clean_url = self.FRONTEND_URL.strip().rstrip("/")
+            if clean_url not in origins:
+                origins.insert(0, clean_url)
+        return origins
 
     @property
     def effective_cors_origin_regex(self) -> Optional[str]:

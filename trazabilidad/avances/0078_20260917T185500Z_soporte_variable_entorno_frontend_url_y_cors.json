@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 78,
+  "id": "AV-0078",
+  "timestamp": "2026-09-17T18:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CFG-ENV-FRONTEND-URL",
+    "name": "Soporte Nativo de Variables de Entorno FRONTEND_URL y CORS Dinámico",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del desacoplamiento total de URLs del frontend en el código fuente mediante variables de entorno: 1) Creación del parámetro FRONTEND_URL en app/core/config.py para lectura directa desde .env o variables de entorno de Cloud Run; 2) Propiedad calculada effective_cors_origins en Settings que unifica dinámicamente FRONTEND_URL y BACKEND_CORS_ORIGINS; 3) Actualización de CORSMiddleware en app/main.py y DeviceRestrictionMiddleware para consumir effective_cors_origins; 4) Documentación de variables en .env para fácil configuración en cualquier despliegue.",
+  "scope": {
+    "planned": [
+      "Agregar campo FRONTEND_URL a Settings en config.py",
+      "Crear propiedad effective_cors_origins que priorice la variable de entorno",
+      "Actualizar main.py y device_restriction.py para usar effective_cors_origins",
+      "Actualizar archivo .env con FRONTEND_URL y BACKEND_CORS_ORIGINS"
+    ],
+    "completed": [
+      "Agregar campo FRONTEND_URL a Settings en config.py",
+      "Crear propiedad effective_cors_origins que priorice la variable de entorno",
+      "Actualizar main.py y device_restriction.py para usar effective_cors_origins",
+      "Actualizar archivo .env con FRONTEND_URL y BACKEND_CORS_ORIGINS"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Añadido FRONTEND_URL y propiedad effective_cors_origins para lectura transparente de variables de entorno."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Uso de settings.effective_cors_origins en CORSMiddleware."
+    },
+    {
+      "path": "app/core/middleware/device_restriction.py",
+      "action": "modified",
+      "summary": "Uso de settings.effective_cors_origins en la validación de DeviceRestrictionMiddleware."
+    },
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Inclusión de FRONTEND_URL y orígenes CORS organizados."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Variable de entorno FRONTEND_URL con precedencia sobre valores por defecto",
+      "rationale": "Permite configurar el frontend con una simple variable de entorno (ej. FRONTEND_URL=https://...) en Cloud Run o .env sin necesidad de editar código fuente en config.py.",
+      "consequences": "Cumplimiento estricto con los principios Twelve-Factor App de configuración desacoplada del código."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\python.exe -c \"from app.core.config import settings; print(settings.FRONTEND_URL, settings.effective_cors_origins)\"",
+      "result": "passed",
+      "evidence": "Inyección exitosa de la URL en la lista de orígenes CORS."
+    },
+    {
+      "command": "venv\\Scripts\\pytest.exe tests/unit/test_device_restriction_middleware.py",
+      "result": "passed",
+      "evidence": "6 passed in 0.07s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Hacer git commit y push a develop y main.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "8088f49",
+    "dirty": false
+  },
+  "notes": [
+    "CORS ahora se puede configurar tanto por FRONTEND_URL como por BACKEND_CORS_ORIGINS."
+  ]
+}

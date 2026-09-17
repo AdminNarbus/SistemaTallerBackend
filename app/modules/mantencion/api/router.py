@@ -432,16 +432,18 @@ async def check_detalle(
     id: int,
     detalle_id: int,
     resuelto: bool = Query(..., description="True para marcar resuelto, False para desmarcar"),
-    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
+    mecanico_id: Optional[int] = Query(None, description="ID del mecánico resolutor (opcional para supervisora o administrador)"),
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Marca o desmarca un check de falla resuelta guardando el timestamp y el ID del mecánico."""
     logger.info(
-        "[MANTENCION] Check falla en solicitud_id=%s | detalle_id=%s | resuelto=%s | mecanico_id=%s",
+        "[MANTENCION] Check falla en solicitud_id=%s | detalle_id=%s | resuelto=%s | actor_id=%s | mecanico_id=%s",
         id,
         detalle_id,
         resuelto,
         current_user.id,
+        mecanico_id,
     )
     return await mantencion_service.check_detalle(
         db,
@@ -450,6 +452,7 @@ async def check_detalle(
         mecanico_id=current_user.id,
         resuelto=resuelto,
         mecanico_nombre=current_user.nombre_completo,
+        mecanico_resolvio_id=mecanico_id,
     )
 
 

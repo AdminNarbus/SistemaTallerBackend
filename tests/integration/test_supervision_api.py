@@ -215,3 +215,174 @@ async def test_supervision_auditoria_campos_operacionales(client, auth_headers_s
         assert "fecha_liberacion" in sol
 
 
+@pytest.mark.asyncio
+async def test_supervision_agregar_falla_y_detalle_ot(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    """Prueba que la supervisora pueda agregar una avería y consultar el detalle completo de la OT."""
+    falla_frenos = seed_test_data["falla2"]
+
+    # 1. Crear OT por conductor
+    sol_payload = {
+        "n_bus": "BUS-SUP-FALLAS",
+        "descripcion_general": "Revisión técnica supervisada",
+    }
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    assert create_res.status_code == 201
+    sol_id = create_res.json()["id"]
+
+    # 2. Supervisora consulta detalle de la OT directamente vía /supervision/solicitudes/{id}
+    res_detalle = await client.get(f"/api/v1/supervision/solicitudes/{sol_id}", headers=auth_headers_supervisor)
+    assert res_detalle.status_code == 200
+    assert res_detalle.json()["id"] == sol_id
+
+    # 3. Conductor intenta agregar falla desde supervisión -> 403 Forbidden
+    res_forbidden = await client.post(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles",
+        json={"categoria_id": falla_frenos.categoria_id, "descripcion_personalizada": "Intento indebido"},
+        headers=auth_headers_conductor,
+    )
+    assert res_forbidden.status_code == 403
+
+    # 4. Supervisora agrega falla pendiente
+    res_agrega = await client.post(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles",
+        json={
+            "categoria_id": falla_frenos.categoria_id,
+            "descripcion_personalizada": "Rotor deformado detectado por supervisora",
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_agrega.status_code == 201
+    sol_actualizada = res_agrega.json()
+    assert len(sol_actualizada["detalles"]) == 1
+    det = sol_actualizada["detalles"][0]
+    assert det["resuelto"] is False
+    assert det["mecanico_resolvio_id"] is None
+    assert "Rotor deformado" in det["descripcion_personalizada"]
+
+    # Verificar que en la bitácora conste el registro de la supervisora
+    comentarios = sol_actualizada["comentarios"]
+    assert any("Supervisora" in c["comentario"] and "Rotor deformado" in c["comentario"] for c in comentarios)
+
+
+@pytest.mark.asyncio
+async def test_supervision_agregar_falla_resuelta_con_mecanico(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    """Prueba que la supervisora pueda agregar una avería marcándola directamente como resuelta por un mecánico."""
+    mecanico1 = seed_test_data["mecanico1"]
+    falla_frenos = seed_test_data["falla2"]
+
+    sol_payload = {
+        "n_bus": "BUS-SUP-RESUELTA",
+        "descripcion_general": "Inspección de egreso",
+    }
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    assert create_res.status_code == 201
+    sol_id = create_res.json()["id"]
+
+    # Supervisora agrega falla que ya fue solucionada por mecanico1
+    res_agrega = await client.post(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles",
+        json={
+            "categoria_id": falla_frenos.categoria_id,
+            "descripcion_personalizada": "Ajuste de freno de estacionamiento",
+            "resuelto": True,
+            "mecanico_resolvio_id": mecanico1.id,
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_agrega.status_code == 201
+    data = res_agrega.json()
+    assert len(data["detalles"]) == 1
+    det = data["detalles"][0]
+    assert det["resuelto"] is True
+    assert det["mecanico_resolvio_id"] == mecanico1.id
+
+
+@pytest.mark.asyncio
+async def test_supervision_resolver_falla_indicando_mecanico_flujo(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    """Prueba completa para que la supervisora indique qué mecánico arregló una falla existente o la reabra."""
+    mecanico1 = seed_test_data["mecanico1"]
+    falla_frenos = seed_test_data["falla2"]
+
+    # 1. Crear solicitud con 1 falla pendiente
+    sol_payload = {
+        "n_bus": "BUS-SUP-CHECK",
+        "descripcion_general": "Falla pendiente para resolución",
+        "detalles": [
+            {
+                "categoria_id": falla_frenos.categoria_id,
+                "descripcion_personalizada": "Válvula de freno de mano trabada",
+            }
+        ],
+    }
+    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    assert create_res.status_code == 201
+    sol_data = create_res.json()
+    sol_id = sol_data["id"]
+    detalle_id = sol_data["detalles"][0]["id"]
+
+    # 2. Supervisora intenta resolver sin indicar mecanico_id -> 422 BusinessRuleException
+    res_sin_mec = await client.patch(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
+        json={"resuelto": True, "mecanico_id": None},
+        headers=auth_headers_supervisor,
+    )
+    assert res_sin_mec.status_code == 422
+    assert "Debe indicar el ID del mecánico" in res_sin_mec.json()["error"]["message"]
+
+    # 3. Supervisora resuelve la falla indicando qué mecánico la arregló
+    res_resolver = await client.patch(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
+        json={
+            "resuelto": True,
+            "mecanico_id": mecanico1.id,
+            "comentario": "Se lubricó el vástago y se calibró la presión",
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_resolver.status_code == 200
+    det_update = res_resolver.json()
+    assert det_update["resuelto"] is True
+    assert det_update["mecanico_resolvio_id"] == mecanico1.id
+    assert det_update["mecanico_resolvio_nombre"] == mecanico1.nombre_completo
+
+    # 4. Verificar que la OT refleje la resolución y el comentario en bitácora
+    res_ot = await client.get(f"/api/v1/supervision/solicitudes/{sol_id}", headers=auth_headers_supervisor)
+    assert res_ot.status_code == 200
+    ot_data = res_ot.json()
+    assert ot_data["detalles"][0]["resuelto"] is True
+    assert ot_data["detalles"][0]["mecanico_resolvio_id"] == mecanico1.id
+    # Bitácora contiene la autoría de la supervisora y el mecánico
+    comentarios = ot_data["comentarios"]
+    assert any("Supervisora" in c["comentario"] and mecanico1.nombre_completo in c["comentario"] for c in comentarios)
+
+    # 5. Supervisora reabre la avería si se requiere nueva revisión
+    res_reabrir = await client.patch(
+        f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
+        json={
+            "resuelto": False,
+            "comentario": "Persiste leve pérdida de aire en prueba de ruta",
+        },
+        headers=auth_headers_supervisor,
+    )
+    assert res_reabrir.status_code == 200
+    det_reabierto = res_reabrir.json()
+    assert det_reabierto["resuelto"] is False
+    assert det_reabierto["mecanico_resolvio_id"] is None
+
+    # 6. Probar endpoint de mantención /detalles/{id}/check invocado por supervisora con mecanico_id
+    res_mant_check = await client.patch(
+        f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check?resuelto=true&mecanico_id={mecanico1.id}",
+        headers=auth_headers_supervisor,
+    )
+    assert res_mant_check.status_code == 200
+    assert res_mant_check.json()["resuelto"] is True
+    assert res_mant_check.json()["mecanico_resolvio_id"] == mecanico1.id
+
+
+

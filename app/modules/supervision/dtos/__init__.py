@@ -1,3 +1,4 @@
+from app.modules.mantencion.dtos import AgregarFallaDTO, ResolverFallaSupervisoraDTO
 from app.modules.supervision.dtos.supervision_dto import (
     MetricasEstadoDTO,
     CategoriaFrecuenciaDTO,
@@ -12,4 +13,6 @@ __all__ = [
     "AlertaSupervisionDTO",
     "ResumenTallerDTO",
     "MecanicoCargaDTO",
+    "AgregarFallaDTO",
+    "ResolverFallaSupervisoraDTO",
 ]

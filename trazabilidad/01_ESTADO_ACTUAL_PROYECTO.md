@@ -139,6 +139,13 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Cabecera HTTP `X-Total-Count` Expuesta en CORS:** Inyección de `X-Total-Count` con el total de registros encontrados en endpoints paginados (`/usuarios`, `/mecanicos`, `/auditoria/buses-taller`, `/pendientes`, `/mis-trabajos`, `/buses`), configurada explícitamente en `CORSMiddleware` (`expose_headers=["X-Total-Count"]`) para permitir al frontend calcular páginas totales sin alterar la respuesta de listas JSON.
   - **Vista Especializada de Supervisión:** Nuevo endpoint `GET /api/v1/supervision/usuarios` protegido por rol (`SUPERVISOR`/`ADMIN`) con filtros por rol, búsqueda de texto `q`, estado activo `is_active` y paginación (`skip`, `limit=20`).
   - **100% de la Suite de Pruebas Aprobada:** 168 de 168 tests automatizados pasando exitosamente en 62.38s.
+- **Gestión de Fallas y Asignación de Resolutor por Supervisora en Detalle de OT (AV-0073):**
+  - **Adición Directa de Averías a OTs Existentes:** Endpoint `POST /api/v1/supervision/solicitudes/{id}/detalles` (y contraparte en mantención) para que la supervisora añada averías detectadas durante la atención, permitiendo dejarlas pendientes, asignarlas de inmediato a un mecánico (`mecanico_asignado_id`) o registrarlas ya resueltas (`resuelto=true`, `mecanico_resolvio_id`).
+  - **Resolución Explícita e Imputación de Mecánico Resolutor:** Endpoint `PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}/resolver` permitiendo a la supervisora marcar una falla como resuelta indicando qué mecánico la arregló (`mecanico_id`), o reabrirla (`resuelto=false`), con validaciones contra fallas con repuestos faltantes y registro en bitácora inmutable.
+  - **Consulta Unificada de Detalle de OT:** Endpoint `GET /api/v1/supervision/solicitudes/{id}` para inspección completa de órdenes en el módulo de supervisión.
+  - **Soporte Transversal en `check_detalle`:** Ampliado `PATCH /api/v1/mantencion/{id}/detalles/{detalle_id}/check` para admitir rol `SUPERVISOR` y query param opcional `mecanico_id`.
+  - **100% de la Suite de Pruebas Aprobada:** 171 de 171 tests automatizados pasando exitosamente en 63.47s.
+
 
 
 

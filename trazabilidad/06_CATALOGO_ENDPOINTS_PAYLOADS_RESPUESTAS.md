@@ -1,11 +1,11 @@
 # Catálogo Exhaustivo de Endpoints, Payloads y Respuestas: Backend Taller Narbus
 
 > **Documento Oficial de Especificación de Interfaz REST API**  
-> **Versión:** 2.4.0  
+> **Versión:** 2.5.0  
 > **Fecha de Actualización:** 2026-09-17  
 > **Proyecto:** Backend Taller Narbus (`FastAPI + SQLAlchemy Async + PostgreSQL`)  
 > **Base URL:** `http://localhost:8000/api/v1` (o `/api/v1` en producción)  
-> **Total de Endpoints:** 50 endpoints activos
+> **Total de Endpoints:** 53 endpoints activos
 
 ---
 
@@ -1133,5 +1133,77 @@ Para optimizar el rendimiento y la experiencia de usuario, todos los endpoints c
   }
 ]
 ```
+
+---
+
+### 7.8 `GET /api/v1/supervision/solicitudes/{id}`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Consulta directa y detallada de una orden de trabajo (OT) específica para el panel y modal de supervisión, incluyendo todas las averías registradas, mecánicos asignados, duraciones de turnos, pauta preventiva y bitácora completa.
+- **Parámetros Path:**
+  - `id` *(integer, obligatorio)*: ID de la orden de trabajo (`TallerSolicitud`).
+- **Payload:** Ninguno.
+- **Respuesta (`SolicitudDTO` - 200 OK):** Detalle completo de la solicitud.
+
+---
+
+### 7.9 `POST /api/v1/supervision/solicitudes/{id}/detalles`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Permite a la supervisora agregar una avería a una OT existente directamente desde la vista de detalle de la orden, con opción de dejarla pendiente, asignarla de inmediato a un mecánico o registrarla de una vez como resuelta.
+- **Parámetros Path:**
+  - `id` *(integer, obligatorio)*: ID de la orden de trabajo (`TallerSolicitud`).
+- **Payload (`AgregarFallaDTO` - `application/json`):**
+```json
+{
+  "categoria_id": 3,
+  "falla_id": null,
+  "descripcion_personalizada": "Rotor deformado y pastillas desgastadas",
+  "mecanico_asignado_id": 2,
+  "mecanico_resolvio_id": null,
+  "resuelto": false
+}
+```
+  - **Explicación de campos del Payload:**
+    - `categoria_id` *(integer, opcional)*: ID de la categoría del catálogo.
+    - `falla_id` *(integer, opcional)*: ID puntual de la avería si se selecciona del catálogo.
+    - `descripcion_personalizada` *(string, opcional)*: Glosa o detalle específico ingresado manualmente.
+    - `mecanico_asignado_id` *(integer, opcional)*: ID del mecánico al que se le asigna de inmediato la avería.
+    - `mecanico_resolvio_id` *(integer, opcional)*: ID del mecánico que ya solucionó la falla (si se registra como ya resuelta).
+    - `resuelto` *(boolean, opcional, default: false)*: Si es `true`, marca la avería resuelta de inmediato.
+- **Respuesta (`SolicitudDTO` - 201 Created):** Solicitud completa actualizada con la nueva avería y bitácora inmutable.
+
+---
+
+### 7.10 `PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}/resolver`
+- **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
+- **Propósito:** Permite a la supervisora marcar una falla específica como resuelta indicando explícitamente qué mecánico realizó la reparación (`mecanico_id`), o reabrirla (`resuelto=false`), registrando la auditoría completa en la bitácora inmutable.
+- **Parámetros Path:**
+  - `id` *(integer, obligatorio)*: ID de la solicitud.
+  - `detalle_id` *(integer, obligatorio)*: ID del detalle de falla (`TallerSolicitudDetalle`).
+- **Payload (`ResolverFallaSupervisoraDTO` - `application/json`):**
+```json
+{
+  "resuelto": true,
+  "mecanico_id": 2,
+  "comentario": "Se lubricó vástago y se calibró presión"
+}
+```
+  - **Explicación de campos del Payload:**
+    - `resuelto` *(boolean, obligatorio)*: `true` para marcar resuelta, `false` para reabrir.
+    - `mecanico_id` *(integer, obligatorio si resuelto=true)*: ID del mecánico que realizó la reparación.
+    - `comentario` *(string, opcional)*: Observación técnica complementaria para la bitácora.
+- **Respuesta (`DetalleUpdateDTO` - 200 OK):**
+```json
+{
+  "detalle_id": 15,
+  "solicitud_id": 42,
+  "resuelto": true,
+  "falta_repuesto": false,
+  "mecanico_resolvio_id": 2,
+  "mecanico_resolvio_nombre": "Juan Mecanico Perez",
+  "comentario_repuesto": null,
+  "fecha_resolucion": "2026-09-17T10:15:00"
+}
+```
+
 
 

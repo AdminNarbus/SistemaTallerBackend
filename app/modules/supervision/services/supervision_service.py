@@ -10,6 +10,9 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
+    AgregarFallaDTO,
+    ResolverFallaSupervisoraDTO,
+    DetalleUpdateDTO,
 )
 
 from app.modules.supervision.constants import (
@@ -151,6 +154,62 @@ class SupervisionService:
             supervisor_id=supervisor_id,
             supervisor_nombre=supervisor_nombre,
         )
+
+    async def agregar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        dto: AgregarFallaDTO,
+        supervisor_id: int,
+    ) -> SolicitudDTO:
+        """Permite a la supervisora agregar una avería a una OT existente."""
+        logger.info(
+            "[SUPERVISION_SERVICE] Supervisora %s agregando falla a solicitud_id=%s",
+            supervisor_id,
+            solicitud_id,
+        )
+        return await self.mantencion.agregar_falla(
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=supervisor_id,
+            dto=dto,
+        )
+
+    async def resolver_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        dto: ResolverFallaSupervisoraDTO,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> DetalleUpdateDTO:
+        """Permite a la supervisora marcar una falla como resuelta indicando qué mecánico la reparó (o reabrirla)."""
+        logger.info(
+            "[SUPERVISION_SERVICE] Supervisora %s resolviendo falla detalle_id=%s en solicitud_id=%s | resuelto=%s | mecanico_id=%s",
+            supervisor_id,
+            detalle_id,
+            solicitud_id,
+            dto.resuelto,
+            dto.mecanico_id,
+        )
+        return await self.mantencion.resolver_falla_supervisora(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            dto=dto,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
+    async def get_solicitud(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+    ) -> SolicitudDTO:
+        """Permite a la supervisora obtener el detalle completo de una OT."""
+        logger.info("[SUPERVISION_SERVICE] Consultando solicitud_id=%s", solicitud_id)
+        return await self.mantencion.get_solicitud(db, solicitud_id=solicitud_id)
 
 
 supervision_service = SupervisionService()

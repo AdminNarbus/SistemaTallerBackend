@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 73,
+  "id": "AV-0073",
+  "timestamp": "2026-09-17T13:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-73",
+    "name": "Gestión de Fallas y Asignación de Resolutor por Supervisora en Detalle de OT",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de endpoints y lógica de negocio para permitir a la supervisora añadir averías a una Orden de Trabajo (OT) existente y registrar explícitamente qué mecánico solucionó cada falla (o reabrirla) directamente desde la vista de detalle de la OT, con registro auditable en la bitácora inmutable.",
+  "scope": {
+    "planned": [
+      "Extender AgregarFallaDTO con soporte de mecanico_asignado_id, mecanico_resolvio_id y resuelto",
+      "Crear ResolverFallaSupervisoraDTO para resolución y reapertura de averías indicando mecánico resolutor",
+      "Implementar resolver_falla_supervisora y adaptar agregar_falla en MantencionService con bitácora inmutable",
+      "Añadir métodos agregar_falla, resolver_falla y get_solicitud en SupervisionService",
+      "Exponer POST /api/v1/supervision/solicitudes/{id}/detalles y PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}/resolver",
+      "Exponer GET /api/v1/supervision/solicitudes/{id} para consulta directa del detalle de la OT",
+      "Permitir rol SUPERVISOR y parámetro opcional mecanico_id en PATCH /api/v1/mantencion/{id}/detalles/{detalle_id}/check",
+      "Agregar suite de pruebas de integración en test_supervision_api.py (10/10 pasando, 171 tests globales verdes)"
+    ],
+    "completed": [
+      "Extender AgregarFallaDTO con soporte de mecanico_asignado_id, mecanico_resolvio_id y resuelto",
+      "Crear ResolverFallaSupervisoraDTO para resolución y reapertura de averías indicando mecánico resolutor",
+      "Implementar resolver_falla_supervisora y adaptar agregar_falla en MantencionService con bitácora inmutable",
+      "Añadir métodos agregar_falla, resolver_falla y get_solicitud en SupervisionService",
+      "Exponer POST /api/v1/supervision/solicitudes/{id}/detalles y PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}/resolver",
+      "Exponer GET /api/v1/supervision/solicitudes/{id} para consulta directa del detalle de la OT",
+      "Permitir rol SUPERVISOR y parámetro opcional mecanico_id en PATCH /api/v1/mantencion/{id}/detalles/{detalle_id}/check",
+      "Agregar suite de pruebas de integración en test_supervision_api.py (10/10 pasando, 171 tests globales verdes)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Vistas visuales en repositorio de frontend (ProtoNeumaticos)",
+      "Modificaciones de estructura relacional DDL (el modelo ya contenía mecanico_resolvio_id)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Ampliación de AgregarFallaDTO con mecanico_asignado_id, mecanico_resolvio_id, resuelto y creación de ResolverFallaSupervisoraDTO"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de ResolverFallaSupervisoraDTO"
+    },
+    {
+      "path": "app/modules/supervision/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Reexportación de AgregarFallaDTO y ResolverFallaSupervisoraDTO en módulo de supervisión"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Soporte de supervisión en agregar_falla, soporte de mecanico_resolvio_id en check_detalle y creación de resolver_falla_supervisora con bitácora inmutable"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Métodos agregar_falla, resolver_falla y get_solicitud delegando a mantencion_service"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Endpoints GET /solicitudes/{id}, POST /solicitudes/{id}/detalles y PATCH /solicitudes/{id}/detalles/{detalle_id}/resolver"
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Ampliación de check_detalle para admitir rol SUPERVISOR y query parameter opcional mecanico_id"
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Pruebas de integración para agregar fallas, resolver indicando mecánico, validaciones 422 y reaperturas"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Resolución y adición atómica de averías desde el detalle de la OT sin depender del formulario de creación",
+      "rationale": "La supervisora requería registrar fallas adicionales detectadas durante los trabajos en taller e imputar qué mecánico realizó la reparación de manera directa en el detalle de la OT.",
+      "consequences": "Total versatilidad operativa para la supervisora, permitiendo corregir omisiones o registrar trabajos completados sin forzar al chofer a crear nuevas solicitudes."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Trazabilidad dual en bitácora inmutable (Supervisora como autora del registro + Mecánico como ejecutor técnico)",
+      "rationale": "Para fines de auditoría y calidad, es fundamental distinguir quién registró la acción en el sistema (la supervisora) de quién ejecutó físicamente la reparación (el mecánico).",
+      "consequences": "Transparencia absoluta en la bitácora de la OT con comentarios tipo RESOLUCION y REAPERTURA que identifican a ambas partes."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Retorno atómico DetalleUpdateDTO en resolución y SolicitudDTO en adición",
+      "rationale": "Resolver una falla retorna DetalleUpdateDTO construido en memoria (0 RTTs post-commit) optimizando la actualización en vivo de la fila en la tabla del frontend, mientras que añadir una falla retorna SolicitudDTO con el nuevo conteo y estado consolidado.",
+      "consequences": "Alto rendimiento y mínima carga en red, alineado con las optimizaciones de Nivel 3 del backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_supervision_api.py",
+      "result": "passed",
+      "evidence": "10 passed in 4.11s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py",
+      "result": "passed",
+      "evidence": "11 passed in 4.42s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "171 passed, 1 warning in 63.47s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir los endpoints POST /supervision/solicitudes/{id}/detalles y PATCH /supervision/solicitudes/{id}/detalles/{detalle_id}/resolver en el componente de detalle de OT del frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "51a4ad5",
+    "dirty": true
+  },
+  "notes": [
+    "No se requieren nuevas migraciones de base de datos dado que taller_solicitud_detalles ya contaba con la columna mecanico_resolvio_id indexada.",
+    "El endpoint PATCH /mantencion/{id}/detalles/{detalle_id}/check mantiene total retrocompatibilidad con los mecánicos mientras ahora admite a la supervisora con mecanico_id."
+  ]
+}

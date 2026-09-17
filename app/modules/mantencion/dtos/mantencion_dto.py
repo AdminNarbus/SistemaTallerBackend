@@ -71,6 +71,15 @@ class AgregarFallaDTO(BaseModel):
     falla_id: Optional[int] = None
     descripcion_personalizada: Optional[str] = None
     autoasignar: bool = True
+    mecanico_asignado_id: Optional[int] = None
+    mecanico_resolvio_id: Optional[int] = None
+    resuelto: bool = False
+
+
+class ResolverFallaSupervisoraDTO(BaseModel):
+    resuelto: bool = True
+    mecanico_id: Optional[int] = None
+    comentario: Optional[str] = None
 
 
 class SolicitudDetalleDTO(BaseModel):

@@ -12,6 +12,9 @@ from app.modules.mantencion.dtos.mantencion_dto import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
+    AgregarFallaDTO,
+    ResolverFallaSupervisoraDTO,
+    DetalleUpdateDTO,
 )
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
@@ -239,6 +242,84 @@ async def dar_de_baja_bus_supervision(
     )
     return await bus_service.dar_de_baja_bus(
         db, bus_id=bus_id, dto=payload, usuario_id=current_user.id
+    )
+
+
+@router.get(
+    "/solicitudes/{id}",
+    response_model=SolicitudDTO,
+    summary="Detalle completo de una OT para Supervisión",
+    description="Permite a la supervisora consultar la totalidad de la información de una orden de trabajo (averías, mecánicos asignados, evidencias, bitácora).",
+)
+async def get_solicitud_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    """Obtiene el detalle completo de una solicitud por su ID desde el panel de supervisión."""
+    logger.info("[SUPERVISION] Consulta detalle solicitud_id=%s | supervisor_id=%s", id, current_user.id)
+    return await supervision_service.get_solicitud(db, solicitud_id=id)
+
+
+@router.post(
+    "/solicitudes/{id}/detalles",
+    response_model=SolicitudDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Añadir falla a una OT desde el panel de supervisión",
+    description="Permite a la supervisora agregar una avería a una OT existente, con opción de dejarla pendiente, asignarla de inmediato a un mecánico o registrarla como ya resuelta.",
+)
+async def agregar_falla_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    dto: AgregarFallaDTO = Body(...),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    """Añade una avería a la orden de trabajo directamente desde la vista de detalle de la OT."""
+    logger.info(
+        "[SUPERVISION] Supervisora %s agregando falla a solicitud_id=%s | falla_id=%s | resuelto=%s | mecanico_resolvio_id=%s",
+        current_user.id,
+        id,
+        dto.falla_id,
+        dto.resuelto,
+        dto.mecanico_resolvio_id,
+    )
+    return await supervision_service.agregar_falla(
+        db,
+        solicitud_id=id,
+        dto=dto,
+        supervisor_id=current_user.id,
+    )
+
+
+@router.patch(
+    "/solicitudes/{id}/detalles/{detalle_id}/resolver",
+    response_model=DetalleUpdateDTO,
+    summary="Registrar resolución de avería indicando qué mecánico la reparó",
+    description="Permite a la supervisora marcar una falla como resuelta especificando explícitamente el mecánico que la arregló, o reabrirla, registrando el evento en la bitácora inmutable.",
+)
+async def resolver_falla_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    detalle_id: int = Path(..., description="ID numérico del detalle de falla", ge=1),
+    dto: ResolverFallaSupervisoraDTO = Body(...),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> DetalleUpdateDTO:
+    """Registra qué mecánico arregló una falla puntual desde la vista de detalle de la OT."""
+    logger.info(
+        "[SUPERVISION] Supervisora %s registrando resolución de falla detalle_id=%s en solicitud_id=%s | resuelto=%s | mecanico_id=%s",
+        current_user.id,
+        detalle_id,
+        id,
+        dto.resuelto,
+        dto.mecanico_id,
+    )
+    return await supervision_service.resolver_falla(
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        dto=dto,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
     )
 
 

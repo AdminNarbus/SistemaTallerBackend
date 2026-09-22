@@ -22,7 +22,12 @@ from app.modules.supervision.constants import (
     MAX_PAGE_LIMIT,
     ESTADOS_VALIDOS_AUDITORIA,
 )
-from app.modules.supervision.dtos import ResumenTallerDTO, AlertaSupervisionDTO, MecanicoCargaDTO
+from app.modules.supervision.dtos import (
+    ResumenTallerDTO,
+    AlertaSupervisionDTO,
+    MecanicoCargaDTO,
+    SolicitudAuditoriaDTO,
+)
 from app.modules.supervision.services import supervision_service
 
 
@@ -95,7 +100,7 @@ async def listar_usuarios_supervision(
     )
 
 
-@router.get("/auditoria/buses-taller", response_model=List[SolicitudDTO])
+@router.get("/auditoria/buses-taller", response_model=List[SolicitudAuditoriaDTO])
 async def get_auditoria_buses_taller(
     response: Response,
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),

@@ -134,7 +134,21 @@ async def test_flujo_completo_taller_e2e(
     assert target_auditoria is not None
     assert target_auditoria["n_bus"] == "BUS-808"
     assert target_auditoria["estado"] == "FINALIZADO"
-    # Verificar que el historial inmutable registre los comentarios y asignaciones
-    assert len(target_auditoria["comentarios"]) >= 4
-    assert len(target_auditoria["historial_mecanicos"]) >= 3
+    # La lista de auditoría omite deliberadamente colecciones pesadas e IDs secundarios para optimizar las tarjetas:
+    assert "comentarios" not in target_auditoria
+    assert "pauta_respuestas" not in target_auditoria
+    assert "bus_patente" not in target_auditoria
+    assert "bus_id" not in target_auditoria
+    assert "descripcion_general" not in target_auditoria
+    assert "foto_url" not in target_auditoria
     assert len(target_auditoria["mecanicos"]) == 2
+    assert target_auditoria["mecanicos"][0]["mecanico_nombre"] is not None
+    assert "mecanico_id" not in target_auditoria["mecanicos"][0]
+
+    # Para auditoría profunda y bitácora completa de comentarios, se consulta el detalle de la solicitud:
+    res_detalle = await client.get(f"/api/v1/mantencion/{sol_id}", headers=auth_headers_supervisor)
+    assert res_detalle.status_code == 200
+    detalle = res_detalle.json()
+    assert len(detalle["comentarios"]) >= 4
+    assert len(detalle["historial_mecanicos"]) >= 3
+

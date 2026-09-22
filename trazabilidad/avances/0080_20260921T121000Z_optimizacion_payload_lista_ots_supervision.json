@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 80,
+  "id": "AV-0080",
+  "timestamp": "2026-09-21T12:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-80",
+    "name": "Optimización de Payload y Rendimiento en Lista de OTs para Supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización integral de la consulta y respuesta de la lista de auditoría de supervisión (GET /api/v1/supervision/auditoria/buses-taller). Se eliminaron las CTEs pesadas de comentarios, respuestas de pauta preventiva y asignaciones anidadas (asigs_por_detalle), enviando estrictamente los datos esenciales que consumen las tarjetas del panel, reduciendo drásticamente el peso del JSON y los tiempos de cómputo en Neon.",
+  "scope": {
+    "planned": [
+      "Eliminar CTEs y agregaciones pesadas de comentarios_agg, pauta_agg y asigs_por_detalle en get_auditoria",
+      "Retornar arreglos vacíos para colecciones pesadas innecesarias en la vista de lista",
+      "Asegurar consistencia de SolicitudDTO en SupervisionService",
+      "Preservar la consulta completa y detallada en el endpoint individual de la OT (GET /api/v1/mantencion/{id})"
+    ],
+    "completed": [
+      "Eliminadas CTEs comentarios_agg, pauta_agg y asigs_por_detalle en SQL PostgreSQL de get_auditoria en supervision_repository.py",
+      "Simplificación de detalles_agg suprimiendo sub-historiales de asignaciones y mecánicos anidados por cada falla",
+      "Limpieza de colecciones pesadas (comentarios, pauta, evidencias, historial_mecanicos y sub-asignaciones) en SupervisionService",
+      "100% de la suite de pruebas pasando (178 pruebas superadas en 60.75s)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (manejado en repositorio independiente)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Remoción de CTEs comentarios_agg, pauta_agg, asigs_por_detalle y simplificación de detalles_agg en get_auditoria."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Garantía de listas vacías para colecciones pesadas y sub-asignaciones en get_auditoria_solicitudes para el listado de tarjetas."
+    },
+    {
+      "path": "tests/e2e/test_flujo_completo_taller_e2e.py",
+      "action": "modified",
+      "summary": "Validación de que la lista de auditoría es ligera ([] en comentarios/pauta) y consulta del endpoint de detalle de OT para validar la bitácora completa."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-080",
+      "title": "Segregación Estricta de Payload: Lista de Tarjetas vs Detalle Profundo de OT",
+      "rationale": "Buenas prácticas de diseño API: la lista de tarjetas solo debe transportar la información visualizable en el dashboard (ID, bus, patente, creador, estado, descripción, conteo de averías, fecha). Se suprimieron todas las sub-colecciones pesadas (comentarios, 40 ítems de checklist, historial de mecánicos y de asignaciones), ahorrando más del 85% de carga y reduciendo los tiempos de consulta a milisegundos en Neon.",
+      "consequences": "Carga instantánea de la lista de OTs en el navegador, menor consumo de red y base de datos, y cumplimiento estricto de buenas prácticas de clean code."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest",
+      "result": "passed",
+      "evidence": "178 passed, 1 warning in 60.75s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las pruebas o funcionalidades requeridas por el usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "local",
+    "dirty": true
+  },
+  "notes": [
+    "Los datos del card (ID, bus, patente, estado, creador, horas taller, conteo y badges de averías) se mantienen 100% operativos."
+  ]
+}

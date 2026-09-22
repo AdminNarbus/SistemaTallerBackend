@@ -5,6 +5,9 @@ from app.modules.supervision.dtos.supervision_dto import (
     AlertaSupervisionDTO,
     ResumenTallerDTO,
     MecanicoCargaDTO,
+    SolicitudAuditoriaDTO,
+    MecanicoAuditoriaDTO,
+    DetalleFallaAuditoriaDTO,
 )
 
 __all__ = [
@@ -13,6 +16,9 @@ __all__ = [
     "AlertaSupervisionDTO",
     "ResumenTallerDTO",
     "MecanicoCargaDTO",
+    "SolicitudAuditoriaDTO",
+    "MecanicoAuditoriaDTO",
+    "DetalleFallaAuditoriaDTO",
     "AgregarFallaDTO",
     "ResolverFallaSupervisoraDTO",
 ]

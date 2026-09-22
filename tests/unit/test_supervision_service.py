@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from app.modules.buses.models.bus import Bus
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
@@ -269,19 +270,22 @@ def test_supervision_service_init_custom_dependencies():
 
 @pytest.mark.asyncio
 async def test_supervision_service_get_auditoria_aislado():
-    """Verifica que get_auditoria_solicitudes delegue al repo y mapee DTOs correctamente."""
+    """Verifica que get_auditoria_solicitudes delegue al repo y mapee SolicitudAuditoriaDTO correctamente."""
     # Arrange
     mock_repo = AsyncMock(spec=SupervisionRepository)
     mock_mantencion = MagicMock()
     mock_db = AsyncMock()
 
-    raw_item = {"id": 100, "n_bus": "500", "estado": "EN_REPARACION"}
+    raw_item = {
+        "id": 100,
+        "n_bus": "500",
+        "estado": "EN_REPARACION",
+        "fecha_creacion": datetime(2026, 9, 21, 12, 0, 0),
+        "total_fallas": 1,
+        "fallas_pendientes": 1,
+        "mecanicos": [{"mecanico_nombre": "Juan Pérez", "is_activo": True}],
+    }
     mock_repo.get_auditoria.return_value = [raw_item]
-
-    dummy_dto = MagicMock(spec=SolicitudDTO)
-    dummy_dto.id = 100
-    dummy_dto.n_bus = "500"
-    mock_mantencion.mapear_a_solicitud_dto.return_value = dummy_dto
 
     service = SupervisionService(repository=mock_repo, mantencion_srv=mock_mantencion)
 
@@ -298,6 +302,8 @@ async def test_supervision_service_get_auditoria_aislado():
     # Assert
     assert len(resultado) == 1
     assert resultado[0].id == 100
+    assert resultado[0].n_bus == "500"
+    assert resultado[0].mecanicos[0].mecanico_nombre == "Juan Pérez"
     mock_repo.get_auditoria.assert_awaited_once_with(
         mock_db,
         n_bus="500",
@@ -306,7 +312,6 @@ async def test_supervision_service_get_auditoria_aislado():
         skip=0,
         limit=10,
     )
-    mock_mantencion.mapear_a_solicitud_dto.assert_called_once_with(raw_item)
 
 
 @pytest.mark.asyncio
@@ -599,5 +604,73 @@ def test_alertas_escalonamiento_4_niveles_severidad():
     assert sev_lib_media == SeveridadAlerta.MEDIA
     assert sev_lib_alta == SeveridadAlerta.ALTA
     assert sev_lib_critica == SeveridadAlerta.CRITICA
+
+
+@pytest.mark.asyncio
+async def test_auditoria_solicitudes_mapeo_dict_sin_fecha_asignacion(db_session):
+    """
+    Verifica que el servicio de supervisión pueda mapear correctamente filas agregadas en dict
+    (PostgreSQL CTE) donde los mecánicos no tienen fecha_asignacion o tienen campos parciales,
+    sin lanzar ValidationError.
+    """
+    from datetime import datetime
+    mock_row = {
+        "id": 999,
+        "n_bus": "BUS-999",
+        "bus_id": 1,
+        "bus_patente": "ABCD12",
+        "usuario_creador_id": 1,
+        "usuario_creador_nombre": "Test Conductor",
+        "mecanico_cierre_id": None,
+        "mecanico_cierre_nombre": None,
+        "estado": "EN_REPARACION",
+        "descripcion_general": "Falla prueba",
+        "foto_url": None,
+        "motivo_incompleto_checklist": None,
+        "motivo_cierre_parcial": None,
+        "fecha_creacion": datetime.now(),
+        "fecha_cierre": None,
+        "fecha_liberacion": None,
+        "horas_en_taller": 2.5,
+        "reincidencias_30d": 0,
+        "total_fallas": 1,
+        "fallas_resueltas": 0,
+        "fallas_pendientes": 1,
+        "fallas_con_falta_repuesto": 0,
+        "detalles_json": [],
+        "mecanicos_json": [
+            {
+                "id": 10,
+                "solicitud_id": 999,
+                "mecanico_id": 5,
+                "mecanico_nombre": "Juan Mecanico",
+                "es_lider_responsable": False,
+                "is_activo": True,
+                # fecha_asignacion omitida intencionalmente para validar resiliencia
+            }
+        ],
+        "historial_mecanicos_json": [],
+        "comentarios_json": [],
+        "pauta_respuestas_json": [],
+    }
+
+    mock_repo = MagicMock(spec=SupervisionRepository)
+    mock_repo.get_auditoria = AsyncMock(return_value=[mock_row])
+
+    service = SupervisionService(repository=mock_repo)
+    dtos = await service.get_auditoria_solicitudes(db_session, n_bus="BUS-999")
+
+    assert len(dtos) == 1
+    assert dtos[0].id == 999
+    assert len(dtos[0].mecanicos) == 1
+    assert dtos[0].mecanicos[0].mecanico_nombre == "Juan Mecanico"
+    assert dtos[0].mecanicos[0].is_activo is True
+    # Validar que los campos innecesarios no existen en el DTO ultraligero
+    assert not hasattr(dtos[0], "bus_patente")
+    assert not hasattr(dtos[0], "bus_id")
+    assert not hasattr(dtos[0], "descripcion_general")
+    assert not hasattr(dtos[0], "foto_url")
+    assert not hasattr(dtos[0], "comentarios")
+
 
 

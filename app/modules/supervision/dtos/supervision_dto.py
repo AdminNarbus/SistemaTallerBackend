@@ -51,3 +51,46 @@ class ResumenTallerDTO(BaseModel):
     buses_activos_taller: List[str] = Field(default_factory=list, description="Lista de n_bus actualmente en órdenes abiertas")
     alertas: List[AlertaSupervisionDTO] = Field(default_factory=list, description="Alertas activas de supervisión de taller")
 
+
+class MecanicoAuditoriaDTO(BaseModel):
+    """Mecánico resumido para tarjetas de supervisión."""
+    mecanico_nombre: str
+    is_activo: bool = True
+
+
+class DetalleFallaAuditoriaDTO(BaseModel):
+    """Falla resumida para badges de averías en tarjetas de supervisión."""
+    id: int
+    falla_nombre: Optional[str] = None
+    categoria_nombre: Optional[str] = None
+    descripcion_personalizada: Optional[str] = None
+    resuelto: bool = False
+    falta_repuesto: bool = False
+
+
+class SolicitudAuditoriaDTO(BaseModel):
+    """
+    DTO ultraligero exclusivo para el Dashboard y tarjetas de auditoría de supervisión.
+    Omite deliberadamente colecciones pesadas (comentarios, pauta, evidencias, fotos, patentes, etc.)
+    reduciendo el payload al mínimo estricto requerido para renderizado instantáneo.
+    """
+    id: int
+    n_bus: str
+    estado: str
+    fecha_creacion: datetime
+    fecha_cierre: Optional[datetime] = None
+    fecha_liberacion: Optional[datetime] = None
+    usuario_creador_nombre: Optional[str] = None
+    mecanico_cierre_nombre: Optional[str] = None
+    horas_en_taller: Optional[float] = None
+    reincidencias_30d: Optional[int] = 0
+
+    total_fallas: int = 0
+    fallas_resueltas: int = 0
+    fallas_pendientes: int = 0
+    fallas_con_falta_repuesto: int = 0
+
+    mecanicos: List[MecanicoAuditoriaDTO] = []
+    detalles: List[DetalleFallaAuditoriaDTO] = []
+
+

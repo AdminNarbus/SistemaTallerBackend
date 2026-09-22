@@ -277,7 +277,7 @@ async def seed_initial_data() -> None:
             await _seed_conductores(db)
             await _seed_categorias_y_fallas(db)
             await _seed_catalogo_buses(db)
-            await _seed_solicitudes_iniciales(db)
+            # await _seed_solicitudes_iniciales(db)  # Desactivado para mantener tabla limpia e iniciar desde OT 1
             await _seed_reporte_neumatico(db)
             await _seed_pauta_preventiva(db)
             logger.info("[SEED] Siembra de datos iniciales completada exitosamente.")

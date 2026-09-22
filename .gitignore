@@ -12,6 +12,7 @@ credentials/
 uploads/*
 !uploads/.gitkeep
 conductores.xlsx
+Registro Buses.xlsx
 
 # Python & Bytecode
 __pycache__/

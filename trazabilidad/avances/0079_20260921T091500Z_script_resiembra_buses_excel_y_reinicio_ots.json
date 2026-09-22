@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 79,
+  "id": "AV-0079",
+  "timestamp": "2026-09-21T09:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-FLOTA",
+    "name": "Resiembra de Flota Oficial y Reinicio de OTs",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación y ejecución del script de resiembra de flota desde 'Registro Buses.xlsx' con 50 buses oficiales, formateo estándar de patentes, preservación estricta de columnas y relaciones, eliminación de solicitudes anteriores y reinicio del correlativo de OTs a 1.",
+  "scope": {
+    "planned": [
+      "Lectura nativa del archivo Excel 'Registro Buses.xlsx' sin dependencias pesadas.",
+      "Normalización de patentes al estándar chileno XXXX-NN e inferencia de marca y empresa.",
+      "Vaciado de solicitudes anteriores y reinicio de secuencia taller_solicitudes_id_seq a 1.",
+      "Vaciado de buses anteriores e inserción de 50 buses oficiales conservando claves foráneas y esquema.",
+      "Desactivación del sembrado automático de solicitudes dummy en el arranque de FastAPI."
+    ],
+    "completed": [
+      "Lectura nativa del archivo Excel 'Registro Buses.xlsx' sin dependencias pesadas.",
+      "Normalización de patentes al estándar chileno XXXX-NN e inferencia de marca y empresa.",
+      "Vaciado de solicitudes anteriores y reinicio de secuencia taller_solicitudes_id_seq a 1.",
+      "Vaciado de buses anteriores e inserción de 50 buses oficiales conservando claves foráneas y esquema.",
+      "Desactivación del sembrado automático de solicitudes dummy en el arranque de FastAPI."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones estructurales DDL en tablas o alteración de restricciones relacionales."
+    ]
+  },
+  "changes": [
+    {
+      "path": "scripts/populate_buses_and_reset_ots.py",
+      "action": "created",
+      "summary": "Script CLI con opciones --target local/neon y --dry-run para resiembra atómica y reseteo de secuencia OT."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Desactivada la creación automática de solicitudes de prueba en el arranque para preservar la BD limpia esperando OT 1."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-079",
+      "title": "Lectura nativa XML y preservación íntegra de esquema relacional",
+      "rationale": "Para evitar dependencias externas como pandas u openpyxl en producción, se procesó el archivo .xlsx mediante zipfile y xml.etree.ElementTree. Las operaciones en BD se ejecutaron como transacciones atómicas preservando columnas y restricciones FK.",
+      "consequences": "La base de datos queda 100% compatible con los modelos existentes de SQLAlchemy, manteniendo reportes de neumáticos vinculados y garantizando que la próxima solicitud inicie con ID = 1."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe scripts\\populate_buses_and_reset_ots.py --target local",
+      "result": "passed",
+      "evidence": "50 buses insertados, 0 solicitudes restantes, secuencia taller_solicitudes_id_seq en 1."
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit",
+      "result": "passed",
+      "evidence": "127 passed in 44.59s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Ejecutar en Neon DB cuando el usuario lo disponga mediante el comando --target neon.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "La base de datos local se encuentra lista y probada.",
+    "Para aplicar en Neon DB solo se debe ejecutar: .\\venv\\Scripts\\python.exe scripts\\populate_buses_and_reset_ots.py --target neon"
+  ]
+}

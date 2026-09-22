@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 83,
+  "id": "AV-0083",
+  "timestamp": "2026-09-22T15:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-83",
+    "name": "Blindaje de Integridad Referencial de Fallas en Creación de Solicitudes",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Resolución integral del error HTTP 500 ForeignKeyViolationError en POST /api/v1/mantencion/solicitudes. En bases de datos de producción (Neon PostgreSQL), las categorías tienen IDs 1..6 mientras que las fallas de taller tienen IDs 11..20. Se corrigió en Frontend el mapeo erróneo de la categoría eléctrico/luces y la asignación fallback indebida de categoriaId como fallaId. En Backend, se blindó create_solicitud con validación defensiva en lote para IDs desajustados (falla_id con categoria_id sin falla_nombre), reasignando de manera segura a la falla activa de la categoría, a la vez que se preserva el contrato Zero-Queries de alto rendimiento en memoria para solicitudes con catálogo completo y rollback explícito en el commit.",
+  "scope": {
+    "planned": [
+      "Diagnosticar la causa raíz del error 500 (ForeignKeyViolationError en taller_solicitud_detalles_falla_id_fkey)",
+      "Corregir en Frontend (ProtoNeumaticos) el mapeo de categorías ('luces' -> 'electrico') y eliminar el fallback catId en fallaId",
+      "Blindar Backend (BackendTallerNarbus) en MantencionService.create_solicitud para validar en lote IDs de falla desajustados",
+      "Preservar la optimización Zero-Queries de AV-0034 cuando el cliente envía falla_id junto a falla_nombre o sin categoria_id",
+      "Agregar manejo de excepciones con rollback explícito y logging estructurado en el commit de la orden",
+      "Crear prueba de integración verificando el fallback automático ante falla_id inexistente",
+      "Verificar el 100% de la suite de pruebas del backend (180 tests)"
+    ],
+    "completed": [
+      "Identificada discrepancia de secuencias de IDs entre categorías (1..6) y fallas (11..20) en PostgreSQL",
+      "Corregido FormularioMantencionTaller.tsx en Frontend para resolver 'luces' a 'electrico' y enviar falla_id nulo si no existe en el catálogo en vez del id de categoría",
+      "Actualizada lógica en mantencion_service.py: check_falla_ids valida selectivamente en BD candidatos a desajuste y reasigna automáticamente a la falla activa de la categoría",
+      "Preservado el contrato Zero-Queries (AV-0034) en memoria cuando el cliente provee falla_id con falla_nombre",
+      "Añadido bloque try/except en commit de solicitud con db.rollback() y log de error estructurado",
+      "Añadido test test_crear_solicitud_con_falla_id_inexistente_fallback_categoria en test_mantencion_api.py",
+      "Ejecutados los 180 tests automatizados del backend con 100% de éxito"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Alteración del esquema DDL de la base de datos o relajación de restricciones de clave foránea"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Validación defensiva en lote para falla_id en create_solicitud, fallback automático a falla activa de categoría, preservación de Zero-Queries y captura de fallos en commit."
+    },
+    {
+      "path": "tests/integration/test_mantencion_api.py",
+      "action": "modified",
+      "summary": "Prueba de integración test_crear_solicitud_con_falla_id_inexistente_fallback_categoria."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización del estado del proyecto incorporando el hito AV-0083."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-083",
+      "title": "Validación Selectiva de Fallas Candidatas a Desajuste vs Contrato Zero-Queries",
+      "rationale": "En clientes móviles/web con catálogo precargado, enviar falla_id y falla_nombre garantiza 0 consultas intermedias (Zero-Queries, AV-0034). Sin embargo, cuando un cliente envía falla_id acompañado de categoria_id pero sin falla_nombre, existe alta probabilidad de que esté confundiendo el ID de categoría con el de falla. Validar selectivamente solo estos casos en BD previene el error 500 por ForeignKeyViolationError en PostgreSQL sin penalizar las peticiones legítimas ultrarrápidas.",
+      "consequences": "Total inmunidad frente a desajustes de IDs de clientes desactualizados, preservando a la vez el máximo rendimiento en la creación de solicitudes de taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -q --show-capture=no tests/unit/test_query_optimizations.py",
+      "result": "passed",
+      "evidence": "5 passed in 0.67s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q --show-capture=no tests/integration/test_mantencion_api.py",
+      "result": "passed",
+      "evidence": "12 passed in 4.75s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q --show-capture=no",
+      "result": "passed",
+      "evidence": "180 passed, 1 warning in 61.80s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar cambios en Cloud Run y verificar envío de reportes con fotos desde el frontend en producción.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Los cambios correspondientes de frontend se aplicaron en ProtoNeumaticos/src/conductores/mantencion/FormularioMantencionTaller.tsx.",
+    "La base de datos en producción Neon mantiene la integridad referencial intacta sin necesidad de alterar claves foráneas."
+  ]
+}

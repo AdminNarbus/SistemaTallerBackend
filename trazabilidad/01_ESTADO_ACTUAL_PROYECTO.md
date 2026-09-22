@@ -161,3 +161,10 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Erradicación de Datos Redundantes e IDs Secundarios:** Eliminados del endpoint `GET /api/v1/supervision/auditoria/buses-taller`: `bus_id`, `bus_patente` (se conserva únicamente `n_bus`), `usuario_creador_id`, `mecanico_cierre_id`, `descripcion_general`, `foto_url`, `motivo_incompleto_checklist`, `motivo_cierre_parcial`, `pauta_completada`, `comentarios`, `pauta_respuestas`, `evidencias` e `historial_mecanicos`.
   - **Estructura Mínima Estricta:** En `mecanicos` se envía únicamente `mecanico_nombre` e `is_activo` (preservando mecánicos históricos en órdenes `FINALIZADO`). En `detalles` se envían los datos mínimos para los badges de averías (`id`, `falla_nombre`, `categoria_nombre`, `descripcion_personalizada`, `resuelto`, `falta_repuesto`).
   - **100% de la Suite de Pruebas Aprobada:** 179 de 179 tests automatizados pasando exitosamente en 62.16s.
+- **Blindaje de Integridad Referencial de Fallas en Creación de Solicitudes (AV-0083):**
+  - **Resolución de Error 500 (`ForeignKeyViolationError`):** Diagnóstico y solución definitiva para la incompatibilidad de secuencias en producción (categorías 1..6 vs fallas 11..20).
+  - **Detección Selectiva y Fallback Seguro:** En `MantencionService.create_solicitud`, se identifican candidatos a desajuste de IDs (`falla_id` con `categoria_id` y sin `falla_nombre`), validando en lote su existencia en BD y reasignando automáticamente a la falla activa de la categoría si el ID no existe, evitando el fallo de clave foránea en PostgreSQL.
+  - **Preservación del Contrato Zero-Queries:** Peticiones con catálogo completo (`falla_id` con `falla_nombre`) mantienen 0 consultas intermedias en memoria según AV-0034.
+  - **Gobierno Transaccional y Logging:** Bloque `try/except` en `commit()` con `rollback()` explícito y logging estructurado de advertencias y errores.
+  - **100% de la Suite de Pruebas Aprobada:** 180 de 180 tests automatizados pasando exitosamente en 61.80s.
+

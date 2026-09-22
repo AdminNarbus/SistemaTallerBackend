@@ -756,8 +756,32 @@ class MantencionService:
         detalles_dtos: List[SolicitudDetalleDTO] = []
         detalles_a_procesar = []
         if dto.detalles:
-            # Solo consultar fallas_map para detalles legados SIN falla_id pero CON categoria_id
-            needed_cats = [d.categoria_id for d in dto.detalles if not d.falla_id and d.categoria_id]
+            # Separar fallas que requieren validación de existencia en BD:
+            # - Si el cliente envía falla_id y también falla_nombre (contrato optimizado Zero-Queries), confiamos en memoria.
+            # - Si el cliente envía falla_id acompañado de categoria_id pero SIN falla_nombre, es candidato a desajuste
+            #   (ej. cliente envió categoria_id como falla_id por error, o ID de falla inexistente). Se valida en BD.
+            check_falla_ids = [
+                d.falla_id
+                for d in dto.detalles
+                if d.falla_id and d.categoria_id and not getattr(d, "falla_nombre", None)
+            ]
+            existing_fallas_info = (
+                await self.repo.get_fallas_info_by_ids(db, check_falla_ids)
+                if check_falla_ids
+                else {}
+            )
+
+            # Categorías que requieren resolución de falla canónica activa:
+            # - Detalles sin falla_id pero con categoria_id
+            # - Detalles cuyo falla_id fue verificado y no existe en la base de datos
+            needed_cats = [
+                d.categoria_id
+                for d in dto.detalles
+                if d.categoria_id and (
+                    not d.falla_id
+                    or (d.falla_id in check_falla_ids and d.falla_id not in existing_fallas_info)
+                )
+            ]
             fallas_map = await self.repo.find_fallas_activas_by_categorias(db, needed_cats) if needed_cats else {}
 
             for det_dto in dto.detalles:
@@ -766,7 +790,38 @@ class MantencionService:
                 falla_nombre = getattr(det_dto, "falla_nombre", None)
                 cat_nombre_res = getattr(det_dto, "categoria_nombre", None)
 
-                if not falla_id and cat_id:
+                # Si requería verificación en BD:
+                if falla_id in check_falla_ids:
+                    if falla_id in existing_fallas_info:
+                        f_info = existing_fallas_info[falla_id]
+                        falla_nombre = falla_nombre or f_info["nombre"]
+                        cat_id = cat_id or f_info["categoria_id"]
+                        cat_nombre_res = cat_nombre_res or f_info["cat_nombre"]
+                    else:
+                        # Fallback defensivo: falla_id inexistente en BD, resolver por categoria_id
+                        logger.warning(
+                            "[MANTENCION] falla_id=%s inexistente o desajustado con categoria_id=%s. Aplicando fallback a falla activa de categoría.",
+                            falla_id,
+                            cat_id,
+                        )
+                        falla_id = None
+                        if cat_id in fallas_map:
+                            falla_id, falla_nombre, cat_nombre_res = fallas_map[cat_id]
+                        elif cat_id:
+                            cat = await self.repo.get_categoria_by_id(db, cat_id)
+                            cat_nom = cat.nombre if cat else f"Categoría #{cat_id}"
+                            cat_nombre_res = cat_nom
+                            nueva_falla = FallaTaller(
+                                categoria_id=cat_id,
+                                nombre=f"Avería de {cat_nom}",
+                                is_active=True,
+                            )
+                            self.repo.add_falla(db, nueva_falla)
+                            await self.repo.flush(db)
+                            falla_id = nueva_falla.id
+                            falla_nombre = nueva_falla.nombre
+                elif not falla_id and cat_id:
+                    # Detalle sin falla_id pero con categoria_id: resolución estándar
                     if cat_id in fallas_map:
                         falla_id, falla_nombre, cat_nombre_res = fallas_map[cat_id]
                     else:
@@ -794,7 +849,12 @@ class MantencionService:
 
         self.repo.add_solicitud(db, solicitud)
         # UN ÚNICO VIAJE A LA BD: Commit atómico que inserta solicitud y todos sus detalles
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            logger.error("[MANTENCION] Error al persistir solicitud y detalles: %s", exc)
+            raise
 
         # 4. Construir DTOs directamente en memoria tras el commit (con IDs generadas por el commit)
         if detalles_a_procesar:

@@ -418,3 +418,34 @@ async def test_supervisor_crea_solicitud_e_ingreso_taller_endpoint(
     assert len(updated_data["detalles"]) == 2
 
 
+@pytest.mark.asyncio
+async def test_crear_solicitud_con_falla_id_inexistente_fallback_categoria(
+    client, auth_headers_conductor, seed_test_data
+):
+    """Verifica que si el cliente envía un falla_id inexistente (ej. de otra BD o confusión con categoriaId),
+    el backend no lance 500 ForeignKeyViolationError, sino que resuelva la falla activa de la categoría."""
+    payload = {
+        "n_bus": "330",
+        "descripcion_general": "Falla enviada con ID de falla inexistente (simulando desajuste de IDs)",
+        "detalles": [
+            {
+                "falla_id": 99999,  # ID que NO existe en fallas_taller
+                "categoria_id": 1,  # FRENOS
+                "descripcion_personalizada": "Freno con vibración extraña",
+            }
+        ],
+    }
+    res = await client.post(
+        "/api/v1/mantencion/solicitudes", json=payload, headers=auth_headers_conductor
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["n_bus"] == "330"
+    assert len(data["detalles"]) == 1
+    # Se reasigna a una falla válida de la categoría 1
+    assert data["detalles"][0]["falla_id"] is not None
+    assert data["detalles"][0]["falla_id"] != 99999
+    assert data["detalles"][0]["categoria_id"] == 1
+
+
+

@@ -360,6 +360,7 @@ class MantencionService:
         total_fallas = len(detalles_dtos)
         fallas_resueltas = len([d for d in detalles_dtos if d.resuelto])
         fallas_con_falta_repuesto = len([d for d in detalles_dtos if d.falta_repuesto])
+        fallas_pendientes = total_fallas - fallas_resueltas
 
         evidencias_dtos = []
         evidencias_val = _get_rel(sol, "evidencias") or []
@@ -401,6 +402,7 @@ class MantencionService:
             total_fallas=total_fallas,
             fallas_resueltas=fallas_resueltas,
             fallas_con_falta_repuesto=fallas_con_falta_repuesto,
+            fallas_pendientes=fallas_pendientes,
             detalles=detalles_dtos,
             mecanicos=mecanicos_dtos,
             historial_mecanicos=historial_mecanicos_dtos,
@@ -492,9 +494,10 @@ class MantencionService:
             pauta_respuestas_raw = json.loads(pauta_respuestas_raw)
         evidencias_dtos = self._parse_evidencias_dtos(r.get("evidencias_json"))
 
-        tot = len(detalles_raw)
-        resueltos = sum(1 for d in detalles_raw if d.get("resuelto"))
-        faltas = sum(1 for d in detalles_raw if d.get("falta_repuesto"))
+        tot = r["total_fallas"] if "total_fallas" in r and r["total_fallas"] is not None else len(detalles_raw)
+        resueltos = r["fallas_resueltas"] if "fallas_resueltas" in r and r["fallas_resueltas"] is not None else sum(1 for d in detalles_raw if d.get("resuelto"))
+        faltas = r["fallas_con_falta_repuesto"] if "fallas_con_falta_repuesto" in r and r["fallas_con_falta_repuesto"] is not None else sum(1 for d in detalles_raw if d.get("falta_repuesto"))
+        pendientes = r["fallas_pendientes"] if "fallas_pendientes" in r and r["fallas_pendientes"] is not None else (tot - resueltos)
         pauta_completada = len(pauta_respuestas_raw) >= TOTAL_ITEMS_PAUTA_PREVENTIVA
 
         if r.get("estado") == "FINALIZADO" and not mecanicos_raw and historial_mecanicos_raw:
@@ -528,6 +531,7 @@ class MantencionService:
             total_fallas=tot,
             fallas_resueltas=resueltos,
             fallas_con_falta_repuesto=faltas,
+            fallas_pendientes=pendientes,
             detalles=detalles_raw,
             mecanicos=mecanicos_raw,
             historial_mecanicos=historial_mecanicos_raw,

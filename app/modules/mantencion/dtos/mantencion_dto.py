@@ -35,7 +35,7 @@ class MecanicoAsignadoDTO(BaseModel):
     origen: str = "SUPERVISOR"
     asignado_por_id: Optional[int] = None
     asignado_por_nombre: Optional[str] = None
-    fecha_asignacion: datetime
+    fecha_asignacion: Optional[datetime] = None
 
 
 class AsignacionFallaDTO(BaseModel):
@@ -50,7 +50,7 @@ class AsignacionFallaDTO(BaseModel):
     asignado_por_nombre: Optional[str] = None
     origen: str
     is_activo: bool
-    fecha_asignacion: datetime
+    fecha_asignacion: Optional[datetime] = None
     fecha_desasignacion: Optional[datetime] = None
     resuelto_en_esta_asignacion: bool
     duracion_minutos: Optional[int] = None
@@ -132,7 +132,7 @@ class SolicitudMecanicoDTO(BaseModel):
     duracion_minutos: Optional[int] = None
     es_lider_responsable: bool = False
     is_activo: bool
-    fecha_asignacion: datetime
+    fecha_asignacion: Optional[datetime] = None
     fecha_desasignacion: Optional[datetime] = None
 
 
@@ -334,6 +334,7 @@ class SolicitudDTO(BaseModel):
     total_fallas: int = 0
     fallas_resueltas: int = 0
     fallas_con_falta_repuesto: int = 0
+    fallas_pendientes: int = 0
 
     detalles: List[SolicitudDetalleDTO] = []
     mecanicos: List[SolicitudMecanicoDTO] = []

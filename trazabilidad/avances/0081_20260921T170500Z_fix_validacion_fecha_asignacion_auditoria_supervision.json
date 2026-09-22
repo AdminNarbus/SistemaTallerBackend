@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 81,
+  "id": "AV-0081",
+  "timestamp": "2026-09-21T17:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-81",
+    "name": "Corrección de Validación Pydantic en Auditoría de Supervisión y Proyección SQL de Mecánicos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Resolución de error 500 (ValidationError) en GET /api/v1/supervision/auditoria/buses-taller. Se corrigió la proyección JSON en PostgreSQL (CTE mecanicos_agg) para suministrar fecha_asignacion, duracion_minutos, asignado_por_id/nombre e historial_mecanicos_json, además de deduplicar y unificar asignaciones de taller_solicitud_mecanicos y taller_asignacion_fallas. En la capa DTO, se flexibilizó defensivamente fecha_asignacion como Optional[datetime] = None en SolicitudMecanicoDTO, MecanicoAsignadoDTO y AsignacionFallaDTO.",
+  "scope": {
+    "planned": [
+      "Identificar causa raíz de ValidationError en mecanicos.0.fecha_asignacion al consultar auditoría de supervisión",
+      "Corregir CTE SQL de mecánicos en supervision_repository.py incluyendo fecha_asignacion y todos los metadatos requeridos",
+      "Unificar asignaciones de fallas y mecánicos generales con deduplicación por mecanico_id",
+      "Hacer opcional defensivo el campo fecha_asignacion en los DTOs de mecánicos",
+      "Actualizar filtros por nombre de mecánico y suite de pruebas unitarias"
+    ],
+    "completed": [
+      "Corregida la proyección JSON en supervision_repository.py incorporando fecha_asignacion, fecha_desasignacion, asignado_por_id/nombre, duracion_minutos e historial_mecanicos_json",
+      "Unificadas asignaciones de taller_solicitud_mecanicos y taller_asignacion_fallas con deduplicación por DISTINCT ON (solicitud_id, mecanico_id)",
+      "Actualizados filtros por nombre de mecánico en count_auditoria (PostgreSQL) y fallbacks ORM (SQLite) para considerar taller_asignacion_fallas",
+      "Ajustado SolicitudMecanicoDTO, MecanicoAsignadoDTO y AsignacionFallaDTO con fecha_asignacion: Optional[datetime] = None",
+      "Prueba unitaria agregada en test_supervision_service.py y suite completa verificada exitosamente"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (manejado en repositorio independiente)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "fecha_asignacion configurada como Optional[datetime] = None en SolicitudMecanicoDTO, MecanicoAsignadoDTO y AsignacionFallaDTO como patrón defensivo."
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Proyección completa de campos de mecánicos en mecanicos_agg, unificación con taller_asignacion_fallas, provisión de historial_mecanicos_json y actualización de filtros por mecánico."
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Nueva prueba unitaria test_auditoria_solicitudes_mapeo_dict_sin_fecha_asignacion validando el mapeo resiliente de diccionarios agregados."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-081",
+      "title": "Proyección Canónica Completa en SQL y Validación Defensiva en DTOs",
+      "rationale": "Para garantizar la robustez del backend frente a consultas de alto rendimiento (CTEs con json_agg en PostgreSQL), la proyección SQL debe suministrar los campos mínimos del contrato del DTO (incluyendo fecha_asignacion). Simultáneamente, se adopta el principio de tolerancia en el DTO (Postel's Law: se conservador en lo que envías, tolerante en lo que aceptas) permitiendo que fecha_asignacion sea opcional en caso de que alguna consulta parcial omita temporalmente marcas de tiempo, previniendo 500 no controlados.",
+      "consequences": "Eliminación definitiva del error 500 en GET /api/v1/supervision/auditoria/buses-taller y mayor resiliencia en la deserialización de mecánicos en todo el módulo de mantención y supervisión."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest tests\\unit\\test_supervision_service.py tests\\integration\\test_supervision_api.py",
+      "result": "passed",
+      "evidence": "31 passed in 6.60s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Validar la experiencia de usuario y visualización de tarjetas de supervisión en el Frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "local",
+    "dirty": true
+  },
+  "notes": [
+    "Resuelto error ValidationError en mecanicos.0.fecha_asignacion reportado durante la carga del Dashboard de Supervisión."
+  ]
+}

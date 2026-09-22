@@ -38,7 +38,8 @@ async def run_keepalive():
     print(f"  Intervalo de pulso: {INTERVAL_SECONDS} segundos (3 minutos)")
     print(f"  Objetivo: Prevenir cold-start de 3s por suspensión de cómputo")
     print("  Presiona CTRL+C para detener el servicio.")
-    print("=" * 70)
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL no está configurada")
 
     engine = create_async_engine(
         DATABASE_URL,

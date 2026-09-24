@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 85,
+  "id": "AV-0085",
+  "timestamp": "2026-09-23T10:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-TIMEZONE-FIX",
+    "name": "Normalización de Fechas Naive y Aware en Cálculo de Horas de Taller",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección de TypeError ('can't subtract offset-naive and offset-aware datetimes') en el endpoint PATCH /api/v1/supervision/solicitudes/{id}/estado y en la serialización general de SolicitudDTO y SolicitudAuditoriaDTO. Se implementó la función pura de dominio calcular_horas_en_taller en utils.py, asegurando normalización automática y compatibilidad temporal en ambas capas.",
+  "scope": {
+    "planned": [
+      "Identificar y resolver error de resta entre datetimes naive y aware en cálculo de horas en taller",
+      "Centralizar lógica en función pura de dominio reutilizable en utils.py",
+      "Actualizar mantencion_service y supervision_service con la función segura",
+      "Añadir cobertura de pruebas unitarias y verificar pase del 100% de la suite"
+    ],
+    "completed": [
+      "Identificar y resolver error de resta entre datetimes naive y aware en cálculo de horas en taller",
+      "Centralizar lógica en función pura de dominio reutilizable en utils.py",
+      "Actualizar mantencion_service y supervision_service con la función segura",
+      "Añadir cobertura de pruebas unitarias y verificar pase del 100% de la suite"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de estructura en tablas de base de datos",
+      "Alteración de esquemas DTO de respuesta para el frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/utils.py",
+      "action": "modified",
+      "summary": "Creación de la función calcular_horas_en_taller para normalizar zonas horarias (naive y aware) antes de calcular diferencias temporales en horas."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Uso de calcular_horas_en_taller en _to_solicitud_dto para prevenir excepciones 500 al finalizar o actualizar estado de solicitudes."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Uso de calcular_horas_en_taller en _map_solicitud_to_auditoria_dto para garantizar consistencia en auditoría."
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Incorporación de pruebas unitarias test_calcular_horas_en_taller_aware_vs_naive y test_calcular_horas_en_taller_none_o_fechas_vacias (182 tests aprobados)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Centralización de cálculo de horas de taller en función de dominio pura",
+      "rationale": "En PostgreSQL/SQLAlchemy, campos DateTime(timezone=True) como fecha_creacion pueden persistir y cargarse como aware (con tzinfo), mientras que operaciones locales de cambio de estado o asignación usan datetime.now() (naive). Restar directamente produce TypeError. Normalizar eliminando el tzinfo antes de calcular el diferencial de segundos erradica de raíz cualquier inconsistencia.",
+      "consequences": "Inmunidad total frente a discrepancias naive/aware tanto al cerrar solicitudes como al visualizarlas en auditoría o responder DTOs al frontend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "182 passed, 1 warning in 62.04s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Validación con el usuario o supervisora en el cliente frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "bbe67b514a4548c327f993ee8d3f209c23d06ecf",
+    "dirty": true
+  },
+  "notes": [
+    "Uvicorn recarga automáticamente los cambios gracias a --reload."
+  ]
+}

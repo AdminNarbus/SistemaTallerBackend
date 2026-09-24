@@ -21,6 +21,75 @@ def calcular_duracion_minutos(inicio: Optional[datetime], fin: Optional[datetime
     return max(1, int(delta_seconds / 60))
 
 
+def calcular_horas_en_taller(
+    inicio: Optional[datetime],
+    fin: Optional[datetime] = None,
+) -> Optional[float]:
+    """
+    Función de Dominio Pura: Calcula las horas transcurridas en taller de forma segura,
+    normalizando diferencias entre datetimes naive y aware (offset-naive vs offset-aware).
+    Si fin es None, toma datetime.now().
+    """
+    if not inicio:
+        return None
+
+    d_inicio = inicio.replace(tzinfo=None) if inicio.tzinfo else inicio
+    if fin:
+        d_fin = fin.replace(tzinfo=None) if fin.tzinfo else fin
+    else:
+        d_fin = datetime.now()
+
+    delta_seconds = max(0.0, (d_fin - d_inicio).total_seconds())
+    return round(delta_seconds / 3600.0, 1)
+
+
+def calcular_telemetria_estadias(
+    estadias: List[Any],
+    horas_taller_acumuladas_db: Optional[float] = None,
+    en_taller: bool = False,
+    now: Optional[datetime] = None,
+) -> tuple[float, int]:
+    """
+    Calcula el tiempo real acumulado en maestranza (sumando estadías cerradas más la abierta si el bus está en taller)
+    y el conteo total de visitas.
+    """
+    ref_now = now or datetime.now()
+    d_ref_now = ref_now.replace(tzinfo=None) if ref_now.tzinfo else ref_now
+
+    total_visitas = len(estadias)
+    if not estadias:
+        acumulado = float(horas_taller_acumuladas_db or 0.0)
+        return round(acumulado, 1), 0
+
+    horas_acumuladas = 0.0
+    for est in estadias:
+        if isinstance(est, dict):
+            h = est.get("horas_estadia")
+            f_ing = est.get("fecha_ingreso")
+            f_sal = est.get("fecha_salida")
+        else:
+            h = getattr(est, "horas_estadia", None)
+            f_ing = getattr(est, "fecha_ingreso", None)
+            f_sal = getattr(est, "fecha_salida", None)
+
+        if h is not None:
+            horas_acumuladas += float(h)
+        elif f_ing is not None and f_sal is None:
+            # Estadía en curso actualmente
+            d_ing = f_ing.replace(tzinfo=None) if hasattr(f_ing, "replace") and f_ing.tzinfo else f_ing
+            if isinstance(d_ing, str):
+                try:
+                    d_ing = datetime.fromisoformat(d_ing)
+                    d_ing = d_ing.replace(tzinfo=None) if d_ing.tzinfo else d_ing
+                except Exception:
+                    d_ing = None
+            if d_ing:
+                delta = max(0.0, (d_ref_now - d_ing).total_seconds())
+                horas_acumuladas += delta / 3600.0
+
+    return round(horas_acumuladas, 1), total_visitas
+
+
 def validar_pauta_preventiva_cierre(
     total_items: int,
     items_respondidos: int,

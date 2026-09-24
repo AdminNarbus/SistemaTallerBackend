@@ -285,16 +285,15 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
         ),
     )
 
-    # 3. Intentar marcar la falla como resuelta -> Debe fallar con BusinessRuleException
-    with pytest.raises(BusinessRuleException) as exc_info:
-        await mantencion_service.check_detalle(
-            db_session,
-            solicitud_id=solicitud.id,
-            detalle_id=detalle_id,
-            mecanico_id=mecanico_id,
-            resuelto=True,
-        )
-    assert "espera de repuesto" in str(exc_info.value).lower()
+    # 3. Flujo desacoplado: ahora se permite resolver la falla directamente sin bloqueo de repuestos
+    dto_check = await mantencion_service.check_detalle(
+        db_session,
+        solicitud_id=solicitud.id,
+        detalle_id=detalle_id,
+        mecanico_id=mecanico_id,
+        resuelto=True,
+    )
+    assert dto_check.resuelto is True
 
     # 4. Reportar que el repuesto llegó (falta_repuesto=False)
     await mantencion_service.reportar_repuesto(

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 86,
+  "id": "AV-0086",
+  "timestamp": "2026-09-23T12:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-ESTADIAS-4ESTADOS",
+    "name": "Unificación de 4 Estados Canónicos y Telemetría de Estadías Físicas de Taller",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación integral de la arquitectura de 4 estados canónicos de taller (PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO) eliminando completamente REPORTADO. Se diseñó el sistema de telemetría de estadías físicas de taller (taller_solicitud_estadias), calculando la demora de primer ingreso (horas_demora_primer_ingreso), horas acumuladas efectivas en maestranza (horas_taller_acumuladas) y tiempos de liberación en ruta sin desvirtuar el cronómetro real de taller.",
+  "scope": {
+    "planned": [
+      "Crear migración Alembic 014 unificando REPORTADO a PENDIENTE y creando tabla taller_solicitud_estadias",
+      "Definir modelo TallerSolicitudEstadia y mapear relación en TallerSolicitud",
+      "Crear EstadiaTallerDTO y enriquecer SolicitudDTO y SolicitudResumenDTO con telemetría de estadías",
+      "Implementar función de dominio calcular_telemetria_estadias en utils.py",
+      "Optimizar repository mantencion con consultas de estadías y agregación JSON CTE nativa",
+      "Implementar helpers privados _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa en MantencionService",
+      "Vincular apertura/cierre de estadías en tomar_trabajo, autoasignar_fallas, asignar_fallas_supervisora, cambiar_estado_solicitud, liberar_solicitud y finalizar_solicitud",
+      "Generar guía detallada para el equipo frontend GUIA_FRONTEND_ESTADOS_Y_CRONOMETRO_TALLER.md",
+      "Actualizar tests e2e, integration y unit para los 4 estados canónicos y verificar 100% de la suite"
+    ],
+    "completed": [
+      "Crear migración Alembic 014 unificando REPORTADO a PENDIENTE y creando tabla taller_solicitud_estadias",
+      "Definir modelo TallerSolicitudEstadia y mapear relación en TallerSolicitud",
+      "Crear EstadiaTallerDTO y enriquecer SolicitudDTO y SolicitudResumenDTO con telemetría de estadías",
+      "Implementar función de dominio calcular_telemetria_estadias en utils.py",
+      "Optimizar repository mantencion con consultas de estadías y agregación JSON CTE nativa",
+      "Implementar helpers privados _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa en MantencionService",
+      "Vincular apertura/cierre de estadías en tomar_trabajo, autoasignar_fallas, asignar_fallas_supervisora, cambiar_estado_solicitud, liberar_solicitud y finalizar_solicitud",
+      "Generar guía detallada para el equipo frontend GUIA_FRONTEND_ESTADOS_Y_CRONOMETRO_TALLER.md",
+      "Actualizar tests e2e, integration y unit para los 4 estados canónicos y verificar 100% de la suite"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de UI en repositorio Frontend (se provee guía de integración)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/014_unificar_estados_y_estadias_taller.py",
+      "action": "created",
+      "summary": "Migración Alembic 014 para actualizar solicitudes REPORTADO a PENDIENTE, agregar campos de telemetría y crear tabla taller_solicitud_estadias con FK a taller_solicitudes."
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud_estadia.py",
+      "action": "created",
+      "summary": "Modelo SQLAlchemy TallerSolicitudEstadia para tracking detallado de visitas de taller (numero_visita, fecha_ingreso, fecha_salida, horas_estadia, motivo_salida)."
+    },
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Valor por defecto de estado actualizado a PENDIENTE, agregados mapped_column para telemetría y relación estadias."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Creación de EstadiaTallerDTO y enriquecimiento de SolicitudDTO y SolicitudResumenDTO con campos de estadías y telemetría."
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de EstadiaTallerDTO en __all__."
+    },
+    {
+      "path": "app/modules/mantencion/utils.py",
+      "action": "modified",
+      "summary": "Función pura de dominio calcular_telemetria_estadias para cómputo seguro de horas físicas acumuladas y visitas."
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Métodos add_estadia, get_estadias_by_solicitud, get_ultima_estadia_abierta, get_conteo_estadias y agregación JSON estadias_agg en CTE PostgreSQL."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Incorporación de _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa en todas las transiciones operacionales y administrativas."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_ESTADOS_Y_CRONOMETRO_TALLER.md",
+      "action": "created",
+      "summary": "Documento con guía completa de integración para el equipo frontend: estados canónicos, telemetría, cronómetro y badges."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Unificación de 4 estados canónicos eliminando REPORTADO",
+      "rationale": "El estado REPORTADO creaba una distinción artificial previa a la revisión que no agregaba valor al flujo operativo. Ahora toda OT creada ingresa directamente como PENDIENTE, simplificando el flujo de estados a: PENDIENTE -> EN_REPARACION -> LIBERADO -> FINALIZADO.",
+      "consequences": "Menor complejidad de filtros, lógica más clara en frontend y precisión al determinar cuándo el bus está físicamente en taller."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Telemetría física de taller desacoplada mediante taller_solicitud_estadias",
+      "rationale": "Calcular horas como (now - fecha_creacion) era incorrecto cuando un bus era liberado temporalmente a ruta (LIBERADO) con fallas pendientes o repuestos en espera. Con la tabla de estadías, cada ingreso y egreso se audita con número de visita (#1, #2...), permitiendo sumar únicamente las horas que el bus estuvo físicamente en taller y registrar la demora de primer ingreso.",
+      "consequences": "Precisión métrica absoluta para supervisión, indicadores de disponibilidad de flota fidedignos y trazabilidad inmutable de cada paso por taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "182 passed, 1 warning en suite completa (e2e, integration, unit)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "El frontend puede consumir los nuevos campos de telemetría y ajustar sus selectores de estado según la guía provista.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "bbe67b514a4548c327f993ee8d3f209c23d06ecf",
+    "dirty": true
+  },
+  "notes": [
+    "Uvicorn sincroniza y ejecuta los cambios en caliente."
+  ]
+}

@@ -8,6 +8,8 @@ from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignaci
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 
+from app.modules.mantencion.models.taller_solicitud_estadia import TallerSolicitudEstadia
+
 __all__ = [
     "CategoriaFalla",
     "FallaTaller",
@@ -19,5 +21,6 @@ __all__ = [
     "PautaTallerItem",
     "TallerSolicitudPauta",
     "TallerSolicitudEvidencia",
+    "TallerSolicitudEstadia",
 ]
 

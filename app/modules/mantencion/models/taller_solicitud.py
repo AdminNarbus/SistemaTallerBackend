@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
     from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
     from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
+    from app.modules.mantencion.models.taller_solicitud_estadia import TallerSolicitudEstadia
 
 
 class TallerSolicitud(Base):
@@ -39,8 +40,8 @@ class TallerSolicitud(Base):
     )
 
     estado: Mapped[str] = mapped_column(
-        String(50), default="REPORTADO", nullable=False, index=True
-    )  # REPORTADO, PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO
+        String(50), default="PENDIENTE", nullable=False, index=True
+    )  # PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO
 
     descripcion_general: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     foto_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -54,6 +55,16 @@ class TallerSolicitud(Base):
     fecha_liberacion: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    fecha_primer_ingreso_taller: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    horas_demora_primer_ingreso: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 1), nullable=True
+    )
+    horas_taller_acumuladas: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 1), default=0.0, nullable=True
+    )
+
     motivo_incompleto_checklist: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
@@ -89,6 +100,9 @@ class TallerSolicitud(Base):
     )
     evidencias: Mapped[List["TallerSolicitudEvidencia"]] = relationship(
         "TallerSolicitudEvidencia", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
+    )
+    estadias: Mapped[List["TallerSolicitudEstadia"]] = relationship(
+        "TallerSolicitudEstadia", back_populates="solicitud", cascade="all, delete-orphan", lazy="selectin"
     )
 
 

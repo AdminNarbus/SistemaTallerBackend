@@ -26,6 +26,7 @@ from app.modules.mantencion.services.mantencion_service import (
 )
 from app.modules.mantencion.utils import (
     calcular_duracion_minutos,
+    calcular_horas_en_taller,
     formatear_comentario_cierre,
     recopilar_archivos_fotos,
     validar_fallas_cierre_parcial,
@@ -71,6 +72,23 @@ def test_calcular_duracion_minutos_aware_vs_naive():
     fin = datetime(2026, 9, 14, 9, 15, 0)  # naive
     duracion = calcular_duracion_minutos(inicio, fin)
     assert duracion == 75
+
+
+def test_calcular_horas_en_taller_aware_vs_naive():
+    """Calcula horas en taller normalizando correctamente entre datetimes aware y naive."""
+    inicio = datetime(2026, 9, 14, 8, 0, 0, tzinfo=timezone.utc)
+    fin = datetime(2026, 9, 14, 10, 30, 0)  # naive (sin tzinfo)
+    horas = calcular_horas_en_taller(inicio, fin)
+    assert horas == 2.5
+
+
+def test_calcular_horas_en_taller_none_o_fechas_vacias():
+    """Retorna None si la fecha de inicio es None, o calcula contra ahora si fin es None."""
+    assert calcular_horas_en_taller(None, None) is None
+    inicio = datetime.now() - timedelta(hours=3)
+    horas = calcular_horas_en_taller(inicio, None)
+    assert horas is not None
+    assert horas >= 3.0
 
 
 def test_validar_pauta_preventiva_incompleta_sin_motivo_falla():
@@ -323,7 +341,7 @@ async def test_create_and_get_solicitud(db_session, seed_test_data):
     solicitud = await mantencion_service.create_solicitud(db_session, dto, creador_id)
     assert solicitud.id is not None
     assert solicitud.n_bus == "BUS-101"
-    assert solicitud.estado == "REPORTADO"
+    assert solicitud.estado == "PENDIENTE"
     assert len(solicitud.detalles) == 1
     assert solicitud.detalles[0].falla_id == falla_id
 
@@ -589,7 +607,7 @@ async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_te
     )
 
     assert solicitud.bus_id == bus.id
-    assert solicitud.estado == "REPORTADO"
+    assert solicitud.estado == "PENDIENTE"
     # El bus debe haber quedado con en_taller = True automáticamente
     await db_session.refresh(bus)
     assert bus.en_taller is True

@@ -59,23 +59,37 @@ class AsignacionFallaDTO(BaseModel):
 
 # --- Detalle Falla DTOs ---
 class SolicitudDetalleCreateDTO(BaseModel):
+    nombre: Optional[str] = Field(None, description="Nombre o texto directo de la avería (ej: 'Freno largo')")
+    falla_nombre: Optional[str] = None
+    descripcion_personalizada: Optional[str] = None
     falla_id: Optional[int] = None
     categoria_id: Optional[int] = None
-    falla_nombre: Optional[str] = None
     categoria_nombre: Optional[str] = None
-    descripcion_personalizada: Optional[str] = None
+
+    @property
+    def texto_falla(self) -> str:
+        """Retorna el nombre o descripción directa de la avería garantizando un valor limpio."""
+        texto = self.nombre or self.falla_nombre or self.descripcion_personalizada or ""
+        return texto.strip()
 
 
 class AgregarFallaDTO(BaseModel):
+    nombre: Optional[str] = Field(None, description="Nombre o texto directo de la avería")
+    descripcion_personalizada: Optional[str] = None
+    falla_nombre: Optional[str] = None
     categoria_id: Optional[int] = None
     falla_id: Optional[int] = None
-    descripcion_personalizada: Optional[str] = None
     autoasignar: bool = True
     mecanico_asignado_id: Optional[int] = None
     mecanico_resolvio_id: Optional[int] = None
     mecanico_id: Optional[int] = None
     usuario_id: Optional[int] = None
     resuelto: bool = False
+
+    @property
+    def texto_falla(self) -> str:
+        texto = self.nombre or self.descripcion_personalizada or self.falla_nombre or ""
+        return texto.strip()
 
     @property
     def effective_resolutor_id(self) -> Optional[int]:
@@ -103,6 +117,8 @@ class SolicitudDetalleDTO(BaseModel):
 
     id: int
     solicitud_id: int
+    nombre: Optional[str] = None
+    falla_nombre: Optional[str] = None
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
     falla_id: Optional[int] = None
@@ -117,6 +133,20 @@ class SolicitudDetalleDTO(BaseModel):
     fecha_resolucion: Optional[datetime] = None
     mecanicos_asignados: List[MecanicoAsignadoDTO] = []
     historial_asignaciones: List[AsignacionFallaDTO] = []
+
+    def model_post_init(self, __context: Any) -> None:
+        # Garantizar que nombre y falla_nombre siempre contengan el texto directo de la falla
+        nombre_limpio = (
+            self.descripcion_personalizada
+            or self.falla_nombre
+            or (self.falla.nombre if self.falla else None)
+            or self.nombre
+            or f"Avería #{self.id}"
+        )
+        if not self.nombre:
+            self.nombre = nombre_limpio
+        if not self.falla_nombre:
+            self.falla_nombre = nombre_limpio
 
 
 # --- Mecanico Asignado Global DTOs ---
@@ -205,7 +235,7 @@ class AsignarFallasSupervisoraDTO(BaseModel):
 class CambiarEstadoSolicitudDTO(BaseModel):
     estado: EstadoSolicitud = Field(
         ...,
-        description="Nuevo estado canónico de la solicitud (REPORTADO, PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO)",
+        description="Nuevo estado canónico de la solicitud (PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO)",
     )
     comentario: Optional[str] = Field(
         None,
@@ -221,7 +251,12 @@ class CambiarEstadoSolicitudDTO(BaseModel):
     @classmethod
     def normalizar_estado(cls, v: Any) -> Any:
         if isinstance(v, str):
-            return v.upper().strip()
+            val = v.upper().strip()
+            if val == "REPORTADO":
+                return EstadoSolicitud.PENDIENTE
+            return val
+        if v == EstadoSolicitud.REPORTADO:
+            return EstadoSolicitud.PENDIENTE
         return v
 
 
@@ -308,6 +343,18 @@ class AgregarColaboradorDTO(BaseModel):
     colaborador_nombre: Optional[str] = None
 
 
+class EstadiaTallerDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    solicitud_id: Optional[int] = None
+    numero_visita: int
+    fecha_ingreso: datetime
+    fecha_salida: Optional[datetime] = None
+    horas_estadia: Optional[float] = None
+    motivo_salida: Optional[str] = None
+
+
 class SolicitudDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -327,6 +374,10 @@ class SolicitudDTO(BaseModel):
     fecha_creacion: datetime
     fecha_cierre: Optional[datetime] = None
     fecha_liberacion: Optional[datetime] = None
+    fecha_primer_ingreso_taller: Optional[datetime] = None
+    horas_demora_primer_ingreso: Optional[float] = None
+    horas_taller_acumuladas: Optional[float] = 0.0
+    total_visitas: int = 0
     horas_en_taller: Optional[float] = None
     reincidencias_30d: Optional[int] = 0
 
@@ -342,6 +393,7 @@ class SolicitudDTO(BaseModel):
     comentarios: List[SolicitudComentarioDTO] = []
     pauta_respuestas: List[PautaRespuestaDTO] = []
     evidencias: List[SolicitudEvidenciaDTO] = []
+    estadias: List[EstadiaTallerDTO] = []
 
 
 class SolicitudResumenDTO(SolicitudDTO):

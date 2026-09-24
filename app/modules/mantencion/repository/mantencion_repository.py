@@ -17,6 +17,7 @@ from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolici
 from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.mantencion.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.mantencion.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,7 @@ class MantencionRepository:
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.item),
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.mecanico),
                 selectinload(TallerSolicitud.evidencias),
+                selectinload(TallerSolicitud.estadias),
             )
         )
         res = await db.execute(stmt)
@@ -249,9 +251,28 @@ class MantencionRepository:
                 WITH filtered_solicitud AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.id = :solicitud_id
+                ),
+                estadias_agg AS (
+                    SELECT
+                        es.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', es.id,
+                                'solicitud_id', es.solicitud_id,
+                                'numero_visita', es.numero_visita,
+                                'fecha_ingreso', es.fecha_ingreso,
+                                'fecha_salida', es.fecha_salida,
+                                'horas_estadia', es.horas_estadia,
+                                'motivo_salida', es.motivo_salida
+                            ) ORDER BY es.numero_visita ASC, es.id ASC
+                        ) as estadias_json
+                    FROM taller_solicitud_estadias es
+                    JOIN filtered_solicitud fs ON fs.id = es.solicitud_id
+                    GROUP BY es.solicitud_id
                 ),
                 evidencias_agg AS (
                     SELECT 
@@ -440,12 +461,17 @@ class MantencionRepository:
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
                     fs.fecha_cierre,
+                    fs.fecha_liberacion,
+                    fs.fecha_primer_ingreso_taller,
+                    fs.horas_demora_primer_ingreso,
+                    COALESCE(fs.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                     COALESCE(da.detalles_json, '[]'::json) as detalles_json,
                     COALESCE(ma.mecanicos_activos_json, '[]'::json) as mecanicos_json,
                     COALESCE(ma.historial_mecanicos_json, '[]'::json) as historial_mecanicos_json,
                     COALESCE(ca.comentarios_json, '[]'::json) as comentarios_json,
                     COALESCE(pa.pauta_json, '[]'::json) as pauta_respuestas_json,
-                    COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
+                    COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json,
+                    COALESCE(esa.estadias_json, '[]'::json) as estadias_json
                 FROM filtered_solicitud fs
                 LEFT JOIN buses b ON b.id = fs.bus_id
                 LEFT JOIN usuarios u ON u.id = fs.usuario_creador_id
@@ -454,7 +480,8 @@ class MantencionRepository:
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
                 LEFT JOIN comentarios_agg ca ON ca.solicitud_id = fs.id
                 LEFT JOIN pauta_agg pa ON pa.solicitud_id = fs.id
-                LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id;
+                LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
+                LEFT JOIN estadias_agg esa ON esa.solicitud_id = fs.id;
             """)
             res = await db.execute(sql, {"solicitud_id": solicitud_id})
             row = res.mappings().first()
@@ -562,9 +589,10 @@ class MantencionRepository:
                 WITH filtered_solicitudes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
-                    WHERE s.estado IN ('REPORTADO', 'PENDIENTE')
+                    WHERE s.estado IN ('PENDIENTE', 'REPORTADO')
                     ORDER BY s.id DESC, s.fecha_creacion DESC
                     LIMIT :limit OFFSET :skip
                 ),
@@ -591,6 +619,8 @@ class MantencionRepository:
                             json_build_object(
                                 'id', d.id,
                                 'solicitud_id', d.solicitud_id,
+                                'nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
+                                'falla_nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
                                 'categoria_id', f.categoria_id,
                                 'categoria_nombre', cf.nombre,
                                 'falla_id', d.falla_id,
@@ -683,6 +713,10 @@ class MantencionRepository:
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
                     fs.fecha_cierre,
+                    fs.fecha_liberacion,
+                    fs.fecha_primer_ingreso_taller,
+                    fs.horas_demora_primer_ingreso,
+                    COALESCE(fs.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                     COALESCE(da.detalles_json, '[]'::json) as detalles_json,
                     COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json,
                     COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
@@ -739,7 +773,8 @@ class MantencionRepository:
                 WITH filtered_solicitudes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.estado = 'EN_REPARACION'
                       AND (
@@ -757,6 +792,8 @@ class MantencionRepository:
                             json_build_object(
                                 'id', d.id,
                                 'solicitud_id', d.solicitud_id,
+                                'nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
+                                'falla_nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
                                 'categoria_id', f.categoria_id,
                                 'categoria_nombre', cf.nombre,
                                 'falla_id', d.falla_id,
@@ -860,6 +897,10 @@ class MantencionRepository:
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
                     fs.fecha_cierre,
+                    fs.fecha_liberacion,
+                    fs.fecha_primer_ingreso_taller,
+                    fs.horas_demora_primer_ingreso,
+                    COALESCE(fs.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                     COALESCE(da.detalles_json, '[]'::json) as detalles_json,
                     COALESCE(ma.mecanicos_json, '[]'::json) as mecanicos_json,
                     COALESCE(ea.evidencias_json, '[]'::json) as evidencias_json
@@ -1240,6 +1281,33 @@ class MantencionRepository:
         res = await db.execute(stmt)
         return bool(res.scalars().all())
 
+    async def get_estado_cuadrilla_restante(
+        self, db: AsyncSession, solicitud_id: int, mecanicos_ids: Set[int], excluir_ids: Set[int]
+    ) -> Tuple[Set[int], bool]:
+        """
+        Consolida en 1 solo viaje de red (1 solo SELECT con dos columnas escalares/agregadas)
+        el cálculo de mecánicos con otras fallas asignadas y si queda alguna otra asignación en la OT.
+        """
+        if not excluir_ids:
+            return set(), True
+
+        stmt = select(
+            TallerAsignacionFalla.id,
+            TallerAsignacionFalla.mecanico_id,
+        ).where(
+            and_(
+                TallerAsignacionFalla.solicitud_id == solicitud_id,
+                TallerAsignacionFalla.is_activo == True,
+                TallerAsignacionFalla.id.not_in(excluir_ids),
+            )
+        )
+        res = await db.execute(stmt)
+        filas = res.all()
+        quedan_asignaciones = len(filas) > 0
+        mecs_con_restantes = {row[1] for row in filas if row[1] in mecanicos_ids}
+        return mecs_con_restantes, quedan_asignaciones
+
+
     # --- Métodos Atómicos de Escritura (Persistencia pura sin commit) ---
 
     def add_solicitud(self, db: AsyncSession, solicitud: TallerSolicitud) -> None:
@@ -1374,6 +1442,44 @@ class MantencionRepository:
         mecs = await self.desactivar_mecanicos_activos(db, solicitud_id, fecha_desasignacion, flush=False)
         asigs = await self.desactivar_todas_asignaciones_activas(db, solicitud_id, fecha_desasignacion, flush=False)
         return mecs, asigs
+
+    def add_estadia(self, db: AsyncSession, estadia: TallerSolicitudEstadia) -> None:
+        db.add(estadia)
+
+    async def get_estadias_by_solicitud(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> List[TallerSolicitudEstadia]:
+        stmt = (
+            select(TallerSolicitudEstadia)
+            .where(TallerSolicitudEstadia.solicitud_id == solicitud_id)
+            .order_by(TallerSolicitudEstadia.numero_visita.asc(), TallerSolicitudEstadia.id.asc())
+        )
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_ultima_estadia_abierta(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> Optional[TallerSolicitudEstadia]:
+        stmt = (
+            select(TallerSolicitudEstadia)
+            .where(
+                and_(
+                    TallerSolicitudEstadia.solicitud_id == solicitud_id,
+                    TallerSolicitudEstadia.fecha_salida.is_(None),
+                )
+            )
+            .order_by(TallerSolicitudEstadia.id.desc())
+            .limit(1)
+        )
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_conteo_estadias(self, db: AsyncSession, solicitud_id: int) -> int:
+        stmt = select(func.count(TallerSolicitudEstadia.id)).where(
+            TallerSolicitudEstadia.solicitud_id == solicitud_id
+        )
+        res = await db.execute(stmt)
+        return res.scalar() or 0
 
     async def flush(self, db: AsyncSession) -> None:
         await db.flush()

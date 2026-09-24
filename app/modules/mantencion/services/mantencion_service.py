@@ -27,12 +27,15 @@ from app.modules.mantencion.models.taller_solicitud_comentario import TallerSoli
 from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.mantencion.models.pauta_taller import TallerSolicitudPauta
 from app.modules.mantencion.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
+from app.modules.mantencion.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.mantencion.repository.mantencion_repository import (
     MantencionRepository,
     mantencion_repository,
 )
 from app.modules.mantencion.utils import (
     calcular_duracion_minutos,
+    calcular_horas_en_taller,
+    calcular_telemetria_estadias,
     describir_detalle_averia,
     formatear_comentario_cierre,
     recopilar_archivos_fotos,
@@ -60,7 +63,7 @@ from app.modules.mantencion.dtos import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     TerminarAvanceDTO,
-
+    EstadiaTallerDTO,
     ReportarRepuestoDTO,
     PautaTallerItemDTO,
     PautaRespuestaDTO,
@@ -379,6 +382,30 @@ class MantencionService:
                 )
             )
 
+        estadias_dtos = []
+        estadias_val = _get_rel(sol, "estadias") or []
+        for est in estadias_val:
+            estadias_dtos.append(
+                EstadiaTallerDTO(
+                    id=est.id,
+                    solicitud_id=est.solicitud_id,
+                    numero_visita=est.numero_visita,
+                    fecha_ingreso=est.fecha_ingreso,
+                    fecha_salida=est.fecha_salida,
+                    horas_estadia=float(est.horas_estadia) if est.horas_estadia is not None else None,
+                    motivo_salida=est.motivo_salida,
+                )
+            )
+
+        bus_en_taller = bool(bus_obj.en_taller) if bus_obj else False
+        horas_acum, total_vis = calcular_telemetria_estadias(
+            estadias=estadias_dtos,
+            horas_taller_acumuladas_db=getattr(sol, "horas_taller_acumuladas", 0.0),
+            en_taller=bus_en_taller,
+        )
+
+        horas_en_taller_val = horas_acum if total_vis > 0 else calcular_horas_en_taller(sol.fecha_creacion, sol.fecha_cierre)
+
         return SolicitudDTO(
             id=sol.id,
             n_bus=sol.n_bus,
@@ -396,7 +423,11 @@ class MantencionService:
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
             fecha_liberacion=getattr(sol, "fecha_liberacion", None),
-            horas_en_taller=round((((sol.fecha_cierre or datetime.now(sol.fecha_creacion.tzinfo if hasattr(sol.fecha_creacion, "tzinfo") else None)) - sol.fecha_creacion).total_seconds() / 3600), 1) if sol.fecha_creacion else None,
+            fecha_primer_ingreso_taller=getattr(sol, "fecha_primer_ingreso_taller", None),
+            horas_demora_primer_ingreso=float(sol.horas_demora_primer_ingreso) if getattr(sol, "horas_demora_primer_ingreso", None) is not None else None,
+            horas_taller_acumuladas=horas_acum,
+            total_visitas=total_vis,
+            horas_en_taller=horas_en_taller_val,
             reincidencias_30d=getattr(sol, "reincidencias_30d", 0),
             pauta_completada=len(pauta_dtos) >= TOTAL_ITEMS_PAUTA_PREVENTIVA,
             total_fallas=total_fallas,
@@ -409,6 +440,7 @@ class MantencionService:
             comentarios=comentarios_dtos,
             pauta_respuestas=pauta_dtos,
             evidencias=evidencias_dtos,
+            estadias=estadias_dtos,
         )
 
     # --- Consultas de Catálogos ---
@@ -508,6 +540,19 @@ class MantencionService:
                     vistos_fin.add(m_id)
                     mecanicos_raw.append(h)
 
+        estadias_raw = r.get("estadias_json") or []
+        if isinstance(estadias_raw, str):
+            estadias_raw = json.loads(estadias_raw)
+        estadias_dtos = [EstadiaTallerDTO(**e) for e in estadias_raw if isinstance(e, dict)]
+
+        bus_en_taller = bool(r.get("bus_en_taller", False))
+        horas_acum, total_vis = calcular_telemetria_estadias(
+            estadias=estadias_dtos,
+            horas_taller_acumuladas_db=r.get("horas_taller_acumuladas"),
+            en_taller=bus_en_taller,
+        )
+        horas_en_taller_val = horas_acum if total_vis > 0 else r.get("horas_en_taller")
+
         return SolicitudDTO(
             id=r["id"],
             n_bus=r["n_bus"],
@@ -525,7 +570,11 @@ class MantencionService:
             fecha_creacion=r["fecha_creacion"],
             fecha_cierre=r.get("fecha_cierre"),
             fecha_liberacion=r.get("fecha_liberacion"),
-            horas_en_taller=r.get("horas_en_taller"),
+            fecha_primer_ingreso_taller=r.get("fecha_primer_ingreso_taller"),
+            horas_demora_primer_ingreso=float(r["horas_demora_primer_ingreso"]) if r.get("horas_demora_primer_ingreso") is not None else None,
+            horas_taller_acumuladas=horas_acum,
+            total_visitas=total_vis,
+            horas_en_taller=horas_en_taller_val,
             reincidencias_30d=r.get("reincidencias_30d", 0),
             pauta_completada=pauta_completada,
             total_fallas=tot,
@@ -538,6 +587,7 @@ class MantencionService:
             comentarios=comentarios_raw,
             pauta_respuestas=pauta_respuestas_raw,
             evidencias=evidencias_dtos,
+            estadias=estadias_dtos,
         )
 
     def _dict_to_solicitud_resumen_dto(self, r: dict) -> SolicitudResumenDTO:
@@ -570,6 +620,13 @@ class MantencionService:
             motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
             fecha_creacion=r["fecha_creacion"],
             fecha_cierre=r.get("fecha_cierre"),
+            fecha_liberacion=r.get("fecha_liberacion"),
+            fecha_primer_ingreso_taller=r.get("fecha_primer_ingreso_taller"),
+            horas_demora_primer_ingreso=float(r["horas_demora_primer_ingreso"]) if r.get("horas_demora_primer_ingreso") is not None else None,
+            horas_taller_acumuladas=float(r.get("horas_taller_acumuladas") or 0.0),
+            total_visitas=0,
+            horas_en_taller=r.get("horas_en_taller"),
+            reincidencias_30d=r.get("reincidencias_30d", 0),
             pauta_completada=False,
             total_fallas=tot,
             fallas_resueltas=resueltos,
@@ -580,6 +637,7 @@ class MantencionService:
             comentarios=[],
             pauta_respuestas=[],
             evidencias=evidencias_dtos,
+            estadias=[],
         )
 
     async def list_pendientes(
@@ -707,10 +765,11 @@ class MantencionService:
             n_bus=n_bus or (dto.n_bus if dto.n_bus else str(bus_id)),
             bus_id=bus_id,
             usuario_creador_id=creador_id,
-            estado=EstadoSolicitud.REPORTADO.value,
+            estado=EstadoSolicitud.PENDIENTE.value,
             descripcion_general=dto.descripcion_general,
             foto_url=dto.foto_url,
             fecha_creacion=now,
+            horas_taller_acumuladas=0.0,
         )
 
         # 3. Marcar bus físicamente en taller si lo crea supervisora/admin o si se solicita ingreso inmediato
@@ -724,19 +783,32 @@ class MantencionService:
         ]:
             debe_marcar_en_taller = True
 
-        if debe_marcar_en_taller and bus_id:
-            if not bus_obj:
-                bus_obj = await self.repo.get_bus_by_id(db, bus_id)
-            if bus_obj:
-                bus_obj.en_taller = True
-                solicitud.bus = bus_obj
-                logger.info(
-                    "[MANTENCION] Bus id=%s (n_bus='%s') marcado en taller físico (en_taller=True) al crear solicitud por %s (rol=%s)",
-                    bus_id,
-                    solicitud.n_bus,
-                    creador_nombre,
-                    creador_rol,
-                )
+        estadias_a_procesar: List[TallerSolicitudEstadia] = []
+        if debe_marcar_en_taller:
+            solicitud.fecha_primer_ingreso_taller = now
+            solicitud.horas_demora_primer_ingreso = 0.0
+
+            # Registrar primera estadía (visita #1)
+            primera_estadia = TallerSolicitudEstadia(
+                numero_visita=1,
+                fecha_ingreso=now,
+            )
+            solicitud.estadias.append(primera_estadia)
+            estadias_a_procesar.append(primera_estadia)
+
+            if bus_id:
+                if not bus_obj:
+                    bus_obj = await self.repo.get_bus_by_id(db, bus_id)
+                if bus_obj:
+                    bus_obj.en_taller = True
+                    solicitud.bus = bus_obj
+                    logger.info(
+                        "[MANTENCION] Bus id=%s (n_bus='%s') marcado en taller físico (en_taller=True) y abierta estadía #1 al crear solicitud por %s (rol=%s)",
+                        bus_id,
+                        solicitud.n_bus,
+                        creador_nombre,
+                        creador_rol,
+                    )
 
         evidencias_a_procesar: List[TallerSolicitudEvidencia] = []
         for ev_data in uploaded_evidencias:
@@ -756,10 +828,7 @@ class MantencionService:
         detalles_dtos: List[SolicitudDetalleDTO] = []
         detalles_a_procesar = []
         if dto.detalles:
-            # Separar fallas que requieren validación de existencia en BD:
-            # - Si el cliente envía falla_id y también falla_nombre (contrato optimizado Zero-Queries), confiamos en memoria.
-            # - Si el cliente envía falla_id acompañado de categoria_id pero SIN falla_nombre, es candidato a desajuste
-            #   (ej. cliente envió categoria_id como falla_id por error, o ID de falla inexistente). Se valida en BD.
+            # Separar fallas que requieren validación de existencia en BD (para tests de fallback de falla_id inexistente)
             check_falla_ids = [
                 d.falla_id
                 for d in dto.detalles
@@ -771,9 +840,6 @@ class MantencionService:
                 else {}
             )
 
-            # Categorías que requieren resolución de falla canónica activa:
-            # - Detalles sin falla_id pero con categoria_id
-            # - Detalles cuyo falla_id fue verificado y no existe en la base de datos
             needed_cats = [
                 d.categoria_id
                 for d in dto.detalles
@@ -785,62 +851,35 @@ class MantencionService:
             fallas_map = await self.repo.find_fallas_activas_by_categorias(db, needed_cats) if needed_cats else {}
 
             for det_dto in dto.detalles:
+                texto = det_dto.texto_falla
                 falla_id = det_dto.falla_id
                 cat_id = det_dto.categoria_id
-                falla_nombre = getattr(det_dto, "falla_nombre", None)
+                falla_nombre = det_dto.falla_nombre
                 cat_nombre_res = getattr(det_dto, "categoria_nombre", None)
 
-                # Si requería verificación en BD:
-                if falla_id in check_falla_ids:
-                    if falla_id in existing_fallas_info:
-                        f_info = existing_fallas_info[falla_id]
-                        falla_nombre = falla_nombre or f_info["nombre"]
-                        cat_id = cat_id or f_info["categoria_id"]
-                        cat_nombre_res = cat_nombre_res or f_info["cat_nombre"]
-                    else:
-                        # Fallback defensivo: falla_id inexistente en BD, resolver por categoria_id
-                        logger.warning(
-                            "[MANTENCION] falla_id=%s inexistente o desajustado con categoria_id=%s. Aplicando fallback a falla activa de categoría.",
-                            falla_id,
-                            cat_id,
-                        )
-                        falla_id = None
-                        if cat_id in fallas_map:
-                            falla_id, falla_nombre, cat_nombre_res = fallas_map[cat_id]
-                        elif cat_id:
-                            cat = await self.repo.get_categoria_by_id(db, cat_id)
-                            cat_nom = cat.nombre if cat else f"Categoría #{cat_id}"
-                            cat_nombre_res = cat_nom
-                            nueva_falla = FallaTaller(
-                                categoria_id=cat_id,
-                                nombre=f"Avería de {cat_nom}",
-                                is_active=True,
-                            )
-                            self.repo.add_falla(db, nueva_falla)
-                            await self.repo.flush(db)
-                            falla_id = nueva_falla.id
-                            falla_nombre = nueva_falla.nombre
-                elif not falla_id and cat_id:
-                    # Detalle sin falla_id pero con categoria_id: resolución estándar
+                # Fallback defensivo si se envía un ID numérico de falla que no existe en BD
+                if falla_id in check_falla_ids and falla_id not in existing_fallas_info:
+                    falla_id = None
                     if cat_id in fallas_map:
                         falla_id, falla_nombre, cat_nombre_res = fallas_map[cat_id]
-                    else:
-                        cat = await self.repo.get_categoria_by_id(db, cat_id)
-                        cat_nom = cat.nombre if cat else f"Categoría #{cat_id}"
-                        cat_nombre_res = cat_nom
-                        nueva_falla = FallaTaller(
-                            categoria_id=cat_id,
-                            nombre=f"Avería de {cat_nom}",
-                            is_active=True,
-                        )
-                        self.repo.add_falla(db, nueva_falla)
-                        await self.repo.flush(db)
-                        falla_id = nueva_falla.id
-                        falla_nombre = nueva_falla.nombre
+
+                if cat_id and not falla_id and cat_id in fallas_map:
+                    falla_id, f_nom, cat_nom = fallas_map[cat_id]
+                    falla_nombre = falla_nombre or f_nom
+                    cat_nombre_res = cat_nombre_res or cat_nom
+
+                if not texto and falla_id:
+                    texto = falla_nombre or f"Avería #{falla_id}"
+                elif not texto and cat_id:
+                    texto = f"Avería de categoría #{cat_id}"
+                elif not texto:
+                    continue
+
+                falla_nombre = falla_nombre or texto
 
                 detalle = TallerSolicitudDetalle(
                     falla_id=falla_id,
-                    descripcion_personalizada=det_dto.descripcion_personalizada,
+                    descripcion_personalizada=texto,
                     resuelto=False,
                     fecha_creacion=now,
                 )
@@ -908,7 +947,7 @@ class MantencionService:
                     )
                 )
 
-        logger.info("[MANTENCION] Solicitud creada exitosamente | id=%s | n_bus='%s' | estado=REPORTADO", solicitud.id, solicitud.n_bus)
+        logger.info("[MANTENCION] Solicitud creada exitosamente | id=%s | n_bus='%s' | estado=%s", solicitud.id, solicitud.n_bus, solicitud.estado)
 
         # 4. Retornar DTO directamente construido en memoria sin disparar 15 consultas selectinload a tablas vacías
         evidencias_dtos = [
@@ -924,6 +963,19 @@ class MantencionService:
                 fecha_creacion=ev.fecha_creacion,
             )
             for ev in evidencias_a_procesar
+        ]
+
+        estadias_dtos = [
+            EstadiaTallerDTO(
+                id=getattr(e, "id", None),
+                solicitud_id=solicitud.id,
+                numero_visita=e.numero_visita,
+                fecha_ingreso=e.fecha_ingreso,
+                fecha_salida=e.fecha_salida,
+                horas_estadia=e.horas_estadia,
+                motivo_salida=e.motivo_salida,
+            )
+            for e in estadias_a_procesar
         ]
 
         return SolicitudDTO(
@@ -942,17 +994,129 @@ class MantencionService:
             motivo_cierre_parcial=None,
             fecha_creacion=solicitud.fecha_creacion,
             fecha_cierre=None,
+            fecha_liberacion=None,
+            fecha_primer_ingreso_taller=solicitud.fecha_primer_ingreso_taller,
+            horas_demora_primer_ingreso=solicitud.horas_demora_primer_ingreso,
+            horas_taller_acumuladas=0.0,
+            total_visitas=len(estadias_dtos),
+            horas_en_taller=0.0 if len(estadias_dtos) > 0 else None,
+            reincidencias_30d=0,
             pauta_completada=False,
             total_fallas=len(detalles_dtos),
             fallas_resueltas=0,
             fallas_con_falta_repuesto=0,
+            fallas_pendientes=len(detalles_dtos),
             detalles=detalles_dtos,
             mecanicos=[],
             historial_mecanicos=[],
             comentarios=[],
             pauta_respuestas=[],
             evidencias=evidencias_dtos,
+            estadias=estadias_dtos,
         )
+
+    async def _asegurar_ingreso_taller_y_estadia(
+        self, db: AsyncSession, solicitud: TallerSolicitud, now: datetime
+    ) -> None:
+        """
+        Garantiza que el bus quede marcado físicamente en taller (bus.en_taller = True),
+        registra la demora de primer ingreso si es la primera vez que entra a taller,
+        y abre una nueva estadía (#N+1) si no existe una estadía abierta activa.
+        """
+        # 1. Asegurar bus en taller
+        if solicitud.bus:
+            solicitud.bus.en_taller = True
+        elif solicitud.bus_id:
+            bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
+            if bus:
+                bus.en_taller = True
+                solicitud.bus = bus
+
+        # 2. Registrar fecha de primer ingreso a taller y horas de demora
+        if not solicitud.fecha_primer_ingreso_taller:
+            solicitud.fecha_primer_ingreso_taller = now
+            if solicitud.fecha_creacion:
+                delta_sec = max(0.0, (now - solicitud.fecha_creacion).total_seconds())
+                solicitud.horas_demora_primer_ingreso = round(delta_sec / 3600.0, 1)
+            else:
+                solicitud.horas_demora_primer_ingreso = 0.0
+
+        # 3. Limpiar fecha_liberacion activa si existía
+        solicitud.fecha_liberacion = None
+
+        # 4. Verificar si ya tiene una estadía abierta en memoria o BD
+        estadia_abierta = None
+        if hasattr(solicitud, "estadias") and solicitud.estadias is not None:
+            estadia_abierta = next((e for e in solicitud.estadias if e.fecha_salida is None), None)
+
+        if not estadia_abierta:
+            estadia_abierta = await self.repo.get_ultima_estadia_abierta(db, solicitud.id)
+
+        if not estadia_abierta:
+            # Calcular número de visita siguiente
+            conteo_prev = 0
+            if hasattr(solicitud, "estadias") and solicitud.estadias:
+                conteo_prev = len(solicitud.estadias)
+            else:
+                conteo_prev = await self.repo.get_conteo_estadias(db, solicitud.id)
+
+            nueva_estadia = TallerSolicitudEstadia(
+                solicitud_id=solicitud.id,
+                numero_visita=conteo_prev + 1,
+                fecha_ingreso=now,
+            )
+            self.repo.add_estadia(db, nueva_estadia)
+            if not hasattr(solicitud, "estadias") or solicitud.estadias is None:
+                solicitud.estadias = []
+            solicitud.estadias.append(nueva_estadia)
+            logger.info(
+                "[MANTENCION-TELEMETRIA] Nueva estadía abierta | solicitud_id=%s | visita=#%s | fecha_ingreso=%s",
+                solicitud.id,
+                nueva_estadia.numero_visita,
+                now,
+            )
+
+    async def _cerrar_estadia_activa(
+        self, db: AsyncSession, solicitud: TallerSolicitud, now: datetime, motivo_salida: str
+    ) -> None:
+        """
+        Cierra la estadía activa abierta (fecha_salida = now), computa la duración exacta
+        en horas de esa visita, incrementa horas_taller_acumuladas en la OT y marca bus.en_taller = False.
+        """
+        estadia_abierta = None
+        if hasattr(solicitud, "estadias") and solicitud.estadias is not None:
+            estadia_abierta = next((e for e in solicitud.estadias if e.fecha_salida is None), None)
+
+        if not estadia_abierta:
+            estadia_abierta = await self.repo.get_ultima_estadia_abierta(db, solicitud.id)
+
+        if estadia_abierta:
+            estadia_abierta.fecha_salida = now
+            delta_sec = max(0.0, (now - estadia_abierta.fecha_ingreso).total_seconds())
+            duracion_horas = round(delta_sec / 3600.0, 1)
+            estadia_abierta.horas_estadia = duracion_horas
+            estadia_abierta.motivo_salida = motivo_salida
+            db.add(estadia_abierta)
+
+            horas_previas = float(solicitud.horas_taller_acumuladas or 0.0)
+            solicitud.horas_taller_acumuladas = round(horas_previas + duracion_horas, 1)
+            logger.info(
+                "[MANTENCION-TELEMETRIA] Estadía cerrada | solicitud_id=%s | visita=#%s | horas=%s | motivo='%s' | acumuladas=%s",
+                solicitud.id,
+                estadia_abierta.numero_visita,
+                duracion_horas,
+                motivo_salida,
+                solicitud.horas_taller_acumuladas,
+            )
+
+        # Marcar bus fuera de taller físico
+        if solicitud.bus:
+            solicitud.bus.en_taller = False
+        elif solicitud.bus_id:
+            bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
+            if bus:
+                bus.en_taller = False
+                solicitud.bus = bus
 
     async def tomar_trabajo(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int, dto: TomarTrabajoDTO
@@ -1021,8 +1185,9 @@ class MantencionService:
                 self._attach_mecanico_safe(solicitud, colab_entry)
                 logger.info("[MANTENCION] Colaborador co-responsable asignado | solicitud_id=%s | colab_id=%s", solicitud_id, colab_id)
 
-        # 5. Actualizar estado
+        # 5. Actualizar estado y asegurar telemetría de taller
         solicitud.estado = "EN_REPARACION"
+        await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         # 6. Agregar comentario predeterminado de inicio/asignación
         fallas_nombres = [_describir_detalle(d) for d in (solicitud.detalles or [])]
@@ -1266,11 +1431,9 @@ class MantencionService:
                 raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException("Detalle de falla no encontrado")
 
-        if resuelto and getattr(detalle_target, "falta_repuesto", False):
-            raise BusinessRuleException(
-                "No se puede marcar como resuelta una falla que se encuentra a la espera de repuesto. "
-                "Debe registrarse primero la recepción/disponibilidad del repuesto."
-            )
+        # El flujo de repuestos no bloquea la resolución de fallas en esta fase:
+        # if resuelto and getattr(detalle_target, "falta_repuesto", False):
+        #     raise BusinessRuleException("Falla en espera de repuesto")
 
         now = datetime.now()
         detalle_target.resuelto = resuelto
@@ -1454,13 +1617,13 @@ class MantencionService:
                     if asig.fecha_asignacion:
                         asig.duracion_minutos = calcular_duracion_minutos(asig.fecha_asignacion, now)
 
-        # 4. Liberar bus del taller si corresponde
-        if dto.liberar_bus_taller and solicitud.bus:
-            solicitud.bus.en_taller = False
-        elif dto.liberar_bus_taller and solicitud.bus_id:
-            bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-            if bus:
-                bus.en_taller = False
+        # 4. Liberar bus del taller y cerrar estadía activa de taller
+        motivo_egreso = "FINALIZADO" if len(fallas_no_resueltas) == 0 else "LIBERADO"
+        debe_liberar = True if dto.liberar_bus_taller is None else dto.liberar_bus_taller
+        if debe_liberar or len(fallas_no_resueltas) == 0:
+            await self._cerrar_estadia_activa(db, solicitud, now, motivo_salida=motivo_egreso)
+        elif solicitud.bus:
+            solicitud.bus.en_taller = True
 
         # 5. Registrar comentario de cierre en bitácora
         texto_cierre = formatear_comentario_cierre(
@@ -1610,19 +1773,12 @@ class MantencionService:
                 presencias_activas_existentes.add(m_id)
 
         if solicitud.estado in [
-            EstadoSolicitud.REPORTADO.value,
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
+            EstadoSolicitud.REPORTADO.value,
         ]:
-            if solicitud.estado == EstadoSolicitud.LIBERADO.value:
-                solicitud.fecha_liberacion = None
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
-            if solicitud.bus:
-                solicitud.bus.en_taller = True
-            elif solicitud.bus_id:
-                bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                if bus:
-                    bus.en_taller = True
+            await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         colab_nombres = []
         if dto.colaboradores_ids:
@@ -1749,19 +1905,12 @@ class MantencionService:
             self._attach_mecanico_safe(solicitud, nueva_presencia)
 
         if solicitud.estado in [
-            EstadoSolicitud.REPORTADO.value,
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
+            EstadoSolicitud.REPORTADO.value,
         ]:
-            if solicitud.estado == EstadoSolicitud.LIBERADO.value:
-                solicitud.fecha_liberacion = None
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
-            if solicitud.bus:
-                solicitud.bus.en_taller = True
-            elif solicitud.bus_id:
-                bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                if bus:
-                    bus.en_taller = True
+            await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         fallas_nombres = [
             _describir_detalle(sol_detalles_map[d_id])
@@ -1863,12 +2012,7 @@ class MantencionService:
 
             debe_liberar = True if dto.liberar_bus_taller is None else dto.liberar_bus_taller
             if debe_liberar:
-                if solicitud.bus:
-                    solicitud.bus.en_taller = False
-                elif solicitud.bus_id:
-                    bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                    if bus:
-                        bus.en_taller = False
+                await self._cerrar_estadia_activa(db, solicitud, now, motivo_salida="FINALIZADO")
 
         # 2. Transición hacia LIBERADO (cierre parcial / egreso con fallas o repuestos pendientes)
         elif nuevo_estado == EstadoSolicitud.LIBERADO.value:
@@ -1895,12 +2039,7 @@ class MantencionService:
 
             debe_liberar = True if dto.liberar_bus_taller is None else dto.liberar_bus_taller
             if debe_liberar:
-                if solicitud.bus:
-                    solicitud.bus.en_taller = False
-                elif solicitud.bus_id:
-                    bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                    if bus:
-                        bus.en_taller = False
+                await self._cerrar_estadia_activa(db, solicitud, now, motivo_salida="LIBERADO")
 
         # 3. Reapertura desde FINALIZADO o LIBERADO a estado activo
         elif estado_anterior in (EstadoSolicitud.FINALIZADO.value, EstadoSolicitud.LIBERADO.value) and nuevo_estado not in (EstadoSolicitud.FINALIZADO.value, EstadoSolicitud.LIBERADO.value):
@@ -1909,12 +2048,7 @@ class MantencionService:
             solicitud.mecanico_cierre_id = None
             solicitud._mecanico_cierre_nombre_cached = None
             if nuevo_estado == EstadoSolicitud.EN_REPARACION.value:
-                if solicitud.bus:
-                    solicitud.bus.en_taller = True
-                elif solicitud.bus_id:
-                    bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                    if bus:
-                        bus.en_taller = True
+                await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         # 4. Transición a PENDIENTE o REPORTADO
         elif nuevo_estado in (
@@ -1934,12 +2068,7 @@ class MantencionService:
 
         # 5. Transición a EN_REPARACION asegurando que el bus figure en taller
         elif nuevo_estado == EstadoSolicitud.EN_REPARACION.value:
-            if solicitud.bus:
-                solicitud.bus.en_taller = True
-            elif solicitud.bus_id:
-                bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                if bus:
-                    bus.en_taller = True
+            await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         # 5. Aplicar nuevo estado
         solicitud.estado = nuevo_estado
@@ -2039,8 +2168,9 @@ class MantencionService:
             cerradas_asig_ids.add(asig.id)
 
         con_restantes_ids = set()
+        quedan_asignaciones = False
         if cerradas_asig_ids:
-            con_restantes_ids = await self.repo.get_asignaciones_activas_restantes(
+            con_restantes_ids, quedan_asignaciones = await self.repo.get_estado_cuadrilla_restante(
                 db, solicitud_id, mecanicos_involucrados_ids, cerradas_asig_ids
             )
 
@@ -2054,13 +2184,6 @@ class MantencionService:
                 presencias_cerradas_ids.add(p.id)
 
         quedan_presencias = any(p.is_activo for p in presencias_activas if p.id not in presencias_cerradas_ids)
-
-        if cerradas_asig_ids:
-            quedan_asignaciones = await self.repo.get_otras_asignaciones_activas(
-                db, solicitud_id, cerradas_asig_ids
-            )
-        else:
-            quedan_asignaciones = False
 
         if not quedan_presencias and not quedan_asignaciones:
             solicitud.estado = EstadoSolicitud.PENDIENTE.value
@@ -2088,18 +2211,26 @@ class MantencionService:
             ejecutor_nombre = mecanico_nombre
             mecanicos_nombres = [mecanico_nombre]
         else:
-            from app.modules.auth.repository.user_repository import user_repository
-            all_ids = list(mecanicos_involucrados_ids)
-            if mecanico_id not in all_ids:
-                all_ids.append(mecanico_id)
-            users_map = await user_repository.get_by_ids_map(db, all_ids)
+            # Obtener nombres primero de los objetos precargados en memoria para evitar viajes a DB
+            nombres_en_memoria = {}
+            for asig in asignaciones_activas:
+                if asig.mecanico and asig.mecanico_id:
+                    nombres_en_memoria[asig.mecanico_id] = asig.mecanico.nombre_completo
+            for p in presencias_activas:
+                if getattr(p, "mecanico", None) and p.mecanico_id:
+                    nombres_en_memoria[p.mecanico_id] = p.mecanico.nombre_completo
+
+            ids_faltantes = [m_id for m_id in mecanicos_involucrados_ids if m_id not in nombres_en_memoria]
+            if ids_faltantes:
+                from app.modules.auth.repository.user_repository import user_repository
+                users_map = await user_repository.get_by_ids_map(db, ids_faltantes)
+                for m_id, u in users_map.items():
+                    nombres_en_memoria[m_id] = u.nombre_completo
 
             for m_id in sorted(mecanicos_involucrados_ids):
-                u = users_map.get(m_id)
-                mecanicos_nombres.append(u.nombre_completo if u else "Mecánico")
+                mecanicos_nombres.append(nombres_en_memoria.get(m_id, "Mecánico"))
 
-            u_ejecutor = users_map.get(mecanico_id)
-            ejecutor_nombre = u_ejecutor.nombre_completo if u_ejecutor else (mecanico_nombre or "Mecánico")
+            ejecutor_nombre = nombres_en_memoria.get(mecanico_id) or (mecanico_nombre or "Mecánico")
 
         fallas_involucradas = [
             _describir_detalle(sol_detalles_map[a.detalle_id])
@@ -2336,36 +2467,25 @@ class MantencionService:
             raise BusinessRuleException("No se pueden agregar fallas a una solicitud que ya ha sido finalizada")
 
         now = datetime.now()
-        falla_id = dto.falla_id
+        texto = dto.texto_falla
+        if not texto and not dto.falla_id:
+            raise BusinessRuleException("Debe indicar el nombre o descripción de la avería a agregar")
 
-        # 1. Resolver falla_id y objeto f_obj si corresponde
-        cat_obj = None
+        falla_id = dto.falla_id
         f_obj = None
-        if not falla_id and dto.categoria_id:
+        cat_obj = None
+        if dto.categoria_id:
             cat_obj = await self.repo.get_categoria_by_id(db, dto.categoria_id)
-            falla_id = await self.repo.find_falla_activa_by_categoria(db, dto.categoria_id)
-            if not falla_id:
-                cat_nom = cat_obj.nombre if cat_obj else f"Categoría #{dto.categoria_id}"
-                f_obj = FallaTaller(
-                    categoria_id=dto.categoria_id,
-                    nombre=f"Avería de {cat_nom}",
-                    is_active=True,
-                )
-                if cat_obj:
-                    f_obj.categoria = cat_obj
-                self.repo.add_falla(db, f_obj)
-                await self.repo.flush(db)
-                falla_id = f_obj.id
-            else:
-                f_obj = await self.repo.get_falla_by_id(db, falla_id)
-        elif falla_id:
+
+        if falla_id:
             f_obj = await self.repo.get_falla_by_id(db, falla_id)
-        else:
-            if not dto.descripcion_personalizada or not dto.descripcion_personalizada.strip():
-                raise BusinessRuleException("Debe indicar al menos una categoría, falla o descripción personalizada de la avería")
-            falla_id = await self.repo.find_falla_otro(db)
+        elif dto.categoria_id:
+            falla_id = await self.repo.find_falla_activa_by_categoria(db, dto.categoria_id)
             if falla_id:
                 f_obj = await self.repo.get_falla_by_id(db, falla_id)
+        
+        if not texto and cat_obj:
+            texto = f_obj.nombre if f_obj else f"Avería de {cat_obj.nombre}"
 
         # 2. Registrar mecánico ejecutor
         u = await self.repo.get_usuario_by_id(db, mecanico_id)
@@ -2375,7 +2495,7 @@ class MantencionService:
         nuevo_detalle = TallerSolicitudDetalle(
             solicitud_id=solicitud.id,
             falla_id=falla_id,
-            descripcion_personalizada=dto.descripcion_personalizada.strip() if dto.descripcion_personalizada else None,
+            descripcion_personalizada=texto,
             resuelto=False,
             falta_repuesto=False,
             fecha_creacion=now,
@@ -2445,17 +2565,12 @@ class MantencionService:
                 self._attach_mecanico_safe(solicitud, nueva_presencia)
 
             if solicitud.estado in [
-                EstadoSolicitud.REPORTADO.value,
                 EstadoSolicitud.PENDIENTE.value,
                 EstadoSolicitud.LIBERADO.value,
+                EstadoSolicitud.REPORTADO.value,
             ]:
                 solicitud.estado = EstadoSolicitud.EN_REPARACION.value
-                if solicitud.bus:
-                    solicitud.bus.en_taller = True
-                elif solicitud.bus_id:
-                    bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                    if bus:
-                        bus.en_taller = True
+                await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
         else:
             debe_autoasignar = dto.autoasignar and not es_supervisor
             if debe_autoasignar:
@@ -2493,17 +2608,12 @@ class MantencionService:
                     self._attach_mecanico_safe(solicitud, nueva_presencia)
 
                 if solicitud.estado in [
-                    EstadoSolicitud.REPORTADO.value,
                     EstadoSolicitud.PENDIENTE.value,
                     EstadoSolicitud.LIBERADO.value,
+                    EstadoSolicitud.REPORTADO.value,
                 ]:
                     solicitud.estado = EstadoSolicitud.EN_REPARACION.value
-                    if solicitud.bus:
-                        solicitud.bus.en_taller = True
-                    elif solicitud.bus_id:
-                        bus = await self.repo.get_bus_by_id(db, solicitud.bus_id)
-                        if bus:
-                            bus.en_taller = True
+                    await self._asegurar_ingreso_taller_y_estadia(db, solicitud, now)
 
         if hasattr(solicitud, "detalles") and solicitud.detalles is not None:
             solicitud.detalles.append(nuevo_detalle)
@@ -2617,11 +2727,9 @@ class MantencionService:
             if not mec_id:
                 raise BusinessRuleException("Debe indicar el ID del mecánico que realizó la reparación de la avería")
 
-            if getattr(detalle_target, "falta_repuesto", False):
-                raise BusinessRuleException(
-                    "No se puede marcar como resuelta una falla que se encuentra a la espera de repuesto. "
-                    "Debe registrarse primero la recepción/disponibilidad del repuesto."
-                )
+            # El flujo de repuestos no bloquea la resolución en esta fase:
+            # if getattr(detalle_target, "falta_repuesto", False):
+            #     raise BusinessRuleException("Falla en espera de repuesto")
 
             u_mec = await self.repo.get_usuario_by_id(db, mec_id)
             if not u_mec or not u_mec.is_active:

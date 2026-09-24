@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 from app.modules.supervision.constants import TipoAlertaSupervision, SeveridadAlerta
@@ -61,11 +61,16 @@ class MecanicoAuditoriaDTO(BaseModel):
 class DetalleFallaAuditoriaDTO(BaseModel):
     """Falla resumida para badges de averías en tarjetas de supervisión."""
     id: int
-    falla_nombre: Optional[str] = None
+    falla_nombre: str
+    nombre: Optional[str] = None
     categoria_nombre: Optional[str] = None
     descripcion_personalizada: Optional[str] = None
     resuelto: bool = False
     falta_repuesto: bool = False
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.nombre:
+            self.nombre = self.falla_nombre
 
 
 class SolicitudAuditoriaDTO(BaseModel):

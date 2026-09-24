@@ -41,7 +41,7 @@ async def test_flujo_completo_taller_e2e(
     det2_id = detalles[1]["id"]
 
     assert sol_data["n_bus"] == "BUS-808"
-    assert sol_data["estado"] == "REPORTADO"
+    assert sol_data["estado"] == "PENDIENTE"
     assert len(detalles) == 2
 
     # -------------------------------------------------------------------------

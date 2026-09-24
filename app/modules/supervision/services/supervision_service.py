@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+from app.modules.mantencion.utils import calcular_horas_en_taller
 from app.modules.mantencion.services.mantencion_service import (
     MantencionService,
     mantencion_service,
@@ -151,7 +152,11 @@ class SupervisionService:
                 if d.falta_repuesto:
                     fallas_con_falta_repuesto += 1
 
-                falla_nom = d.falla.nombre if getattr(d, "falla", None) else None
+                falla_nom = (
+                    d.descripcion_personalizada
+                    or (d.falla.nombre if getattr(d, "falla", None) else None)
+                    or f"Avería #{d.id}"
+                )
                 cat_nom = (
                     d.falla.categoria.nombre
                     if getattr(d, "falla", None) and getattr(d.falla, "categoria", None)
@@ -178,9 +183,7 @@ class SupervisionService:
 
         horas_taller = getattr(sol, "horas_en_taller", None)
         if horas_taller is None and sol.fecha_creacion:
-            ref_fin = sol.fecha_cierre or datetime.now(sol.fecha_creacion.tzinfo)
-            diff_seg = (ref_fin - sol.fecha_creacion).total_seconds()
-            horas_taller = round(diff_seg / 3600.0, 1)
+            horas_taller = calcular_horas_en_taller(sol.fecha_creacion, sol.fecha_cierre)
 
         return SolicitudAuditoriaDTO(
             id=sol.id,

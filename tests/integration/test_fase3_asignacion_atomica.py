@@ -41,7 +41,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
     assert res_crear.status_code == 201
     data_sol = res_crear.json()
     sol_id = data_sol["id"]
-    assert data_sol["estado"] == "REPORTADO"
+    assert data_sol["estado"] == "PENDIENTE"
     assert len(data_sol["detalles"]) == 2
     det1_id = data_sol["detalles"][0]["id"]
     det2_id = data_sol["detalles"][1]["id"]

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 87,
+  "id": "AV-0087",
+  "timestamp": "2026-09-23T17:28:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-DESACOPLE-CATEGORIAS",
+    "name": "Eliminación de Raíz de Categorías en Fallas y Adopción de Avería Directa",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación de raíz del concepto de categorías en el registro y auditoría de fallas de taller. Cada avería se define únicamente por su texto directo ('nombre' o 'falla_nombre'). Se simplificó la ingesta en create_solicitud y agregar_falla_a_solicitud suprimiendo la creación de fallas o categorías artificiales. Se actualizaron las consultas CTE de listados en mantencion y auditoría de supervisión para garantizar que ninguna falla aparezca como desconocida o vacía. Se configuró y aplicó la migración 014 a la base de datos PostgreSQL local.",
+  "scope": {
+    "planned": [
+      "Configurar DATABASE_URL en .env hacia PostgreSQL local estricto (127.0.0.1:5432) y aplicar alembic upgrade head",
+      "Actualizar SolicitudDetalleCreateDTO y AgregarFallaDTO con property helper texto_falla",
+      "Actualizar SolicitudDetalleDTO y DetalleFallaAuditoriaDTO con model_post_init para asegurar nombre y falla_nombre limpios",
+      "Simplificar create_solicitud en MantencionService eliminando la resolución en cascada de categorías",
+      "Simplificar agregar_falla_a_solicitud para admitir directamente el texto de la avería sin forzar catálogo",
+      "Actualizar consultas SQL nativas en mantencion_repository y supervision_repository proyectando COALESCE(d.descripcion_personalizada, f.nombre, 'Avería')",
+      "Actualizar _mapear_orm_a_auditoria_dto en supervision_service para priorizar descripcion_personalizada",
+      "Ejecutar y verificar suite de pruebas automatizadas"
+    ],
+    "completed": [
+      "Configurar DATABASE_URL en .env hacia PostgreSQL local estricto (127.0.0.1:5432) y aplicar alembic upgrade head",
+      "Actualizar SolicitudDetalleCreateDTO y AgregarFallaDTO con property helper texto_falla",
+      "Actualizar SolicitudDetalleDTO y DetalleFallaAuditoriaDTO con model_post_init para asegurar nombre y falla_nombre limpios",
+      "Simplificar create_solicitud en MantencionService eliminando la resolución en cascada de categorías",
+      "Simplificar agregar_falla_a_solicitud para admitir directamente el texto de la avería sin forzar catálogo",
+      "Actualizar consultas SQL nativas en mantencion_repository y supervision_repository proyectando COALESCE(d.descripcion_personalizada, f.nombre, 'Avería')",
+      "Actualizar _mapear_orm_a_auditoria_dto en supervision_service para priorizar descripcion_personalizada",
+      "Ejecutar y verificar suite de pruebas automatizadas"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "DATABASE_URL configurada a PostgreSQL local estricto (127.0.0.1:5432/narbus_taller_db) desactivando Neon Cloud"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "modified",
+      "summary": "Inclusión de campo nombre y property texto_falla en SolicitudDetalleCreateDTO/AgregarFallaDTO y model_post_init en SolicitudDetalleDTO"
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "DetalleFallaAuditoriaDTO enriquecido con post-init para garantizar falla_nombre y nombre limpios"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Eliminación de resolución de categorías en create_solicitud y simplificación de agregar_falla_a_solicitud"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Proyección de 'nombre' y 'falla_nombre' usando COALESCE en detalles_agg para list_pendientes, list_liberadas y list_finalizadas"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Proyección de 'falla_nombre' y 'nombre' directo en list_auditoria_buses"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Mapeo de falla_nom priorizando descripcion_personalizada en _mapear_orm_a_auditoria_dto"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0087-01",
+      "title": "Configuración estricta a base de datos PostgreSQL local",
+      "rationale": "El entorno de desarrollo y pruebas locales debe operar directamente sobre 127.0.0.1:5432 según directrices de AGENTS.md, evitando latencia o inconsistencias con bases de datos en la nube.",
+      "consequences": "Total autonomía de desarrollo local con migraciones sincronizadas en la máquina del desarrollador."
+    },
+    {
+      "id": "DEC-0087-02",
+      "title": "Avería definida por su texto directo sin dependencia de catálogo o categorías",
+      "rationale": "En la operación de taller, las fallas son específicas y redactadas libremente por conductores o mecánicos. Las categorías generaban etiquetas 'Desconocido' o agrupaciones artificiales que no aportaban valor técnico.",
+      "consequences": "Contratos limpios donde 'nombre' o 'falla_nombre' siempre devuelven el texto real de la avería."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\alembic upgrade head",
+      "result": "passed",
+      "evidence": "Running upgrade 013_add_fecha_liberacion -> 014_unificar_estados_y_estadias exitoso en local"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q tests/unit/",
+      "result": "passed",
+      "evidence": "130 passed in 44.12s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q tests/integration/",
+      "result": "passed",
+      "evidence": "45 passed in 18.10s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Socializar guía frontend y proceder con entregables de la rama develop.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "La base de datos local postgresql://127.0.0.1:5432/narbus_taller_db se encuentra en la versión de esquema 014."
+  ]
+}

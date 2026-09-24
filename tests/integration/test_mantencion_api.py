@@ -38,7 +38,7 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     sol_data = create_res.json()
     sol_id = sol_data["id"]
     detalle_id = sol_data["detalles"][0]["id"]
-    assert sol_data["estado"] == "REPORTADO"
+    assert sol_data["estado"] == "PENDIENTE"
 
     # 2. Mecánico 1 revisa solicitudes pendientes
     pendientes_res = await client.get("/api/v1/mantencion/pendientes", headers=auth_headers_mecanico1)

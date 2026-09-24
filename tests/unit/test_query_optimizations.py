@@ -84,7 +84,7 @@ async def test_create_solicitud_batch_fallas_and_fast_dto(db_session: AsyncSessi
     assert sol_dto.bus_patente == "OPTI-01"
     assert sol_dto.usuario_creador_id == chofer.id
     assert sol_dto.usuario_creador_nombre == "Carlos Soto"
-    assert sol_dto.estado == "REPORTADO"
+    assert sol_dto.estado == "PENDIENTE"
     assert sol_dto.total_fallas == 2
     assert len(sol_dto.detalles) == 2
 

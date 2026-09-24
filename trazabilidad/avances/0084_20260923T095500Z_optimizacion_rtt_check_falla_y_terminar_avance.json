@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 84,
+  "id": "AV-0084",
+  "timestamp": "2026-09-23T09:55:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "OPT-MANT-FLUX",
+    "name": "Optimización RTTs en Check de Falla y Término de Avance",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización de rendimiento y reducción de viajes de red (RTTs) en los flujos de interacción del mecánico: 1) Desacople completo del control de repuestos en check_detalle y resolver_falla_supervisora; 2) Consolidación de la verificación de cuadrilla restante en get_estado_cuadrilla_restante en 1 sola consulta SQL; 3) Reutilización de nombres de mecánicos precargados en memoria en terminar_avance sin consultas adicionales a usuarios; 4) 100% de la suite de pruebas aprobada (180 tests pasando).",
+  "scope": {
+    "planned": [
+      "Desacoplar validaciones bloqueantes de repuestos en check de fallas",
+      "Consolidar consultas de cuadrilla restante en terminar_avance a 1 sola consulta",
+      "Reutilizar nombres de usuarios de las entidades precargadas en memoria",
+      "Preservar compatibilidad total con contratos de frontend y tests existentes"
+    ],
+    "completed": [
+      "Desacoplar validaciones bloqueantes de repuestos en check de fallas",
+      "Consolidar consultas de cuadrilla restante en terminar_avance a 1 sola consulta",
+      "Reutilizar nombres de usuarios de las entidades precargadas en memoria",
+      "Preservar compatibilidad total con contratos de frontend y tests existentes"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de esquemas DDL en base de datos",
+      "Alteración de contratos DTO consumidos por el frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Incorporación de get_estado_cuadrilla_restante para unificar verificación de mecánicos y asignaciones activas en 1 solo viaje de red."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Desacople de validación falta_repuesto en check_detalle y resolver_falla_supervisora, unificación de comprobaciones de cuadrilla restante y resolución de nombres en memoria."
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Actualización de prueba unitaria reflejando el desacople de repuestos en la resolución de fallas."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Consolidación de consultas de cuadrilla restante en un solo statement SQL",
+      "rationale": "En terminar_avance se ejecutaban consultas secuenciales independientes (get_asignaciones_activas_restantes y get_otras_asignaciones_activas). Unificarlas en get_estado_cuadrilla_restante reduce 1 Round-Trip Time completo a la base de datos.",
+      "consequences": "Menor tiempo de respuesta en la entrega de turno sin perder la exactitud en la transición de la solicitud a PENDIENTE."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Resolución de nombres para bitácora a partir de relaciones precargadas en memoria",
+      "rationale": "Las entidades TallerAsignacionFalla y TallerSolicitudMecanico ya cargan la relación de mecanico con joinedload. Extraer el nombre directamente evita el viaje de red secundario a user_repository.get_by_ids_map.",
+      "consequences": "Cero consultas SQL adicionales para resolver nombres en bitácoras grupales de avance."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Desacople no destructivo de validaciones de falta de repuestos",
+      "rationale": "El módulo de repuestos no se encuentra activo operativamente en la fase actual. Mantener el bloqueo en la resolución de fallas introducía fricción innecesaria para los mecánicos y supervisores.",
+      "consequences": "Los mecánicos pueden resolver fallas directamente sin bloqueos de stock o repuesto."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/ -v",
+      "result": "passed",
+      "evidence": "180 passed, 1 warning in 63.63s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Validación con el usuario y paso al siguiente hito planificado.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "bbe67b5",
+    "dirty": true
+  },
+  "notes": [
+    "Cumplimiento riguroso de directrices .agents/ (Clean Code, SRP, repositorios sin commits y 4 capas limpias)."
+  ]
+}

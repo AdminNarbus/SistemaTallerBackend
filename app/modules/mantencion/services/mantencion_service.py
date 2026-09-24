@@ -1036,29 +1036,23 @@ class MantencionService:
         if not solicitud.fecha_primer_ingreso_taller:
             solicitud.fecha_primer_ingreso_taller = now
             if solicitud.fecha_creacion:
-                delta_sec = max(0.0, (now - solicitud.fecha_creacion).total_seconds())
-                solicitud.horas_demora_primer_ingreso = round(delta_sec / 3600.0, 1)
+                solicitud.horas_demora_primer_ingreso = calcular_horas_en_taller(solicitud.fecha_creacion, now) or 0.0
             else:
                 solicitud.horas_demora_primer_ingreso = 0.0
 
         # 3. Limpiar fecha_liberacion activa si existía
         solicitud.fecha_liberacion = None
 
-        # 4. Verificar si ya tiene una estadía abierta en memoria o BD
+        # 4. Verificar si ya tiene una estadía abierta en memoria o BD (en 1 sola consulta SQL)
         estadia_abierta = None
+        conteo_prev = 0
         if hasattr(solicitud, "estadias") and solicitud.estadias is not None:
             estadia_abierta = next((e for e in solicitud.estadias if e.fecha_salida is None), None)
+            conteo_prev = len(solicitud.estadias)
+        else:
+            estadia_abierta, conteo_prev = await self.repo.get_info_estadia_para_ingreso(db, solicitud.id)
 
         if not estadia_abierta:
-            estadia_abierta = await self.repo.get_ultima_estadia_abierta(db, solicitud.id)
-
-        if not estadia_abierta:
-            # Calcular número de visita siguiente
-            conteo_prev = 0
-            if hasattr(solicitud, "estadias") and solicitud.estadias:
-                conteo_prev = len(solicitud.estadias)
-            else:
-                conteo_prev = await self.repo.get_conteo_estadias(db, solicitud.id)
 
             nueva_estadia = TallerSolicitudEstadia(
                 solicitud_id=solicitud.id,
@@ -1092,8 +1086,7 @@ class MantencionService:
 
         if estadia_abierta:
             estadia_abierta.fecha_salida = now
-            delta_sec = max(0.0, (now - estadia_abierta.fecha_ingreso).total_seconds())
-            duracion_horas = round(delta_sec / 3600.0, 1)
+            duracion_horas = calcular_horas_en_taller(estadia_abierta.fecha_ingreso, now) or 0.0
             estadia_abierta.horas_estadia = duracion_horas
             estadia_abierta.motivo_salida = motivo_salida
             db.add(estadia_abierta)
@@ -1441,12 +1434,12 @@ class MantencionService:
         # Resolver usuario resolutor efectivo
         resolutor_id = mecanico_resolvio_id if (mecanico_resolvio_id and resuelto) else (mecanico_id if resuelto else None)
 
+        actor_nom = mecanico_nombre or "Mecánico"
+        u_mec = None
         if not mecanico_nombre:
             u_mec = await self.repo.get_usuario_by_id(db, mecanico_id)
-            actor_nom = u_mec.nombre_completo if u_mec else "Mecánico"
-        else:
-            u_mec = None
-            actor_nom = mecanico_nombre
+            if u_mec:
+                actor_nom = u_mec.nombre_completo
 
         u_resolutor = None
         resolutor_nom = actor_nom
@@ -1558,7 +1551,7 @@ class MantencionService:
         mecanico_cierre_nom: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s", solicitud_id, mecanico_cierre_id)
-        solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1668,7 +1661,7 @@ class MantencionService:
             dto.detalles_ids,
             dto.colaboradores_ids,
         )
-        solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
@@ -1699,13 +1692,11 @@ class MantencionService:
             u_mec = users_map.get(mecanico_id)
             mec_nom = u_mec.nombre_completo if u_mec else (mecanico_nombre or "Mecánico")
 
-        asigs_activas_todas, presencias_activas_existentes = await asyncio.gather(
-            self.repo.get_asignaciones_activas(
-                db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids
-            ),
-            self.repo.get_presencias_activas_mecanicos(
-                db, solicitud_id=solicitud_id, mecanicos_ids=mecanicos_objetivo
-            ),
+        asigs_activas_todas = await self.repo.get_asignaciones_activas(
+            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids
+        )
+        presencias_activas_existentes = await self.repo.get_presencias_activas_mecanicos(
+            db, solicitud_id=solicitud_id, mecanicos_ids=mecanicos_objetivo
         )
 
         for asig in asigs_activas_todas:
@@ -1847,13 +1838,11 @@ class MantencionService:
         asignadas_count = 0
 
         from app.modules.auth.repository.user_repository import user_repository
-        asigs_exist, users_map, presencia = await asyncio.gather(
-            self.repo.get_asignaciones_activas(
-                db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=[dto.mecanico_id]
-            ),
-            user_repository.get_by_ids_map(db, [supervisor_id, dto.mecanico_id]),
-            self.repo.get_presencia_activa_individual(db, solicitud_id, dto.mecanico_id),
+        asigs_exist = await self.repo.get_asignaciones_activas(
+            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids, mecanicos_ids=[dto.mecanico_id]
         )
+        users_map = await user_repository.get_by_ids_map(db, [supervisor_id, dto.mecanico_id])
+        presencia = await self.repo.get_presencia_activa_individual(db, solicitud_id, dto.mecanico_id)
         activas_existentes = {a.detalle_id for a in asigs_exist}
 
         u_sup = users_map.get(supervisor_id)
@@ -2116,17 +2105,14 @@ class MantencionService:
             mecanico_id,
             dto.detalles_ids,
         )
-        solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now()
 
-        # Nivel 2: paralelizar SELECTs independientes en 1 solo RTT con asyncio.gather
-        todas_asigs_activas, presencias_activas = await asyncio.gather(
-            self.repo.get_asignaciones_activas(db, solicitud_id=solicitud_id),
-            self.repo.get_presencias_activas(db, solicitud_id=solicitud_id),
-        )
+        todas_asigs_activas = await self.repo.get_asignaciones_activas(db, solicitud_id=solicitud_id)
+        presencias_activas = await self.repo.get_presencias_activas(db, solicitud_id=solicitud_id)
 
         mi_presencia = next((p for p in presencias_activas if p.mecanico_id == mecanico_id and p.is_activo), None)
         mis_asigs_activas = [a for a in todas_asigs_activas if a.mecanico_id == mecanico_id]
@@ -2170,9 +2156,9 @@ class MantencionService:
         con_restantes_ids = set()
         quedan_asignaciones = False
         if cerradas_asig_ids:
-            con_restantes_ids, quedan_asignaciones = await self.repo.get_estado_cuadrilla_restante(
-                db, solicitud_id, mecanicos_involucrados_ids, cerradas_asig_ids
-            )
+            restantes = [a for a in todas_asigs_activas if a.id not in cerradas_asig_ids]
+            con_restantes_ids = {a.mecanico_id for a in restantes if a.mecanico_id in mecanicos_involucrados_ids}
+            quedan_asignaciones = len(restantes) > 0
 
         presencias_cerradas_ids = set()
         for p in presencias_activas:
@@ -2188,6 +2174,18 @@ class MantencionService:
         if not quedan_presencias and not quedan_asignaciones:
             solicitud.estado = EstadoSolicitud.PENDIENTE.value
             logger.info("[MANTENCION] Solicitud sin cuadrilla activa → PENDIENTE | solicitud_id=%s", solicitud_id)
+
+        for det in (solicitud.detalles or []):
+            if hasattr(det, "asignaciones") and det.asignaciones:
+                for asig in det.asignaciones:
+                    if asig.id in cerradas_asig_ids:
+                        asig.is_activo = False
+                        asig.fecha_desasignacion = now
+                        if asig.fecha_asignacion:
+                            asig.duracion_minutos = _calcular_duracion_minutos(asig.fecha_asignacion, now)
+                        asig.resuelto_en_esta_asignacion = bool(det.resuelto)
+                        if dto.comentario and dto.comentario.strip():
+                            asig.comentario = dto.comentario.strip()
 
         if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas:
             for asig in solicitud.asignaciones_fallas:
@@ -2392,9 +2390,9 @@ class MantencionService:
 
         # 1. Validar existencia de solicitud, obtener datos del mecánico y verificar ítems en paralelo
         item_ids = [r.item_id for r in dto.respuestas]
-        valid_item_ids, (total_p, resp_p, mec_nom, sol_existe) = await asyncio.gather(
-            self.repo.get_pauta_items_by_ids(db, item_ids),
-            self.repo.get_conteo_pauta_y_mecanico(db, solicitud_id, mecanico_id),
+        valid_item_ids = await self.repo.get_pauta_items_by_ids(db, item_ids)
+        total_p, resp_p, mec_nom, sol_existe = await self.repo.get_conteo_pauta_y_mecanico(
+            db, solicitud_id, mecanico_id
         )
         if not sol_existe:
             raise NotFoundException("Solicitud de taller no encontrada")

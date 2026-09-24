@@ -306,6 +306,7 @@ async def test_finalizar_solicitud_no_existente_lanza_not_found():
     """finalizar_solicitud lanza NotFoundException si la orden no existe en base de datos."""
     # Arrange
     mock_repo = AsyncMock()
+    mock_repo.get_solicitud_con_detalles.return_value = None
     mock_repo.get_solicitud_operacional.return_value = None
     service = MantencionService(repository=mock_repo)
     mock_db = AsyncMock()

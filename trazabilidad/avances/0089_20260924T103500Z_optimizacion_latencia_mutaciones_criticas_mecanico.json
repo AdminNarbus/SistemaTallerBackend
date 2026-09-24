@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 89,
+  "id": "AV-0089",
+  "timestamp": "2026-09-24T10:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-PERF",
+    "name": "Optimización Latencia Mutaciones Mecánico en Base de Datos Remota Neon",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización profunda de latencia de red y consultas SQL en mutaciones críticas del módulo de mantención (Resolver Avería, Terminar Avance, Finalizar OT y Autoasignar) conectadas a Neon Cloud (AWS us-east-2), reduciendo tiempos de respuesta de 5.31s a 800ms en checks y eliminando cascadas recursivas de selectinload.",
+  "scope": {
+    "planned": [
+      "Diagnosticar causa raíz de latencia de 5.31s en PATCH /check contra Neon Cloud",
+      "Eliminar cascadas de selectinload en TallerSolicitudDetalle y TallerSolicitudEstadia",
+      "Optimizar endpoints terminar-avance y finalizar_solicitud en mantencion_service",
+      "Reemplazar llamadas concurrentes inseguras a asyncio.gather sobre AsyncSession",
+      "Verificar con benchmark HTTP real contra Neon y suite completa de tests pytest"
+    ],
+    "completed": [
+      "Diagnóstico exhaustivo: Se aisló que TallerSolicitudDetalle.asignaciones y TallerSolicitudEstadia.solicitud poseían lazy='selectin', disparando en cadena hasta 12 consultas SQL con viajes transcontinentales (RTT ~130ms)",
+      "Optimización en get_detalle_operacional: noload en solicitud y asignaciones para resolver averías atómicamente",
+      "Optimización en TallerSolicitudEstadia: Removido lazy='selectin' de la relación Many-to-One 'solicitud' y añadido noload explícito en get_ultima_estadia_abierta (reducción de 4358ms a 323ms en esa consulta)",
+      "Optimización en get_solicitud_con_detalles: Añadido noload en asignaciones, evidencias y estadias",
+      "Sustitución de asyncio.gather sobre la misma AsyncSession por awaits secuenciales deterministas en terminar_avance, autoasignar_fallas, asignar_mecanicos y responder_pauta_preventiva",
+      "Verificación con pruebas HTTP en vivo: PATCH /check bajó de 5310ms a 806ms (~85% de reducción), GET /solicitud a 343ms, y finalizar_solicitud a 3200ms",
+      "Suite completa de pruebas ejecutada: 182/182 tests aprobados (100% pasando)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de UI en repositorio de Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/models/taller_solicitud_estadia.py",
+      "action": "modified",
+      "summary": "Removido lazy='selectin' en la relación Many-to-One 'solicitud' para evitar que cada consulta de estadía cargue recursivamente la solicitud completa con sus 6 colecciones hijas"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Añadido noload para solicitud en get_ultima_estadia_abierta, noload para asignaciones/evidencias/estadias en get_solicitud_con_detalles y get_detalle_operacional"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Reemplazado asyncio.gather concurrente sobre la misma AsyncSession por secuenciales seguros; retorno directo con get_solicitud JSON agg optimizado"
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Actualizado mock en pruebas unitarias para get_solicitud_con_detalles"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0089-1",
+      "title": "Eliminación de lazy='selectin' en relación secundaria Many-to-One de TallerSolicitudEstadia",
+      "rationale": "La relación bidireccional 'solicitud' en TallerSolicitudEstadia estaba configurada con lazy='selectin'. Al consultar una estadía abierta con limit 1, SQLAlchemy ejecutaba un SELECT secundario de la solicitud completa, disparando recursivamente todas sus colecciones hijas y sumando más de 4 segundos de latencia de red.",
+      "consequences": "La consulta get_ultima_estadia_abierta pasó de tardar 4358ms a 323ms en Neon Cloud sin alterar ninguna regla de negocio."
+    },
+    {
+      "id": "DEC-0089-2",
+      "title": "Aislamiento de mutaciones con noload en get_solicitud_con_detalles y get_detalle_operacional",
+      "rationale": "Las mutaciones operativas de mecánicos solo necesitan los datos del detalle a modificar y la cabecera. Cargar bitácora de comentarios, evidencias y asignaciones históricas incrementaba los RTTs a Neon.",
+      "consequences": "PATCH /check responde en 806ms (frente a los 5310ms originales) manteniendo compatibilidad absoluta con la API."
+    },
+    {
+      "id": "DEC-0089-3",
+      "title": "Eliminación de asyncio.gather concurrente sobre la misma AsyncSession",
+      "rationale": "El driver asyncpg no permite multiplexar consultas concurrentes sobre un único socket TCP de conexión ('another operation is in progress').",
+      "consequences": "Se garantiza estabilidad y cero colisiones de estado en SQLAlchemy AsyncSession bajo PostgreSQL."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python scratch/benchmark_api.py (Live HTTP against Neon Cloud)",
+      "result": "passed",
+      "evidence": "GET /mantencion/26: 343ms | PATCH /check (Marcar): 806ms | PATCH /check (Desmarcar): 810ms | POST /finalizar: 3206ms"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "182 passed, 1 warning in 63.12s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las siguientes tareas del plan de desarrollo o pruebas de usuario en el frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "2004c7b",
+    "dirty": true
+  },
+  "notes": [
+    "La latencia transcontinental (Backend local/Europa hacia Neon us-east-2 en Ohio) tiene un piso físico de red de ~120ms por RTT. Al reducir de 12 queries a 2-4 queries por endpoint, las mutaciones se sienten fluidas e inmediatas."
+  ]
+}

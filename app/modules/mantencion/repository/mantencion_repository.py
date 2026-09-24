@@ -494,14 +494,17 @@ class MantencionRepository:
         self, db: AsyncSession, solicitud_id: int, detalle_id: int
     ) -> Optional[TallerSolicitudDetalle]:
         """
-        Carga puntual de un detalle de falla específico para mutaciones atómicas,
-        con joinedload de su falla y categoría en 1 sola consulta SQL.
+        Carga quirúrgica de un detalle de falla específico para mutaciones atómicas,
+        con joinedload de su falla y categoría en exactamente 1 sola consulta SQL.
+        Evita cargar la solicitud completa para no disparar la cascada de selectinload.
         """
         stmt = (
             select(TallerSolicitudDetalle)
             .options(
                 joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
-                joinedload(TallerSolicitudDetalle.solicitud),
+                joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                noload(TallerSolicitudDetalle.solicitud),
+                noload(TallerSolicitudDetalle.asignaciones),
             )
             .where(
                 and_(
@@ -529,12 +532,15 @@ class MantencionRepository:
                 joinedload(TallerSolicitud.bus),
                 joinedload(TallerSolicitud.creador),
                 joinedload(TallerSolicitud.mecanico_cierre),
-                joinedload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
-                joinedload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
-                noload(TallerSolicitud.mecanicos),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
+                selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 noload(TallerSolicitud.asignaciones_fallas),
                 noload(TallerSolicitud.comentarios),
                 noload(TallerSolicitud.pauta_respuestas),
+                noload(TallerSolicitud.evidencias),
+                noload(TallerSolicitud.estadias),
             )
         )
         res = await db.execute(stmt)
@@ -1230,10 +1236,14 @@ class MantencionRepository:
     async def get_presencias_activas(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: Optional[int] = None
     ) -> List[TallerSolicitudMecanico]:
-        stmt = select(TallerSolicitudMecanico).where(
-            and_(
-                TallerSolicitudMecanico.solicitud_id == solicitud_id,
-                TallerSolicitudMecanico.is_activo == True,
+        stmt = (
+            select(TallerSolicitudMecanico)
+            .options(joinedload(TallerSolicitudMecanico.mecanico))
+            .where(
+                and_(
+                    TallerSolicitudMecanico.solicitud_id == solicitud_id,
+                    TallerSolicitudMecanico.is_activo == True,
+                )
             )
         )
         if mecanico_id:
@@ -1462,6 +1472,7 @@ class MantencionRepository:
     ) -> Optional[TallerSolicitudEstadia]:
         stmt = (
             select(TallerSolicitudEstadia)
+            .options(noload(TallerSolicitudEstadia.solicitud))
             .where(
                 and_(
                     TallerSolicitudEstadia.solicitud_id == solicitud_id,
@@ -1473,6 +1484,24 @@ class MantencionRepository:
         )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def get_info_estadia_para_ingreso(
+        self, db: AsyncSession, solicitud_id: int
+    ) -> Tuple[Optional[TallerSolicitudEstadia], int]:
+        """
+        Retorna en 1 sola consulta SQL: (estadia_abierta_si_existe, conteo_total_estadias)
+        evitando hacer 2 viajes de red secuenciales a la base de datos remota.
+        """
+        stmt = (
+            select(TallerSolicitudEstadia)
+            .options(noload(TallerSolicitudEstadia.solicitud))
+            .where(TallerSolicitudEstadia.solicitud_id == solicitud_id)
+            .order_by(TallerSolicitudEstadia.id.desc())
+        )
+        res = await db.execute(stmt)
+        estadias = list(res.scalars().all())
+        abierta = next((e for e in estadias if e.fecha_salida is None), None)
+        return abierta, len(estadias)
 
     async def get_conteo_estadias(self, db: AsyncSession, solicitud_id: int) -> int:
         stmt = select(func.count(TallerSolicitudEstadia.id)).where(

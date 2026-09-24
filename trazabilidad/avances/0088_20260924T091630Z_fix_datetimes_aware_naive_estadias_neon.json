@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 88,
+  "id": "AV-0088",
+  "timestamp": "2026-09-24T09:16:30Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-8",
+    "name": "Normalización de datetimes aware/naive en telemetría de estadías para Neon Cloud",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección de resta directa de datetimes en cálculo de demora de primer ingreso y cierre de estadías físicas de taller. Se reemplazó la resta manual por la función de dominio pura calcular_horas_en_taller(), la cual normaliza automáticamente objetos datetime offset-aware (retornados por Neon Cloud) y offset-naive.",
+  "scope": {
+    "planned": [
+      "Cambiar conexión a base de datos Neon en .env",
+      "Corregir TypeError: can't subtract offset-naive and offset-aware datetimes en autoasignar_fallas y cierre de estadía"
+    ],
+    "completed": [
+      "Configuración de DATABASE_URL hacia Neon en .env",
+      "Normalización de cálculo de horas_demora_primer_ingreso con calcular_horas_en_taller en mantencion_service.py",
+      "Normalización de cálculo de duracion_horas al cerrar estadías con calcular_horas_en_taller en mantencion_service.py",
+      "Ejecución exitosa de la suite completa de pruebas (182/182 tests aprobados)"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Activación de DATABASE_URL para Neon Cloud y comentado de configuración local"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Uso de calcular_horas_en_taller en _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_taller para soportar datetimes offset-aware"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-088",
+      "title": "Reutilización de calcular_horas_en_taller para normalización de zona horaria",
+      "rationale": "Neon Cloud devuelve fechas con zona horaria (offset-aware) debido a su configuración de driver/postgres, mientras que datetime.now() local es naive. La función de dominio pura calcular_horas_en_taller ya resuelve esta disparidad eliminando tzinfo de forma segura sin acoplamiento a librerías externas ni supuestos sobre el entorno.",
+      "consequences": "El cálculo de demoras y horas de estadía es 100% robusto tanto en entornos locales como en Neon Cloud y producción."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "182 passed, 1 warning in 63.76s (100% de la suite verde)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con el monitoreo de endpoints y pruebas operativas con la base de datos Neon.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Uvicorn recargó automáticamente los cambios aplicados en mantencion_service.py."
+  ]
+}

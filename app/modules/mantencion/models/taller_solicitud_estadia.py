@@ -31,5 +31,5 @@ class TallerSolicitudEstadia(Base):
 
     # Relación bidireccional
     solicitud: Mapped["TallerSolicitud"] = relationship(
-        "TallerSolicitud", back_populates="estadias", lazy="selectin"
+        "TallerSolicitud", back_populates="estadias"
     )

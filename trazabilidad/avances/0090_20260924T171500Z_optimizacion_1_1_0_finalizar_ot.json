@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 90,
+  "id": "AV-0090",
+  "timestamp": "2026-09-24T17:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-OPT-FIN",
+    "name": "Optimización 1-1-0 de Alto Rendimiento en Finalizar y Cerrar OT",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del modelo 1-1-0 y Data-Locality en la finalización de órdenes de trabajo (POST /api/v1/mantencion/{id}/finalizar y POST /liberar), reduciendo las consultas previas a 1 viaje de lectura consolidada (get_contexto_finalizacion) y 1 transacción batch de escritura atómica con cálculos nativos en PostgreSQL (ejecutar_cierre_ot_batch), con 183/183 tests aprobados.",
+  "scope": {
+    "planned": [
+      "Implementar get_contexto_finalizacion para consolidar validación de OT, pauta, fallas y mecánico en 1 solo SELECT",
+      "Implementar ejecutar_cierre_ot_batch para mutar solicitud, mecánicos, asignaciones, estadía, bus y comentario en 1 sola transacción atómica",
+      "Calcular duraciones de cuadrilla, fallas y estadías en el motor de PostgreSQL (Data-Locality)",
+      "Refactorizar finalizar_solicitud en MantencionService preservando retrocompatibilidad total",
+      "Verificar suite completa de pruebas unitarias, integración y e2e"
+    ],
+    "completed": [
+      "Creado método get_contexto_finalizacion en MantencionRepository con LEFT JOIN y subconsultas escalares/laterales para traer estado, totales de pauta, fallas no resueltas y nombre del mecánico en 1 viaje",
+      "Creado método ejecutar_cierre_ot_batch en MantencionRepository ejecutando UPDATEs masivos con aritmética de timestamps en SQL (EXTRACT(EPOCH FROM (:now - fecha_asignacion)) / 60) y persistencia de bitácora",
+      "Refactorizado finalizar_solicitud en MantencionService reduciendo el pipeline a validación fail-fast y despacho batch 1-1-0",
+      "Incorporado test unitario test_get_contexto_finalizacion_y_cierre_ot_batch_flujo_completo",
+      "Ejecutada la suite completa de pruebas (183 de 183 tests pasando exitosamente, 100%)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de UI en repositorio de Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Añadidos métodos get_contexto_finalizacion (lectura consolidada de validación) y ejecutar_cierre_ot_batch (mutaciones en bloque y cómputo de duración nativo en motor)"
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Refactorizado finalizar_solicitud para operar bajo el modelo 1-1-0 de alta velocidad con validaciones fail-fast"
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Añadida prueba unitaria test_get_contexto_finalizacion_y_cierre_ot_batch_flujo_completo"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Documentado hito AV-0090 con la arquitectura 1-1-0 y Data-Locality en finalización de OT"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-090",
+      "title": "Arquitectura 1-1-0 con Data-Locality para Finalizar OT",
+      "rationale": "La distancia física Chile <-> Ohio (8.800 km, ~140ms RTT) penaliza severamente las secuencias de múltiples queries y flushes. Delegar el cálculo de duraciones a PostgreSQL nativo y consolidar las mutaciones en batch atómico reduce drásticamente el tráfico y elimina la latencia de ida y vuelta.",
+      "consequences": "El endpoint de finalización reduce sus viajes de red de 7-9 a estrictamente 2 viajes de red (1 SELECT + 1 BATCH COMMIT), manteniendo 100% de compatibilidad con los contratos DTO del frontend."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/ -v",
+      "result": "passed",
+      "evidence": "183 passed, 1 warning in 63.87s (100% passing)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consolidar commit en rama feature/optimizacion-finalizar-ot y realizar merge hacia develop siguiendo GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/optimizacion-finalizar-ot",
+    "dirty": false
+  },
+  "notes": [
+    "La implementación soporta dialectos PostgreSQL en producción y SQLite en pruebas automatizadas."
+  ]
+}

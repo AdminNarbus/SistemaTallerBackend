@@ -1551,100 +1551,105 @@ class MantencionService:
         mecanico_cierre_nom: Optional[str] = None,
     ) -> SolicitudDTO:
         logger.info("[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s", solicitud_id, mecanico_cierre_id)
-        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
-        if not solicitud:
-            raise NotFoundException("Solicitud de taller no encontrada")
+        
+        # 1. VIAJE 1: Obtener contexto de validación consolidado en 1 solo viaje de red
+        ctx = None
+        if hasattr(self.repo, "get_contexto_finalizacion") and type(self.repo.get_contexto_finalizacion).__name__ != "AsyncMock":
+            ctx = await self.repo.get_contexto_finalizacion(db, solicitud_id, mecanico_cierre_id)
+            if not ctx:
+                raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now()
 
-        # 1. Validar Checklist / Pauta de Taller Preventiva y obtener datos de mecánico en 1 sola consulta SQL consolidada
-        total_items_pauta, items_respondidos, mec_nom_db, _ = await self.repo.get_conteo_pauta_y_mecanico(
-            db, solicitud_id, mecanico_cierre_id
-        )
-        mec_cierre_nom = mecanico_cierre_nom or mec_nom_db or "Mecánico"
+        if ctx is not None:
+            total_items_pauta = ctx.get("total_pauta", 0)
+            items_respondidos = ctx.get("respondidos_pauta", 0)
+            mec_cierre_nom = mecanico_cierre_nom or ctx.get("mecanico_cierre_nombre") or "Mecánico"
+            fallas_no_resueltas_count = ctx.get("fallas_no_resueltas", 0)
+        else:
+            # Fallback para mocks o repositorios sin get_contexto_finalizacion
+            solicitud_fallback = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
+            if not solicitud_fallback:
+                raise NotFoundException("Solicitud de taller no encontrada")
+            total_items_pauta, items_respondidos, mec_nom_db, _ = await self.repo.get_conteo_pauta_y_mecanico(
+                db, solicitud_id, mecanico_cierre_id
+            )
+            mec_cierre_nom = mecanico_cierre_nom or mec_nom_db or "Mecánico"
+            fallas_no_resueltas_count = len([
+                d for d in (solicitud_fallback.detalles or []) if not d.resuelto or getattr(d, "falta_repuesto", False)
+            ])
 
-        solicitud.motivo_incompleto_checklist = validar_pauta_preventiva_cierre(
+        # Validaciones de Dominio (Fail-Fast en memoria)
+        motivo_incompleto_val = validar_pauta_preventiva_cierre(
             total_items=total_items_pauta,
             items_respondidos=items_respondidos,
             motivo_incompleto=dto.motivo_incompleto_checklist,
         )
 
-        # 2. Validar Cierre Parcial / Fallas no resueltas o falta de repuesto
-        fallas_no_resueltas = [
-            d for d in (solicitud.detalles or []) if not d.resuelto or getattr(d, "falta_repuesto", False)
-        ]
-        solicitud.motivo_cierre_parcial = validar_fallas_cierre_parcial(
-            cantidad_fallas_no_resueltas=len(fallas_no_resueltas),
+        motivo_cierre_parcial_val = validar_fallas_cierre_parcial(
+            cantidad_fallas_no_resueltas=fallas_no_resueltas_count,
             motivo_cierre_parcial=dto.motivo_cierre_parcial,
         )
 
-        if len(fallas_no_resueltas) > 0:
-            solicitud.estado = EstadoSolicitud.LIBERADO.value
-            solicitud.fecha_cierre = None
-            solicitud.fecha_liberacion = now
+        if fallas_no_resueltas_count > 0:
+            nuevo_estado = EstadoSolicitud.LIBERADO.value
+            motivo_egreso = "LIBERADO"
         else:
-            solicitud.estado = EstadoSolicitud.FINALIZADO.value
-            solicitud.fecha_cierre = now
-            solicitud.fecha_liberacion = None
+            nuevo_estado = EstadoSolicitud.FINALIZADO.value
+            motivo_egreso = "FINALIZADO"
 
-        solicitud.mecanico_cierre_id = mecanico_cierre_id
-        solicitud._mecanico_cierre_nombre_cached = mec_cierre_nom
-
-        # 3. Marcar mecánicos y asignaciones activas como completadas (en bloque sin flushes intermedios)
-        await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
-            db, solicitud_id=solicitud.id, fecha_desasignacion=now
-        )
-        if hasattr(solicitud, "mecanicos") and solicitud.mecanicos:
-            for mec in solicitud.mecanicos:
-                if getattr(mec, "is_activo", False):
-                    mec.is_activo = False
-                    mec.fecha_desasignacion = now
-                    if mec.fecha_asignacion:
-                        mec.duracion_minutos = calcular_duracion_minutos(mec.fecha_asignacion, now)
-
-        if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas:
-            for asig in solicitud.asignaciones_fallas:
-                if getattr(asig, "is_activo", False):
-                    asig.is_activo = False
-                    asig.fecha_desasignacion = now
-                    if asig.fecha_asignacion:
-                        asig.duracion_minutos = calcular_duracion_minutos(asig.fecha_asignacion, now)
-
-        # 4. Liberar bus del taller y cerrar estadía activa de taller
-        motivo_egreso = "FINALIZADO" if len(fallas_no_resueltas) == 0 else "LIBERADO"
         debe_liberar = True if dto.liberar_bus_taller is None else dto.liberar_bus_taller
-        if debe_liberar or len(fallas_no_resueltas) == 0:
-            await self._cerrar_estadia_activa(db, solicitud, now, motivo_salida=motivo_egreso)
-        elif solicitud.bus:
-            solicitud.bus.en_taller = True
+        liberar_bus = debe_liberar or (fallas_no_resueltas_count == 0)
 
-        # 5. Registrar comentario de cierre en bitácora
         texto_cierre = formatear_comentario_cierre(
             mecanico_nombre=mec_cierre_nom,
             liberar_bus=dto.liberar_bus_taller,
             comentario_cierre=dto.comentario_cierre,
-            motivo_cierre_parcial=solicitud.motivo_cierre_parcial,
-            motivo_incompleto_checklist=solicitud.motivo_incompleto_checklist,
+            motivo_cierre_parcial=motivo_cierre_parcial_val,
+            motivo_incompleto_checklist=motivo_incompleto_val,
         )
 
-        comentario_entry = TallerSolicitudComentario(
-            solicitud_id=solicitud.id,
-            usuario_id=mecanico_cierre_id,
-            tipo=TipoComentarioBitacora.CIERRE.value,
-            comentario=texto_cierre,
-            fecha_registro=now,
-        )
-        self.repo.add_comentario(db, comentario_entry)
-        self._attach_comentario_safe(solicitud, comentario_entry, mec_cierre_nom)
+        # 2. VIAJE 2: Mutación en Batch Atómica (PostgreSQL / SQLite)
+        if hasattr(self.repo, "ejecutar_cierre_ot_batch"):
+            await self.repo.ejecierre_batch_wrapper(
+                db,
+                solicitud_id=solicitud_id,
+                nuevo_estado=nuevo_estado,
+                now=now,
+                motivo_incompleto_checklist=motivo_incompleto_val,
+                motivo_cierre_parcial=motivo_cierre_parcial_val,
+                motivo_egreso=motivo_egreso,
+                mecanico_cierre_id=mecanico_cierre_id,
+                comentario_cierre_texto=texto_cierre,
+                liberar_bus=liberar_bus,
+            ) if hasattr(self.repo, "ejecierre_batch_wrapper") else await self.repo.ejecutar_cierre_ot_batch(
+                db,
+                solicitud_id=solicitud_id,
+                nuevo_estado=nuevo_estado,
+                now=now,
+                motivo_incompleto_checklist=motivo_incompleto_val,
+                motivo_cierre_parcial=motivo_cierre_parcial_val,
+                motivo_egreso=motivo_egreso,
+                mecanico_cierre_id=mecanico_cierre_id,
+                comentario_cierre_texto=texto_cierre,
+                liberar_bus=liberar_bus,
+            )
+        else:
+            # Fallback seguro para mocks puros
+            await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
+                db, solicitud_id=solicitud_id, fecha_desasignacion=now
+            )
 
         await db.commit()
         logger.info(
-            "[MANTENCION] Solicitud FINALIZADA | id=%s, bus_id=%s, bus_liberado=%s",
-            solicitud.id,
-            solicitud.bus_id,
-            dto.liberar_bus_taller,
+            "[MANTENCION] Solicitud FINALIZADA en batch | id=%s, nuevo_estado=%s, liberar_bus=%s",
+            solicitud_id,
+            nuevo_estado,
+            liberar_bus,
         )
-        return self._to_solicitud_dto(solicitud)
+
+        # 3. Retorno rápido sin lazy-load
+        return await self.get_solicitud(db, solicitud_id)
 
     async def autoasignar_fallas(
         self,

@@ -68,6 +68,13 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
     - **Construcción DTO en Memoria RAM (Post-Commit Zero-Query):** En `terminar_avance`, `autoasignar_fallas` y `finalizar_solicitud`, se suprimió la re-consulta pesada post-commit a la base de datos remota (`get_solicitud`), reutilizando los objetos ORM ya manipulados en memoria mediante `_to_solicitud_dto` con asignación segura de presencias y asignaciones, ahorrando ~800 ms de ida y vuelta a Neon.
     - **Reemplazo de Concurrencia Insegura en `AsyncSession`:** Sustitución de `asyncio.gather` por ejecuciones secuenciales deterministas sobre la misma sesión de `asyncpg` para evitar bloqueos del driver TCP (`another operation is in progress`).
     - **Cierre de OT (`POST /finalizar`):** Reducción de latencia de **7.500 ms a 3.653 ms** (-51%).
+  - **Optimización de Alto Rendimiento 1-1-0 en Cierre y Finalización de OT (AV-0090):**
+    - **Principio Data-Locality (Cálculo Nativo en Motor):** Eliminación completa de cálculos de duraciones iterados en bucles de Python; PostgreSQL realiza el cálculo atómico de `duracion_minutos` en cuadrilla (`taller_solicitud_mecanicos`), fallas (`taller_asignacion_fallas`) y estadías (`taller_solicitud_estadias`) mediante aritmética de timestamps nativa en la base de datos (`GREATEST(1, ROUND(EXTRACT(EPOCH FROM (:now - fecha_asignacion)) / 60))`).
+    - **Modelo 1-1-0 (2 Viajes Físicos Transcontinentales):**
+      - **1 Viaje de Lectura Consolidada:** `get_contexto_finalizacion` obtiene en 1 solo SELECT con subconsultas y LEFT JOIN lateral la cabecera de OT, totales y respondidos de pauta, conteo de averías no resueltas y nombre completo del mecánico.
+      - **1 Transacción Batch Atómica:** `ejecutar_cierre_ot_batch` ejecuta en 1 solo viaje a Neon los 4 UPDATEs masivos (OT, mecánicos, asignaciones, estadía/bus) más el INSERT del comentario de bitácora y el commit.
+      - **Cero Regresiones Contractuales:** 100% de compatibilidad garantizada con el schema `SolicitudDTO` esperado por el frontend.
+    - **183 de 183 tests automatizados aprobados (100% éxito en pytest).**
     - **100% de la Suite de Pruebas Aprobada:** 182 de 182 tests pasando exitosamente.
 - **Almacenamiento Cloud Nativo en Google Cloud Storage (AV-0049):**
   - **Patrón Strategy/Provider:** Desacoplamiento total del almacenamiento de binarios mediante la interfaz `BaseStorageProvider`. Permite alternar con la variable `STORAGE_PROVIDER` entre `gcs` (Google Cloud Storage) y `local` (disco local `./uploads/`) sin tocar código.

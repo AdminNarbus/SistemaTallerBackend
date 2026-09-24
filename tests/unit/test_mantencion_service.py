@@ -24,6 +24,7 @@ from app.modules.mantencion.services.mantencion_service import (
     MantencionService,
     mantencion_service,
 )
+from app.modules.mantencion.repository.mantencion_repository import mantencion_repository
 from app.modules.mantencion.utils import (
     calcular_duracion_minutos,
     calcular_horas_en_taller,
@@ -684,4 +685,55 @@ async def test_supervisor_agrega_falla_sin_autoasignar(db_session, seed_test_dat
     # Bitácora registra a la supervisora
     comentarios = sol_actualizada.comentarios
     assert any("Supervisora" in c.comentario for c in comentarios)
+
+
+@pytest.mark.asyncio
+async def test_get_contexto_finalizacion_y_cierre_ot_batch_flujo_completo(db_session, seed_test_data):
+    """Verifica el flujo optimizado 1-1-0: get_contexto_finalizacion y ejecutar_cierre_ot_batch."""
+    conductor = seed_test_data["conductor"]
+    mecanico = seed_test_data["mecanico1"]
+    falla = seed_test_data["falla1"]
+
+    sol = await mantencion_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-OPT-FIN",
+            descripcion_general="Prueba de alto rendimiento cierre OT",
+            detalles=[SolicitudDetalleCreateDTO(falla_id=falla.id)],
+        ),
+        conductor.id,
+    )
+
+    # Mecánico toma la OT
+    await mantencion_service.tomar_trabajo(
+        db_session, sol.id, mecanico.id, TomarTrabajoDTO(comentario_inicial="Iniciando")
+    )
+
+    # 1. Probar get_contexto_finalizacion
+    ctx = await mantencion_repository.get_contexto_finalizacion(db_session, sol.id, mecanico.id)
+    assert ctx is not None
+    assert ctx["id"] == sol.id
+    assert ctx["fallas_no_resueltas"] == 1
+
+    # Marcar detalle resuelto
+    det_id = sol.detalles[0].id
+    await mantencion_service.check_detalle(db_session, sol.id, det_id, mecanico.id, True)
+
+    ctx_resuelto = await mantencion_repository.get_contexto_finalizacion(db_session, sol.id, mecanico.id)
+    assert ctx_resuelto["fallas_no_resueltas"] == 0
+
+    # 2. Finalizar solicitud utilizando el flujo batch refactorizado
+    dto_fin = FinalizarSolicitudDTO(
+        comentario_cierre="Cierre de alta velocidad 1-1-0",
+        motivo_incompleto_checklist="Prueba",
+        liberar_bus_taller=True,
+    )
+    sol_finalizada = await mantencion_service.finalizar_solicitud(
+        db_session, sol.id, mecanico.id, dto_fin
+    )
+
+    assert sol_finalizada.estado == "FINALIZADO"
+    assert sol_finalizada.mecanico_cierre_id == mecanico.id
+    assert any("Cierre de alta velocidad 1-1-0" in c.comentario for c in sol_finalizada.comentarios)
+
 

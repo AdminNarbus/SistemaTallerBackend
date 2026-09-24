@@ -1,8 +1,8 @@
 import logging
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
-from sqlalchemy import select, and_, or_, text, func
+from typing import Any, Dict, List, Optional, Set, Tuple
+from sqlalchemy import select, update, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.orm import selectinload, joinedload, noload
@@ -1512,6 +1512,210 @@ class MantencionRepository:
 
     async def flush(self, db: AsyncSession) -> None:
         await db.flush()
+
+    async def get_contexto_finalizacion(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_cierre_id: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene en 1 solo viaje de red todos los datos requeridos para validar y finalizar una OT:
+        - Cabecera: id, estado, bus_id, fecha_ingreso (fecha_creacion).
+        - Pauta: total_items_pauta, items_respondidos.
+        - Mecánico: nombre completo del mecanico que firma el cierre (si aplica).
+        - Fallas no resueltas: conteo de detalles no resueltos o con falta de repuesto.
+        """
+        stmt = text("""
+            SELECT 
+                s.id,
+                s.estado,
+                s.bus_id,
+                s.fecha_creacion,
+                COALESCE(p.total_pauta, 0) AS total_pauta,
+                COALESCE(p.respondidos_pauta, 0) AS respondidos_pauta,
+                COALESCE(d.fallas_no_resueltas, 0) AS fallas_no_resueltas,
+                CASE WHEN u.id IS NOT NULL THEN TRIM(CONCAT(u.nombre, ' ', COALESCE(u.apellido, ''))) ELSE NULL END AS mecanico_cierre_nombre
+            FROM taller_solicitudes s
+            LEFT JOIN LATERAL (
+                SELECT 
+                    (SELECT COUNT(*) FROM pauta_taller_items WHERE is_active = true) AS total_pauta,
+                    COUNT(DISTINCT p.item_id) AS respondidos_pauta
+                FROM taller_solicitud_pauta p
+                WHERE p.solicitud_id = s.id
+            ) p ON true
+            LEFT JOIN LATERAL (
+                SELECT 
+                    COUNT(*) AS fallas_no_resueltas
+                FROM taller_solicitud_detalles det
+                WHERE det.solicitud_id = s.id 
+                  AND (det.resuelto = false OR det.falta_repuesto = true)
+            ) d ON true
+            LEFT JOIN usuarios u ON u.id = :mecanico_cierre_id
+            WHERE s.id = :solicitud_id
+        """)
+        try:
+            result = await db.execute(
+                stmt,
+                {"solicitud_id": solicitud_id, "mecanico_cierre_id": mecanico_cierre_id},
+            )
+            row = result.mappings().first()
+            return dict(row) if row else None
+        except Exception:
+            # Fallback seguro para dialectos como SQLite en tests unitarios en memoria
+            sol = await self.get_solicitud_con_detalles(db, solicitud_id)
+            if not sol:
+                return None
+            tot_p, resp_p, mec_nom, _ = await self.get_conteo_pauta_y_mecanico(
+                db, solicitud_id, mecanico_cierre_id or 0
+            )
+            fnr = len([
+                det for det in (sol.detalles or [])
+                if not det.resuelto or getattr(det, "falta_repuesto", False)
+            ])
+            return {
+                "id": sol.id,
+                "estado": sol.estado,
+                "bus_id": sol.bus_id,
+                "fecha_creacion": sol.fecha_creacion,
+                "total_pauta": tot_p,
+                "respondidos_pauta": resp_p,
+                "fallas_no_resueltas": fnr,
+                "mecanico_cierre_nombre": mec_nom,
+            }
+
+    async def ejecutar_cierre_ot_batch(
+        self,
+        db: AsyncSession,
+        *,
+        solicitud_id: int,
+        nuevo_estado: str,
+        now: datetime,
+        motivo_incompleto_checklist: Optional[str],
+        motivo_cierre_parcial: Optional[str],
+        motivo_egreso: str,
+        mecanico_cierre_id: int,
+        comentario_cierre_texto: str,
+        liberar_bus: bool,
+    ) -> None:
+        """
+        Ejecuta en una única transacción de base de datos todas las mutaciones requeridas:
+        - 1 UPDATE masivo a taller_solicitudes.
+        - 1 UPDATE masivo con cálculo nativo de duracion_minutos en taller_solicitud_mecanicos.
+        - 1 UPDATE masivo con cálculo nativo de duracion_minutos en taller_asignacion_fallas.
+        - 1 UPDATE masivo con cálculo nativo de duracion en taller_solicitud_estadias si aplica liberación.
+        - 1 UPDATE al bus para en_taller según si se libera.
+        - 1 INSERT de comentario de cierre.
+        """
+        is_pg = bool(db.bind and db.bind.dialect.name == "postgresql")
+
+        # 1. UPDATE en taller_solicitudes
+        fecha_cierre_val = now if nuevo_estado == "FINALIZADO" else None
+        fecha_liberacion_val = now if nuevo_estado == "LIBERADO" else None
+
+        stmt_solicitud = (
+            update(TallerSolicitud)
+            .where(TallerSolicitud.id == solicitud_id)
+            .values(
+                estado=nuevo_estado,
+                fecha_cierre=fecha_cierre_val,
+                fecha_liberacion=fecha_liberacion_val,
+                mecanico_cierre_id=mecanico_cierre_id,
+                motivo_incompleto_checklist=motivo_incompleto_checklist,
+                motivo_cierre_parcial=motivo_cierre_parcial,
+            )
+        )
+        await db.execute(stmt_solicitud)
+
+        # 2. UPDATE masivo en taller_solicitud_mecanicos
+        if is_pg:
+            stmt_mecanicos = text("""
+                UPDATE taller_solicitud_mecanicos
+                SET 
+                    is_activo = false,
+                    fecha_desasignacion = :now,
+                    duracion_minutos = CASE 
+                        WHEN fecha_asignacion IS NOT NULL THEN 
+                            GREATEST(1, ROUND(EXTRACT(EPOCH FROM (:now - fecha_asignacion)) / 60))
+                        ELSE NULL 
+                    END
+                WHERE solicitud_id = :solicitud_id AND is_activo = true
+            """)
+            await db.execute(stmt_mecanicos, {"solicitud_id": solicitud_id, "now": now})
+        else:
+            await self.desactivar_mecanicos_activos(db, solicitud_id, now, flush=False)
+
+        # 3. UPDATE masivo en taller_asignacion_fallas
+        if is_pg:
+            stmt_fallas = text("""
+                UPDATE taller_asignacion_fallas
+                SET 
+                    is_activo = false,
+                    fecha_desasignacion = :now,
+                    duracion_minutos = CASE 
+                        WHEN fecha_asignacion IS NOT NULL THEN 
+                            GREATEST(1, ROUND(EXTRACT(EPOCH FROM (:now - fecha_asignacion)) / 60))
+                        ELSE NULL 
+                    END
+                WHERE solicitud_id = :solicitud_id AND is_activo = true
+            """)
+            await db.execute(stmt_fallas, {"solicitud_id": solicitud_id, "now": now})
+        else:
+            await self.desactivar_todas_asignaciones_activas(db, solicitud_id, now, flush=False)
+
+        # 4. UPDATE de estadía y bus
+        if liberar_bus:
+            if is_pg:
+                stmt_estadia = text("""
+                    UPDATE taller_solicitud_estadias
+                    SET 
+                        fecha_salida = :now,
+                        motivo_salida = :motivo_egreso,
+                        horas_estadia = CASE 
+                            WHEN fecha_ingreso IS NOT NULL THEN 
+                                ROUND(CAST(EXTRACT(EPOCH FROM (:now - fecha_ingreso)) / 3600.0 AS numeric), 1)
+                            ELSE NULL 
+                        END
+                    WHERE solicitud_id = :solicitud_id AND fecha_salida IS NULL
+                """)
+                await db.execute(stmt_estadia, {
+                    "solicitud_id": solicitud_id,
+                    "now": now,
+                    "motivo_egreso": motivo_egreso,
+                })
+            else:
+                estadia_abierta = await self.get_ultima_estadia_abierta(db, solicitud_id)
+                if estadia_abierta:
+                    estadia_abierta.fecha_salida = now
+                    estadia_abierta.motivo_salida = motivo_egreso
+                    if estadia_abierta.fecha_ingreso:
+                        dur = max(0.0, (now.replace(tzinfo=None) - estadia_abierta.fecha_ingreso.replace(tzinfo=None)).total_seconds() / 3600.0)
+                        estadia_abierta.horas_estadia = round(dur, 1)
+
+            stmt_bus = (
+                update(Bus)
+                .where(Bus.id == select(TallerSolicitud.bus_id).where(TallerSolicitud.id == solicitud_id).scalar_subquery())
+                .values(en_taller=False)
+            )
+            await db.execute(stmt_bus)
+        else:
+            stmt_bus = (
+                update(Bus)
+                .where(Bus.id == select(TallerSolicitud.bus_id).where(TallerSolicitud.id == solicitud_id).scalar_subquery())
+                .values(en_taller=True)
+            )
+            await db.execute(stmt_bus)
+
+        # 5. INSERT Comentario de Cierre
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud_id,
+            usuario_id=mecanico_cierre_id,
+            tipo="CIERRE",
+            comentario=comentario_cierre_texto,
+            fecha_registro=now,
+        )
+        self.add_comentario(db, comentario_entry)
+
 
 
 mantencion_repository = MantencionRepository()

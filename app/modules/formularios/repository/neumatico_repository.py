@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.buses.models.bus import Bus
-from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
+from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +18,7 @@ class NeumaticoRepository:
     """
 
     async def add(self, db: AsyncSession, reporte: ReporteNeumatico) -> ReporteNeumatico:
-        """
-        Agrega atómicamente un nuevo reporte de neumático a la sesión y realiza flush.
-        El commit final es responsabilidad exclusiva de la capa de Servicio.
-        """
+        """Agrega atómicamente un nuevo reporte de neumático a la sesión y realiza flush."""
         db.add(reporte)
         await db.flush()
         return reporte
@@ -42,21 +39,25 @@ class NeumaticoRepository:
         return result.scalar_one_or_none()
 
     async def list_reportes(
-        self, db: AsyncSession, limit: int = 20, offset: int = 0
+        self,
+        db: AsyncSession,
+        limit: int = 20,
+        offset: int = 0,
+        n_bus: Optional[str] = None,
     ) -> Sequence[ReporteNeumatico]:
         """Obtiene el listado paginado de reportes ordenados cronológicamente descendente."""
-        stmt = (
-            select(ReporteNeumatico)
-            .order_by(ReporteNeumatico.fecha_subida.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(ReporteNeumatico)
+        if n_bus:
+            stmt = stmt.where(ReporteNeumatico.n_bus == str(n_bus).strip())
+        stmt = stmt.order_by(ReporteNeumatico.fecha_subida.desc()).limit(limit).offset(offset)
         result = await db.execute(stmt)
         return result.scalars().all()
 
-    async def count(self, db: AsyncSession) -> int:
-        """Retorna el conteo total de reportes de neumáticos registrados."""
+    async def count(self, db: AsyncSession, n_bus: Optional[str] = None) -> int:
+        """Retorna el conteo total de reportes de neumáticos registrados (opcionalmente filtrado por n_bus)."""
         stmt = select(func.count(ReporteNeumatico.id))
+        if n_bus:
+            stmt = stmt.where(ReporteNeumatico.n_bus == str(n_bus).strip())
         result = await db.execute(stmt)
         return result.scalar_one() or 0
 
@@ -65,22 +66,21 @@ class NeumaticoRepository:
         db: AsyncSession,
         usuario_id: Optional[int],
         numero_maquina: Optional[str],
-        tipo_bus: Optional[str],
         ruedas: Optional[Any],
         motivo: Optional[str],
-        precio: Optional[float],
-        marca_fuego: Optional[str],
-        evidencia_url: Optional[str],
+        marca_fuego: Optional[str] = None,
+        evidencia_url: Optional[str] = None,
         bus_id: Optional[int] = None,
+        tipo_bus: Optional[str] = None,
+        precio: Optional[float] = None,
     ) -> ReporteNeumatico:
-        """
-        Método de conveniencia atómico (crea y añade la entidad con flush, sin commit).
-        Mantenido para compatibilidad con llamadas existentes.
-        """
+        """Método de conveniencia atómico (crea y añade la entidad con flush, sin commit)."""
         if not bus_id and numero_maquina:
             bus = await self.get_bus_by_numero(db, numero_maquina)
             if bus:
                 bus_id = bus.id
+                if not tipo_bus:
+                    tipo_bus = bus.tipo_bus
 
         ahora = datetime.now(timezone.utc)
         reporte = ReporteNeumatico(

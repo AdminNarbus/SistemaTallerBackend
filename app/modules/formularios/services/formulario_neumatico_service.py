@@ -1,8 +1,6 @@
-import asyncio
 import json
 import logging
-import os
-import uuid
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import UploadFile
@@ -10,27 +8,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.core.storage.storage_service import storage_service
-from app.modules.neumaticos.dtos.reporte_neumatico_dto import (
+from app.modules.formularios.dtos.neumaticos_dto import (
     FormularioNeumaticoResponseDTO,
     FormularioNeumaticoStatusDTO,
     ReporteNeumaticoCreateDTO,
+    ReporteNeumaticoPaginadoDTO,
     ReporteNeumaticoResponseDTO,
 )
-from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
-from app.modules.neumaticos.repository.neumatico_repository import neumatico_repository
+from app.modules.formularios.repository.neumatico_repository import (
+    NeumaticoRepository,
+    neumatico_repository,
+)
+from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 
 logger = logging.getLogger(__name__)
 
 
 class FormularioNeumaticoService:
     """
-    Capa de Servicio (Cerebro del Negocio / Casos de Uso) para el módulo de Neumáticos.
+    Capa de Servicio (Cerebro del Negocio / Casos de Uso) para el formulario de Neumáticos.
     Responsabilidades:
     - Validación de reglas de negocio y parseo seguro de entradas.
     - Orquestación de pasos (evidencias, resolución de vehículos y persistencia).
     - Gobierno exclusivo de la transacción de BD (decide cuándo hacer commit() y rollback()).
     - Uso estricto de excepciones de dominio (BusinessRuleException, NotFoundException).
+    - Inyección de dependencias para desacoplamiento y testing unitario aislado.
     """
+
+    def __init__(
+        self,
+        repository: Optional[NeumaticoRepository] = None,
+        storage_srv: Optional[Any] = None,
+    ):
+        self.repository = repository or neumatico_repository
+        self.storage_service = storage_srv or storage_service
 
     async def obtener_estado_formulario(self) -> FormularioNeumaticoStatusDTO:
         """Retorna el estado de disponibilidad del formulario de neumáticos."""
@@ -53,10 +64,8 @@ class FormularioNeumaticoService:
             dto = ReporteNeumaticoCreateDTO(
                 usuario_id=usuario_id or kwargs.get("usuario_id"),
                 maquina=kwargs.get("maquina"),
-                tipo_bus=kwargs.get("tipo_bus"),
                 ruedas=kwargs.get("ruedas"),
                 motivo=kwargs.get("motivo"),
-                precio=kwargs.get("precio"),
                 marca_fuego=kwargs.get("marca_fuego"),
             )
 
@@ -69,10 +78,9 @@ class FormularioNeumaticoService:
         effective_user_id = usuario_id if usuario_id is not None else dto.usuario_id
 
         logger.info(
-            "[NEUMATICO] Iniciando procesamiento de formulario | usuario_id=%s | maquina='%s' | tipo_bus='%s'",
+            "[NEUMATICO] Iniciando procesamiento de formulario | usuario_id=%s | maquina='%s'",
             effective_user_id,
             dto.maquina,
-            dto.tipo_bus,
         )
 
         # 2. Manejo de evidencia fotográfica mediante StorageService (GCS o Local)
@@ -82,7 +90,7 @@ class FormularioNeumaticoService:
 
         if evidencia and evidencia.filename:
             nombre_original_evidencia = evidencia.filename
-            resultado_upload = await storage_service.upload_image(
+            resultado_upload = await self.storage_service.upload_image(
                 file=evidencia,
                 folder="evidencias",
             )
@@ -95,7 +103,7 @@ class FormularioNeumaticoService:
                 resultado_upload["size_bytes"],
             )
 
-        # 3. Parseo y validación de ruedas y precio
+        # 3. Parseo seguro de ruedas
         ruedas_lista = dto.ruedas
         if isinstance(dto.ruedas, str):
             try:
@@ -103,44 +111,35 @@ class FormularioNeumaticoService:
             except Exception:
                 pass
 
-        precio_float: Optional[float] = None
-        if dto.precio is not None:
-            if isinstance(dto.precio, (int, float)):
-                precio_float = float(dto.precio)
-            else:
-                try:
-                    precio_limpio = str(dto.precio).replace(".", "").replace(",", ".")
-                    precio_float = float(precio_limpio)
-                except Exception:
-                    precio_float = None
-
         # 4. Orquestación de Persistencia y Control de Transacción
         reporte_id: Optional[int] = None
         bus_id: Optional[int] = dto.bus_id
+        tipo_bus_resuelto: Optional[str] = None
 
         if db is not None:
             # 4.1 Resolución atómica de bus por máquina si no viene el bus_id
             if not bus_id and dto.maquina:
-                bus = await neumatico_repository.get_bus_by_numero(db, dto.maquina)
+                bus = await self.repository.get_bus_by_numero(db, dto.maquina)
                 if bus:
                     bus_id = bus.id
+                    tipo_bus_resuelto = bus.tipo_bus
 
-            # 4.2 Instanciación del modelo de dominio
+            # 4.2 Instanciación del modelo de dominio (monto/precio eliminado, tipo_bus autocompletado si existe)
             reporte = ReporteNeumatico(
                 usuario_id=effective_user_id,
                 bus_id=bus_id,
                 n_bus=dto.maquina,
-                tipo_bus=dto.tipo_bus,
+                tipo_bus=tipo_bus_resuelto,
                 ruedas=ruedas_lista,
                 motivo=dto.motivo,
-                precio=precio_float,
+                precio=None,
                 marca_fuego=dto.marca_fuego,
                 evidencia_url=evidencia_path,
                 fecha_subida=datetime.now(timezone.utc),
             )
 
             # 4.3 Persistencia atómica vía repositorio
-            await neumatico_repository.add(db, reporte)
+            await self.repository.add(db, reporte)
 
             # 4.4 Gobierno de Transacción en la capa de Servicio
             try:
@@ -169,10 +168,8 @@ class FormularioNeumaticoService:
             f"UsuarioID={effective_user_id or 'N/A'}, "
             f"Máquina='{dto.maquina or 'N/A'}', "
             f"BusID={bus_id or 'N/A'}, "
-            f"Tipo de Bus='{dto.tipo_bus or 'N/A'}', "
             f"Ruedas={ruedas_lista or '[]'}, "
             f"Motivo='{dto.motivo or 'N/A'}', "
-            f"Precio='{dto.precio or 'N/A'}', "
             f"Marca de Fuego='{dto.marca_fuego or 'N/A'}', "
             f"Evidencia Guardada='{evidencia_url or 'N/A'}'"
         )
@@ -181,10 +178,8 @@ class FormularioNeumaticoService:
             "usuario_id": effective_user_id,
             "maquina": dto.maquina,
             "bus_id": bus_id,
-            "tipo_bus": dto.tipo_bus,
             "ruedas": ruedas_lista,
             "motivo": dto.motivo,
-            "precio": str(dto.precio) if dto.precio is not None else None,
             "marca_fuego": dto.marca_fuego,
             "evidencia_original": nombre_original_evidencia,
             "evidencia_url": evidencia_url,
@@ -203,13 +198,59 @@ class FormularioNeumaticoService:
         self, db: AsyncSession, reporte_id: int
     ) -> ReporteNeumaticoResponseDTO:
         """Obtiene un reporte de neumático por ID o lanza NotFoundException."""
-        reporte = await neumatico_repository.get_by_id(db, reporte_id)
+        reporte = await self.repository.get_by_id(db, reporte_id)
         if not reporte:
             raise NotFoundException(f"Reporte de neumático {reporte_id} no encontrado")
         dto = ReporteNeumaticoResponseDTO.model_validate(reporte)
         if dto.evidencia_url:
-            dto.evidencia_url = storage_service.get_url(dto.evidencia_url) or dto.evidencia_url
+            dto.evidencia_url = self.storage_service.get_url(dto.evidencia_url) or dto.evidencia_url
         return dto
+
+    async def listar_reportes(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+        n_bus: Optional[str] = None,
+    ) -> ReporteNeumaticoPaginadoDTO:
+        """
+        Obtiene el listado paginado de reportes de neumáticos con resolución de URLs de evidencias.
+        Diseñado para la visualización y auditoría por parte de supervisión.
+        """
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 20
+
+        offset = (page - 1) * page_size
+        reportes = await self.repository.list_reportes(
+            db=db, limit=page_size, offset=offset, n_bus=n_bus
+        )
+        total = await self.repository.count(db=db, n_bus=n_bus)
+        pages = math.ceil(total / page_size) if total > 0 else 0
+
+        items_dto = []
+        for r in reportes:
+            dto = ReporteNeumaticoResponseDTO.model_validate(r)
+            if dto.evidencia_url:
+                dto.evidencia_url = self.storage_service.get_url(dto.evidencia_url) or dto.evidencia_url
+            items_dto.append(dto)
+
+        logger.info(
+            "[NEUMATICO] Listado de reportes obtenido | page=%s | page_size=%s | total=%s | n_bus=%s",
+            page,
+            page_size,
+            total,
+            n_bus,
+        )
+
+        return ReporteNeumaticoPaginadoDTO(
+            items=items_dto,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=pages,
+        )
 
 
 formulario_neumatico_service = FormularioNeumaticoService()

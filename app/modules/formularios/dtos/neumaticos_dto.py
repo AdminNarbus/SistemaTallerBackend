@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -7,10 +7,8 @@ class ReporteNeumaticoBaseDTO(BaseModel):
     usuario_id: Optional[int] = None
     bus_id: Optional[int] = None
     n_bus: Optional[str] = None
-    tipo_bus: Optional[str] = None
     ruedas: Optional[Any] = None
     motivo: Optional[str] = None
-    precio: Optional[Union[float, str]] = None
     marca_fuego: Optional[str] = None
     evidencia_url: Optional[str] = None
 
@@ -27,7 +25,6 @@ class ReporteNeumaticoResponseDTO(BaseModel):
     tipo_bus: Optional[str] = None
     ruedas: Optional[Any] = None
     motivo: Optional[str] = None
-    precio: Optional[float] = None
     marca_fuego: Optional[str] = None
     evidencia_url: Optional[str] = None
     fecha_subida: Optional[datetime] = None
@@ -60,3 +57,11 @@ class FormularioNeumaticoResponseDTO(BaseModel):
 
     def __contains__(self, item: str) -> bool:
         return hasattr(self, item)
+
+
+class ReporteNeumaticoPaginadoDTO(BaseModel):
+    items: list[ReporteNeumaticoResponseDTO] = Field(default_factory=list, description="Listado de reportes")
+    total: int = Field(0, description="Total de reportes encontrados")
+    page: int = Field(1, description="Página actual")
+    page_size: int = Field(20, description="Cantidad de elementos por página")
+    pages: int = Field(0, description="Total de páginas calculadas")

@@ -51,4 +51,3 @@ class ReporteNeumatico(Base, TimestampMixin):
     usuario: Mapped[Optional["Usuario"]] = relationship(
         "Usuario", backref="reportes_neumaticos"
     )
-

@@ -17,6 +17,8 @@ from app.modules.auth.dtos import (
     UsuarioResponseDTO,
 )
 from app.modules.auth.services.auth_service import auth_service
+from app.modules.auth.services.user_service import user_service
+from app.modules.auth.services.mechanic_service import mechanic_service
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +72,7 @@ async def register(
     """
     Registra un nuevo usuario en la base de datos y retorna su token de acceso.
     """
-    return await auth_service.register(db, usuario_in=usuario_in)
+    return await user_service.register(db, usuario_in=usuario_in)
 
 
 @router.get(
@@ -109,10 +111,10 @@ async def buscar_mecanicos(
     """
     Endpoint para el buscador/autocompletar de mecánicos en el frontend.
     """
-    total = await auth_service.contar_mecanicos(db, q=q, exclude_id=exclude_id)
+    total = await mechanic_service.contar_mecanicos(db, q=q, exclude_id=exclude_id)
     response.headers["X-Total-Count"] = str(total)
     logger.info("[AUTH] Búsqueda de mecánicos | q='%s' | exclude_id=%s | skip=%d | limit=%d | total=%d | usuario_solicitante_id=%s", q, exclude_id, skip, limit, total, current_user.id)
-    return await auth_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id, skip=skip, limit=limit)
+    return await mechanic_service.buscar_mecanicos(db, q=q, exclude_id=exclude_id, skip=skip, limit=limit)
 
 
 # =====================================================================
@@ -140,9 +142,9 @@ async def listar_usuarios(
     y filtros opcionales. El total de registros coincidentes se expone en la cabecera X-Total-Count.
     Exige rol de SUPERVISOR o ADMIN.
     """
-    total = await auth_service.contar_usuarios(db, rol=rol, q=q, is_active=is_active)
+    total = await user_service.contar_usuarios(db, rol=rol, q=q, is_active=is_active)
     response.headers["X-Total-Count"] = str(total)
-    return await auth_service.listar_usuarios(
+    return await user_service.listar_usuarios(
         db, skip=skip, limit=limit, rol=rol, q=q, is_active=is_active
     )
 
@@ -161,7 +163,7 @@ async def crear_usuario_supervisor(
     """
     Permite a un Supervisor o Admin registrar un usuario (Conductor, Mecánico, Supervisor, etc.).
     """
-    return await auth_service.crear_usuario(db, usuario_in=usuario_in)
+    return await user_service.crear_usuario(db, usuario_in=usuario_in)
 
 
 @router.delete(
@@ -179,6 +181,6 @@ async def deshabilitar_usuario(
     No borra la fila físicamente para garantizar la trazabilidad de reportes y mantenimientos.
     Exige rol de SUPERVISOR o ADMIN.
     """
-    return await auth_service.deshabilitar_usuario(
+    return await user_service.deshabilitar_usuario(
         db, usuario_id=usuario_id, current_user_id=current_user.id
     )

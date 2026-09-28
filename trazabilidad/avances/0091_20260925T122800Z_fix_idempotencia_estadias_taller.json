@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 91,
+  "id": "AV-0091",
+  "timestamp": "2026-09-25T12:28:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-IDEM-ESTADIAS",
+    "name": "Idempotencia de Estadías Físicas y Corrección de Cronómetro de Taller",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Blindaje de idempotencia en la apertura y cierre de estadías físicas de taller (taller_solicitud_estadias). Se corrigió la causa raíz que abría múltiples estadías en curso simultáneas al autoasignar averías sucesivas, inflando artificialmente el cronómetro acumulado en taller. Se incorporó carga de estadías en selectinload para mantener consistencia en memoria sin queries de red adicionales (Zero Latency Extra), verificación segura con inspect y loaded_value, saneamiento en base de datos de OTs afectadas (OT #23, #24, #30) y nuevo test unitario de idempotencia con 184/184 tests verdes.",
+  "scope": {
+    "planned": [
+      "Diagnosticar causa raíz de la inflación de tiempo en taller (2d 8h para OT de <24h) y múltiples Visitas #1 activas",
+      "Eliminar riesgo de consultas de red extras (Zero Latency Extra) integrando estadías en selectinload",
+      "Blindar _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa con inspect y loaded_value",
+      "Sanear en base de datos las estadías duplicadas abiertas de la OT #24 y órdenes concurrentes",
+      "Implementar prueba unitaria de regresión para asegurar idempotencia total",
+      "Verificar suite completa de pruebas (184/184 aprobadas)"
+    ],
+    "completed": [
+      "Actualizado MantencionRepository (get_solicitud_con_detalles y get_solicitud_operacional) reemplazando noload por selectinload(TallerSolicitud.estadias) garantizando verdad en memoria sin viajes de red extra",
+      "Refactorizado MantencionService (_asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa) verificando formalmente loaded_value is not NO_VALUE de SQLAlchemy y cálculo estricto de correlativo de visitas",
+      "Creado y ejecutado script de saneamiento scripts/sanear_estadias_duplicadas.py eliminando duplicados espurios en OTs #23, #24 y #30, dejando 1 sola estadía abierta activa",
+      "Añadido test unitario test_asegurar_ingreso_taller_idempotente_no_duplica_estadias en tests/unit/test_mantencion_service.py",
+      "Ejecución exitosa de la suite completa de pruebas: 184 de 184 tests aprobados (100% verde)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en la interfaz visual de Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Inclusión de selectinload(TallerSolicitud.estadias) en consultas operacionales para garantizar consistencia atómica sin viajes de red extras."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Blindaje de idempotencia en _asegurar_ingreso_taller_y_estadia y _cerrar_estadia_activa utilizando SQLAlchemy inspect y loaded_value."
+    },
+    {
+      "path": "tests/unit/test_mantencion_service.py",
+      "action": "modified",
+      "summary": "Nuevo test unitario test_asegurar_ingreso_taller_idempotente_no_duplica_estadias validando que autoasignaciones concurrentes o sucesivas no abran múltiples estadías en curso."
+    },
+    {
+      "path": "scripts/sanear_estadias_duplicadas.py",
+      "action": "created",
+      "summary": "Script de saneamiento y normalización de correlativos de estadías duplicadas en base de datos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Optimización Zero-RTT mediante selectinload de estadías en consultas operacionales",
+      "rationale": "Evitar consultas SQL adicionales por separado hacia Neon que introducirían entre 40 y 120 ms de latencia por asignación. Al incluir estadias en el selectinload inicial de la solicitud, la colección viaja de forma atómica y la evaluación de estadía abierta se realiza en memoria a velocidad CPU (<0.1 ms).",
+      "consequences": "Respuesta instantánea del endpoint sin pérdida de rendimiento y consistencia total de datos."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Verificación formal de estado cargado con loaded_value is not NO_VALUE",
+      "rationale": "Prevenir el bug silencioso donde un noload() inicializa una lista vacía [] en memoria haciendo que hasattr y != None evalúen verdadero erróneamente.",
+      "consequences": "Robustez y desacoplamiento frente a cambios futuros en las estrategias de carga del repositorio."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest --tb=short",
+      "result": "passed",
+      "evidence": "184 passed, 1 warning in 65.31s (0:01:05)"
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m scripts.sanear_estadias_duplicadas",
+      "result": "passed",
+      "evidence": "Saneamiento completado con éxito para OTs #23, #24 y #30."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Monitoreo de telemetría de tiempos en producción y soporte de cronómetros en frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "local_working_tree",
+    "dirty": true
+  },
+  "notes": [
+    "La OT #24 ahora cuenta con exactamente 1 estadía activa (#1) y el tiempo en taller refleja las horas reales transcurridas."
+  ]
+}

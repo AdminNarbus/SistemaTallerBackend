@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 93,
+  "id": "AV-0093",
+  "timestamp": "2026-09-25T14:40:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-BUSES-REFACTOR",
+    "name": "Modularización y Separación por Responsabilidad Única (SRP) del Módulo Buses",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Descomposición y modularización de la capa de DTOs y Servicios en app/modules/buses bajo el principio de responsabilidad única (SRP): creación de servicios atómicos (BusCatalogService, BusFleetService, BusWorkshopService), desacoplamiento de DTOs en archivos específicos (bus_query_dto, bus_lifecycle_dto, bus_taller_dto), saneamiento de BusRepository eliminando consultas cruzadas a otros módulos (delegando a MantencionRepository) y optimización de filtros en BD con suite completa de 184 tests verdes.",
+  "scope": {
+    "planned": [
+      "Separar DTOs monolíticos en contratos específicos por caso de uso en app/modules/buses/dtos",
+      "Dividir el servicio monolítico en BusCatalogService, BusFleetService y BusWorkshopService con fachada compatible",
+      "Desacoplar BusRepository de tablas externas delegando a mantencion_repository",
+      "Optimizar filtrado de solo_flota_taller a nivel SQL en BusRepository para consistencia de paginación",
+      "Actualizar inyecciones en router.py y verificar suite unitaria e integral (184 tests)"
+    ],
+    "completed": [
+      "Separar DTOs monolíticos en contratos específicos por caso de uso en app/modules/buses/dtos",
+      "Dividir el servicio monolítico en BusCatalogService, BusFleetService y BusWorkshopService con fachada compatible",
+      "Desacoplar BusRepository de tablas externas delegando a mantencion_repository",
+      "Optimizar filtrado de solo_flota_taller a nivel SQL en BusRepository para consistencia de paginación",
+      "Actualizar inyecciones en router.py y verificar suite unitaria e integral (184 tests)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Cambios en tablas relacionales o esquemas de migración Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/buses/dtos/bus_query_dto.py",
+      "action": "created",
+      "summary": "DTOs especializados para consultas de catálogo, autocompletado y búsqueda ligera (BusAutocompleteDTO, BusSimpleDTO)"
+    },
+    {
+      "path": "app/modules/buses/dtos/bus_lifecycle_dto.py",
+      "action": "created",
+      "summary": "DTOs de ciclo de vida de la flota: ficha técnica base, respuesta completa, payload de alta con validación y payload de baja auditada"
+    },
+    {
+      "path": "app/modules/buses/dtos/bus_taller_dto.py",
+      "action": "created",
+      "summary": "DTO especializado en actualización de estado físico en taller (BusUpdateEnTallerDTO)"
+    },
+    {
+      "path": "app/modules/buses/dtos/bus_dto.py",
+      "action": "deleted",
+      "summary": "Eliminación de archivo intermediario redundante; los DTOs se exponen directamente a través de dtos/__init__.py"
+    },
+    {
+      "path": "app/modules/buses/services/bus_catalog_service.py",
+      "action": "created",
+      "summary": "Servicio especializado en catálogo de buses: listados paginados, sugerencias por prefijo, conteo y obtención por ID/n_bus"
+    },
+    {
+      "path": "app/modules/buses/services/bus_fleet_service.py",
+      "action": "created",
+      "summary": "Servicio especializado en altas de buses con validación de patentes/máquinas, bajas auditadas con validación de OTs y reactivación"
+    },
+    {
+      "path": "app/modules/buses/services/bus_workshop_service.py",
+      "action": "created",
+      "summary": "Servicio enfocado en la actualización atómica del estado en taller de un bus"
+    },
+    {
+      "path": "app/modules/buses/services/bus_service.py",
+      "action": "deleted",
+      "summary": "Erradicación definitiva de fachada monolítica obsoleta en favor de servicios atómicos especializados"
+    },
+    {
+      "path": "app/modules/buses/services/__init__.py",
+      "action": "modified",
+      "summary": "Exportación centralizada de todos los servicios especializados (bus_catalog_service, bus_fleet_service, bus_workshop_service)"
+    },
+    {
+      "path": "app/modules/buses/repository/bus_repository.py",
+      "action": "modified",
+      "summary": "Saneamiento de imports redundantes, soporte SQL directo a solo_flota_taller y delegación de conteo de OTs a mantencion_repository"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Incorporación del método count_solicitudes_activas_por_bus en el dominio correspondiente de persistencia de taller"
+    },
+    {
+      "path": "app/modules/buses/api/router.py",
+      "action": "modified",
+      "summary": "Consumo de servicios especializados con SRP y alineación de conteo con filtro solo_flota_taller"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Consumo directo de bus_fleet_service para endpoints de creación y baja de buses desde supervisión"
+    },
+    {
+      "path": "tests/unit/test_bus_service.py",
+      "action": "modified",
+      "summary": "Adaptación completa de tests unitarios e integrales para invocar directamente a BusCatalogService, BusFleetService y BusWorkshopService"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Separación de Servicios por Responsabilidad Funcional (SRP)",
+      "rationale": "El servicio monolítico BusService acumulaba lógicas de catálogo, ciclo de vida administrativo y operaciones físicas de taller, generando clases extensas y acopladas. Separarlos en BusCatalogService, BusFleetService y BusWorkshopService facilita la mantenibilidad, escalabilidad y testeo unitario.",
+      "consequences": "Mayor cohesión por clase, menor acoplamiento y testeabilidad óptima sin romper integraciones gracias a la fachada BusService."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Desacoplamiento de Persistencia entre Módulos",
+      "rationale": "BusRepository ejecutaba consultas SQL contra TallerSolicitud (módulo mantención) rompiendo los límites de bounded context e introduciendo imports diferidos.",
+      "consequences": "La consulta de solicitudes activas reside en MantencionRepository, dejando a BusRepository exclusivamente responsable de la tabla buses."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Filtrado de Flota en BD en vez de Memoria Python",
+      "rationale": "Filtrar en Python posterior a una consulta paginada (skip/limit) rompía la consistencia del tamaño de página retornado.",
+      "consequences": "El filtro solo_flota_taller se resuelve en la cláusula WHERE de SQLAlchemy, garantizando que el limit y offset sean 100% exactos."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_bus_service.py -v",
+      "result": "passed",
+      "evidence": "13 passed in 1.47s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "184 passed, 1 warning in 64.70s (100% éxito)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con siguientes tareas operacionales o refactorizaciones programadas.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los endpoints de la API continúan respondiendo con los mismos contratos exactos y tiempos optimizados."
+  ]
+}

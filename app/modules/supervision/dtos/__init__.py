@@ -1,4 +1,4 @@
-from app.modules.mantencion.dtos import AgregarFallaDTO, ResolverFallaSupervisoraDTO
+from app.modules.taller.dtos import AgregarFallaDTO, ResolverFallaSupervisoraDTO
 from app.modules.supervision.dtos.supervision_dto import (
     MetricasEstadoDTO,
     CategoriaFrecuenciaDTO,

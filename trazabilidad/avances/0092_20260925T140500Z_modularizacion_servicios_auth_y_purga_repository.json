@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 92,
+  "id": "AV-0092",
+  "timestamp": "2026-09-25T14:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-AUTH-REFACTOR",
+    "name": "Modularización de Servicios Auth y Purga de Lógica en UserRepository",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Descomposición y modularización de la capa de servicios en app/modules/auth en servicios especializados (AuthService, UserService, MechanicService), purga de métodos legados y lógica de negocio en UserRepository (dejándolo como repositorio de persistencia SQL puro con entidades ORM), y actualización integral de routers y tests unitarios.",
+  "scope": {
+    "planned": [
+      "Dividir app/modules/auth/services en archivos específicos orientados a casos de uso",
+      "Sanear UserRepository eliminando get_or_create_rol y authenticate",
+      "Alinear user_repository.create para recibir exclusivamente entidades Usuario puras sin bcrypt ni DTOs",
+      "Actualizar inyecciones de dependencias en router.py de auth",
+      "Adaptar suite de pruebas unitarias y verificar cobertura total de 184 tests"
+    ],
+    "completed": [
+      "Dividir app/modules/auth/services en archivos específicos orientados a casos de uso",
+      "Sanear UserRepository eliminando get_or_create_rol y authenticate",
+      "Alinear user_repository.create para recibir exclusivamente entidades Usuario puras sin bcrypt ni DTOs",
+      "Actualizar inyecciones de dependencias en router.py de auth",
+      "Adaptar suite de pruebas unitarias y verificar cobertura total de 184 tests"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Alteraciones en esquema de migraciones Alembic (los modelos ya estaban alineados)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/auth/services/user_service.py",
+      "action": "created",
+      "summary": "Servicio especializado para administración de usuarios: registro, creación administrativa, listado paginado, conteo y soft-delete"
+    },
+    {
+      "path": "app/modules/auth/services/mechanic_service.py",
+      "action": "created",
+      "summary": "Servicio enfocado en mecánicos: búsqueda por nombre/criterios y conteo total de mecánicos activos"
+    },
+    {
+      "path": "app/modules/auth/services/auth_service.py",
+      "action": "modified",
+      "summary": "Especialización de AuthService en login y JWT, actuando además como fachada compatible para otros módulos"
+    },
+    {
+      "path": "app/modules/auth/services/__init__.py",
+      "action": "modified",
+      "summary": "Exportación centralizada de auth_service, user_service y mechanic_service"
+    },
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "Purga de lógica de negocio (get_or_create_rol, authenticate, hashing bcrypt) convirtiéndolo en repositorio SQL puro de entidades ORM"
+    },
+    {
+      "path": "app/modules/auth/api/router.py",
+      "action": "modified",
+      "summary": "Inyección y consumo de servicios especializados auth_service, user_service y mechanic_service según el endpoint correspondiente"
+    },
+    {
+      "path": "tests/unit/test_auth_service.py",
+      "action": "modified",
+      "summary": "Actualización de pruebas de integración para testear user_repository con entidades Usuario y auth_service.login"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Descomposición de AuthService en Servicios Especializados por Caso de Uso",
+      "rationale": "El módulo auth concentraba en un solo servicio la autenticación, la administración de usuarios del sistema y el catálogo/búsqueda de mecánicos. Se aplicó SRP creando UserService y MechanicService independientes, dejando AuthService enfocado en autenticación y tokens JWT.",
+      "consequences": "Mayor cohesión, cumplimiento de principios SOLID, routers más claros y testeabilidad granular de cada flujo de negocio."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Purga de Lógica de Negocio y Hashing en UserRepository",
+      "rationale": "UserRepository contenía métodos legados como get_or_create_rol (creación dinámica de roles en runtime prohibida por estándares), authenticate (comparación de contraseñas bcrypt) y procesamiento de DTOs en create(). La capa de repositorio debe ser de persistencia pura sobre entidades ORM.",
+      "consequences": "Separación estricta de 4 capas Router -> Service -> Repository -> DTO. Hashing y validaciones de credenciales residen exclusivamente en la capa Service."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit/test_auth_service.py",
+      "result": "passed",
+      "evidence": "11 passed in 3.49s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest --tb=short",
+      "result": "passed",
+      "evidence": "184 passed, 1 warning in 65.54s (0:01:05) - 100% test suite passing"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las solicitudes operativas o mejoras de arquitectura requeridas en el backend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "No se generó ninguna regresión en los módulos de Mantención, Neumáticos, Supervisión, Buses o Auth.",
+    "El servidor de desarrollo main:app recargó limpiamente los módulos sin errores de importación circular."
+  ]
+}

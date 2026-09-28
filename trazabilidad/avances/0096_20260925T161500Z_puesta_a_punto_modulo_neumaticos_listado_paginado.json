@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 96,
+  "id": "AV-0096",
+  "timestamp": "2026-09-25T16:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEUMAT-1",
+    "name": "Puesta a Punto Módulo Neumáticos con DIP y Listado Paginado",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Puesta a punto y modernización del módulo de neumáticos: inyección de dependencias (DIP) en FormularioNeumaticoService, limpieza de código muerto, DTO de paginación ReporteNeumaticoPaginadoDTO, soporte para filtro por n_bus en NeumaticoRepository y nuevo endpoint GET /reportes con soporte de paginación y cabecera X-Total-Count para supervisión.",
+  "scope": {
+    "planned": [
+      "Inversión de dependencias (DIP) en FormularioNeumaticoService",
+      "Limpieza de imports obsoletos (asyncio, os, uuid)",
+      "DTO de paginación ReporteNeumaticoPaginadoDTO",
+      "Método listar_reportes en FormularioNeumaticoService con resolución de URLs de evidencias",
+      "Filtro opcional n_bus en NeumaticoRepository",
+      "Endpoint GET /reportes en neumaticos router con cabecera X-Total-Count",
+      "Cobertura de pruebas unitarias y de integración"
+    ],
+    "completed": [
+      "Constructor con inyección opcional implementado en FormularioNeumaticoService",
+      "Imports muertos purgados",
+      "ReporteNeumaticoPaginadoDTO agregado a dtos y exportado en __init__.py",
+      "listar_reportes implementado en servicio y repositorio con cálculo de páginas y filtros",
+      "GET /reportes expuesto en api/router.py con cabecera X-Total-Count",
+      "3 nuevos tests añadidos: test_listar_reportes_servicio_paginado, test_formulario_neumatico_service_dip_injection, test_get_reportes_paginados_api",
+      "Suite completa pasando al 100% (187/187 tests)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend UI ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/neumaticos/dtos/reporte_neumatico_dto.py",
+      "action": "modified",
+      "summary": "Añadido ReporteNeumaticoPaginadoDTO con items, total, page, page_size y pages"
+    },
+    {
+      "path": "app/modules/neumaticos/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportado ReporteNeumaticoPaginadoDTO"
+    },
+    {
+      "path": "app/modules/neumaticos/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Añadido soporte para filtro opcional n_bus en list_reportes y count"
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Implementado constructor DIP, purgados imports muertos y añadido método listar_reportes con resolución de URLs"
+    },
+    {
+      "path": "app/modules/neumaticos/api/router.py",
+      "action": "modified",
+      "summary": "Expuesto endpoint GET /reportes con soporte de paginación y cabecera X-Total-Count"
+    },
+    {
+      "path": "tests/unit/test_neumaticos_service.py",
+      "action": "modified",
+      "summary": "Añadidos tests unitarios para listar_reportes y desacoplamiento por DIP"
+    },
+    {
+      "path": "tests/integration/test_neumaticos_api.py",
+      "action": "modified",
+      "summary": "Añadido test de integración para GET /reportes con cabecera X-Total-Count"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-096",
+      "title": "Exposición de GET /reportes y cabecera X-Total-Count para Supervisión",
+      "rationale": "Para anticipar el requerimiento de la supervisora de auditar y consultar todos los reportes de neumáticos históricos con paginación ágil y filtro opcional por máquina.",
+      "consequences": "El backend ofrece soporte completo de paginación tanto en el payload como en cabecera HTTP estándar, manteniendo retrocompatibilidad total con los endpoints existentes."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_neumaticos_service.py tests/integration/test_neumaticos_api.py -v",
+      "result": "passed",
+      "evidence": "14 passed in 4.24s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "187 passed, 1 warning in 65.76s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las tareas de backend planificadas.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "Compatibilidad 100% preservada con el frontend de ProtoNeumaticos."
+  ]
+}

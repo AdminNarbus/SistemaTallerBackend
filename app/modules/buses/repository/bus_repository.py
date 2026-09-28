@@ -27,16 +27,20 @@ class BusRepository:
         self,
         db: AsyncSession,
         solo_activos: bool = True,
+        solo_flota_taller: bool = False,
         skip: int = 0,
         limit: Optional[int] = None,
     ) -> List[Bus]:
         """
         Retorna entidades Bus desde la base de datos ordenadas por n_bus,
-        con soporte de paginación opcional en capa de persistencia.
+        con soporte de filtrado por flota operativa y paginación a nivel SQL.
         """
         stmt = select(Bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
+        if solo_flota_taller:
+            stmt = stmt.where(Bus.n_bus.is_not(None), func.trim(Bus.n_bus) != "")
+
         stmt = stmt.order_by(Bus.n_bus.asc()).offset(skip)
         if limit is not None:
             stmt = stmt.limit(limit)
@@ -44,11 +48,19 @@ class BusRepository:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_buses(self, db: AsyncSession, solo_activos: bool = True) -> int:
-        """Retorna el conteo total de buses registrados."""
+    async def count_buses(
+        self,
+        db: AsyncSession,
+        solo_activos: bool = True,
+        solo_flota_taller: bool = False,
+    ) -> int:
+        """Retorna el conteo total de buses registrados según filtros de vigencia y flota."""
         stmt = select(func.count(Bus.id))
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
+        if solo_flota_taller:
+            stmt = stmt.where(Bus.n_bus.is_not(None), func.trim(Bus.n_bus) != "")
+
         res = await db.execute(stmt)
         return res.scalar() or 0
 
@@ -57,18 +69,22 @@ class BusRepository:
         db: AsyncSession,
         prefix: str = "",
         solo_activos: bool = True,
+        solo_flota_taller: bool = False,
         limit: Optional[int] = None,
     ) -> List[Bus]:
         """
-        Consulta SQL pura para filtrar buses cuyo número inicie con el prefijo dado.
+        Consulta SQL para filtrar buses cuyo número inicie con el prefijo dado.
         Retorna las entidades Bus coincidentes ordenadas por n_bus.
         """
         clean_prefix = (prefix or "").strip()
         stmt = select(Bus)
         if solo_activos:
             stmt = stmt.where(Bus.is_active == True)
+        if solo_flota_taller:
+            stmt = stmt.where(Bus.n_bus.is_not(None), func.trim(Bus.n_bus) != "")
         if clean_prefix:
             stmt = stmt.where(Bus.n_bus.like(f"{clean_prefix}%"))
+
         stmt = stmt.order_by(Bus.n_bus.asc())
         if limit is not None:
             stmt = stmt.limit(limit)
@@ -94,8 +110,6 @@ class BusRepository:
 
     async def get_by_patente(self, db: AsyncSession, patente: str) -> Optional[Bus]:
         """Obtiene un bus buscando por patente normalizada en mayúsculas."""
-        from sqlalchemy import func
-
         clean = patente.strip().upper()
         stmt = select(Bus).where(func.upper(Bus.patente) == clean)
         result = await db.execute(stmt)
@@ -108,17 +122,12 @@ class BusRepository:
     async def count_solicitudes_activas_por_bus(
         self, db: AsyncSession, bus_id: int
     ) -> int:
-        """Cuenta la cantidad de órdenes de trabajo abiertas en taller para el bus dado."""
-        from sqlalchemy import func
-        from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
-
-        stmt = select(func.count(TallerSolicitud.id)).where(
-            TallerSolicitud.bus_id == bus_id,
-            TallerSolicitud.estado != "FINALIZADO",
-        )
-        res = await db.execute(stmt)
-        return int(res.scalar() or 0)
+        """
+        Método delegado al repositorio de mantención para contar OTs abiertas del bus.
+        Mantiene compatibilidad mientras aísla la consulta en su dominio de mantención.
+        """
+        from app.modules.taller.repository.taller_repository import taller_repository
+        return await taller_repository.count_solicitudes_activas_por_bus(db, bus_id)
 
 
 bus_repository = BusRepository()
-

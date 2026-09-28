@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 98,
+  "id": "AV-0098",
+  "timestamp": "2026-09-25T17:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "FORM-1",
+    "name": "Creación del Módulo Autónomo Formularios y Desacoplamiento de Entradas de Taller",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Diseño, creación e integración del nuevo módulo autónomo 'formularios' (app/modules/formularios) bajo Clean Architecture estricta en 4 capas (API Router -> Service -> Repository -> DTOs). Agrupa por semejanza conceptual las 3 compuertas de entrada/reporte del taller: 1) Formulario de Neumáticos, 2) Formulario/Checklist de Pauta Preventiva (11 ítems), y 3) Formulario de Ingreso de Mantención/Solicitud. Mantiene total retrocompatibilidad funcional con los contratos HTTP existentes y suites de testing.",
+  "scope": {
+    "planned": [
+      "Crear app/modules/formularios con estructura canónica DTOs, Repository, Services y API Routers",
+      "Migrar persistencia y lógica pura de pauta preventiva a pauta_repository y formulario_pauta_service",
+      "Consolidar formulario de neumáticos en neumatico_repository y formulario_neumatico_service",
+      "Proveer router agregador en app/modules/formularios/api/router.py expuesto bajo /api/v1/formularios",
+      "Establecer fachadas retrocompatibles en app/modules/mantencion y app/modules/neumaticos para no alterar clientes frontend existentes",
+      "Crear suite de pruebas unitarias tests/unit/test_formularios_module.py y certificar que la suite global pase al 100%"
+    ],
+    "completed": [
+      "Estructura app/modules/formularios creada con dtos/, repository/, services/ y api/",
+      "DTOs canónicos organizados: neumaticos_dto.py, pauta_dto.py y mantencion_ingreso_dto.py",
+      "pauta_repository.py y neumatico_repository.py implementados con operaciones atómicas y sin lógica de negocio",
+      "Servicios especializados: FormularioPautaService, FormularioNeumaticoService y FormularioMantencionService con inyección de dependencias",
+      "Routers FastAPI: neumaticos_router.py, pauta_router.py, mantencion_router.py y router.py agregador",
+      "Fachadas retrocompatibles implementadas en mantencion/services/pauta_service.py y neumaticos/services/formulario_neumatico_service.py",
+      "Router /api/v1/formularios montado en app/api/v1/router.py",
+      "Suite tests/unit/test_formularios_module.py creada con 6 tests verificando catálogo, resumen, guardado por lote, creación de OT y estado",
+      "Suite completa de 193 tests pasando con 100% de éxito en verde"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (ProtoNeumaticos u otros)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/formularios/__init__.py",
+      "action": "created",
+      "summary": "Inicializador del paquete del nuevo módulo formularios"
+    },
+    {
+      "path": "app/modules/formularios/dtos/neumaticos_dto.py",
+      "action": "created",
+      "summary": "DTOs de entrada y salida para el formulario y reportes de neumáticos"
+    },
+    {
+      "path": "app/modules/formularios/dtos/pauta_dto.py",
+      "action": "created",
+      "summary": "DTOs de catálogo, respuestas y resumen de estado de pauta preventiva de taller"
+    },
+    {
+      "path": "app/modules/formularios/dtos/mantencion_ingreso_dto.py",
+      "action": "created",
+      "summary": "DTO de entrada para el formulario de ingreso de mantención"
+    },
+    {
+      "path": "app/modules/formularios/dtos/__init__.py",
+      "action": "created",
+      "summary": "Re-exportación unificada de DTOs del módulo formularios"
+    },
+    {
+      "path": "app/modules/formularios/repository/neumatico_repository.py",
+      "action": "created",
+      "summary": "Repositorio de persistencia pura para reportes de neumáticos"
+    },
+    {
+      "path": "app/modules/formularios/repository/pauta_repository.py",
+      "action": "created",
+      "summary": "Repositorio de persistencia pura SQL para ítems de catálogo y respuestas de pauta con ON CONFLICT DO UPDATE"
+    },
+    {
+      "path": "app/modules/formularios/repository/__init__.py",
+      "action": "created",
+      "summary": "Instancias singleton y exportación de repositorios del módulo"
+    },
+    {
+      "path": "app/modules/formularios/services/formulario_neumatico_service.py",
+      "action": "created",
+      "summary": "Servicio de negocio para validación, almacenamiento de evidencias y persistencia de neumáticos"
+    },
+    {
+      "path": "app/modules/formularios/services/formulario_pauta_service.py",
+      "action": "created",
+      "summary": "Servicio de negocio para checklist preventivo, cálculo de resumen y registro atómico por lote"
+    },
+    {
+      "path": "app/modules/formularios/services/formulario_mantencion_service.py",
+      "action": "created",
+      "summary": "Servicio de negocio para procesamiento de solicitudes de ingreso de mantención"
+    },
+    {
+      "path": "app/modules/formularios/services/__init__.py",
+      "action": "created",
+      "summary": "Re-exportación de servicios del módulo formularios"
+    },
+    {
+      "path": "app/modules/formularios/api/neumaticos_router.py",
+      "action": "created",
+      "summary": "Endpoints REST y multipart para neumáticos (/formularioNeumatico, /neumaticos/estado, /reportes)"
+    },
+    {
+      "path": "app/modules/formularios/api/pauta_router.py",
+      "action": "created",
+      "summary": "Endpoints REST para pauta (/pauta/items, /solicitudes/{id}/pauta)"
+    },
+    {
+      "path": "app/modules/formularios/api/mantencion_router.py",
+      "action": "created",
+      "summary": "Endpoint REST para ingreso de solicitud (/solicitudes)"
+    },
+    {
+      "path": "app/modules/formularios/api/router.py",
+      "action": "created",
+      "summary": "Router agregador de formularios"
+    },
+    {
+      "path": "app/modules/formularios/api/__init__.py",
+      "action": "created",
+      "summary": "Exportación del router de formularios"
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Fachada retrocompatible delegando al servicio centralizado de formularios"
+    },
+    {
+      "path": "app/modules/neumaticos/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Fachada retrocompatible delegando al repositorio centralizado de formularios"
+    },
+    {
+      "path": "app/modules/neumaticos/api/router.py",
+      "action": "modified",
+      "summary": "Fachada retrocompatible delegando a neumaticos_router de formularios"
+    },
+    {
+      "path": "app/modules/mantencion/services/pauta_service.py",
+      "action": "modified",
+      "summary": "Fachada retrocompatible delegando a formulario_pauta_service"
+    },
+    {
+      "path": "app/modules/mantencion/repository/mantencion_repository.py",
+      "action": "modified",
+      "summary": "Delegación de operaciones de pauta hacia pauta_repository centralizado"
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Incorporación del router unificado /formularios"
+    },
+    {
+      "path": "tests/unit/test_formularios_module.py",
+      "action": "created",
+      "summary": "Suite de 6 pruebas unitarias de persistencia, lógica de negocio y endpoints HTTP para formularios"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-098",
+      "title": "Módulo Autónomo 'Formularios' y Fachadas Retrocompatibles",
+      "rationale": "El módulo mantención había crecido excesivamente abarcando tanto el ciclo de vida de la orden de trabajo (averías, cuadrilla, cierres, auditoría) como los formularios de entrada y pauta preventiva. La creación del módulo formularios agrupa por alta cohesión las 3 compuertas de reporte (neumáticos, pauta preventiva e ingreso a taller). Se establecieron fachadas transparentes en mantencion y neumaticos para garantizar compatibilidad retroactiva absoluta con clientes existentes sin romper ningún contrato de API.",
+      "consequences": "Separación clara de responsabilidades (SRP), código mucho más mantenible y testeable de forma aislada, sin duplicación de lógica ni riesgos de regresión."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_formularios_module.py -v",
+      "result": "passed",
+      "evidence": "6 passed in 1.70s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "193 passed, 1 warning in 66.56s (100% éxito)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Planificar si se requiere extraer el módulo 'taller' o mantener 'mantencion' enfocado exclusivamente en la operativa interna de la orden de trabajo.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los endpoints originales (/api/v1/formularioNeumatico, /api/v1/mantencion/solicitudes, etc.) siguen operativos idénticos.",
+    "Se agregan además los endpoints agrupados bajo /api/v1/formularios/..."
+  ]
+}

@@ -7,11 +7,12 @@ from app.api.deps import SessionDep, require_supervisor_or_admin
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.auth.services.auth_service import auth_service
 from app.modules.buses.dtos import BusCreateDTO, BusDarDeBajaDTO, BusResponseDTO
-from app.modules.buses.services.bus_service import bus_service
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.buses.services import bus_fleet_service
+from app.modules.taller.dtos import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
+    SolicitudResumenDTO,
     AgregarFallaDTO,
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
@@ -100,7 +101,7 @@ async def listar_usuarios_supervision(
     )
 
 
-@router.get("/auditoria/buses-taller", response_model=List[SolicitudAuditoriaDTO])
+@router.get("/auditoria/buses-taller", response_model=List[SolicitudResumenDTO])
 async def get_auditoria_buses_taller(
     response: Response,
     n_bus: Optional[str] = Query(None, description="Filtrar por número de bus"),
@@ -224,7 +225,7 @@ async def crear_bus_supervision(
         payload.patente,
         payload.n_bus,
     )
-    return await bus_service.create_bus(db, dto=payload, usuario_id=current_user.id)
+    return await bus_fleet_service.create_bus(db, dto=payload, usuario_id=current_user.id)
 
 
 @router.patch(
@@ -245,7 +246,7 @@ async def dar_de_baja_bus_supervision(
         bus_id,
         payload.motivo,
     )
-    return await bus_service.dar_de_baja_bus(
+    return await bus_fleet_service.dar_de_baja_bus(
         db, bus_id=bus_id, dto=payload, usuario_id=current_user.id
     )
 

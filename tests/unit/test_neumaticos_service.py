@@ -3,24 +3,22 @@ import pytest
 from datetime import datetime, timezone
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.core.exceptions import BusinessRuleException, NotFoundException
-from app.modules.neumaticos.dtos.reporte_neumatico_dto import ReporteNeumaticoCreateDTO
-from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
-from app.modules.neumaticos.repository.neumatico_repository import neumatico_repository
-from app.modules.neumaticos.services.formulario_neumatico_service import formulario_neumatico_service
+from app.modules.formularios.dtos.neumaticos_dto import ReporteNeumaticoCreateDTO
+from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
+from app.modules.formularios.repository.neumatico_repository import neumatico_repository
+from app.modules.formularios.services.formulario_neumatico_service import formulario_neumatico_service
 
 
 @pytest.mark.asyncio
 async def test_procesar_formulario_neumatico_sin_evidencia(db_session, seed_test_data):
-    """Prueba el procesamiento de formulario de neumáticos sin archivo adjunto."""
+    """Prueba el procesamiento de formulario de neumáticos sin archivo adjunto ni precio."""
     conductor_id = seed_test_data["conductor"].id
 
     res = await formulario_neumatico_service.procesar_formulario(
         usuario_id=conductor_id,
         maquina="BUS-505",
-        tipo_bus="Doble Piso",
         ruedas='[{"posicion": "Delantera Izquierda", "profundidad_mm": 12.5}]',
         motivo="Cambio por desgaste",
-        precio="150000",
         marca_fuego="MF-999888",
         evidencia=None,
         db=db_session,
@@ -31,6 +29,7 @@ async def test_procesar_formulario_neumatico_sin_evidencia(db_session, seed_test
     assert res["datos_recibidos"]["maquina"] == "BUS-505"
     assert res["datos_recibidos"]["marca_fuego"] == "MF-999888"
     assert res["datos_recibidos"]["evidencia_url"] is None
+    assert "precio" not in res["datos_recibidos"]
 
 
 @pytest.mark.asyncio
@@ -41,10 +40,8 @@ async def test_procesar_formulario_neumatico_marca_fuego_opcional(db_session, se
     res = await formulario_neumatico_service.procesar_formulario(
         usuario_id=conductor_id,
         maquina="BUS-606",
-        tipo_bus="Interurbano",
         ruedas='[]',
         motivo="Revisión de rutina",
-        precio="0",
         marca_fuego=None,
         evidencia=None,
         db=db_session,
@@ -56,15 +53,13 @@ async def test_procesar_formulario_neumatico_marca_fuego_opcional(db_session, se
 
 @pytest.mark.asyncio
 async def test_procesar_formulario_con_dto(db_session, seed_test_data):
-    """Prueba el servicio procesando directamente un ReporteNeumaticoCreateDTO."""
+    """Prueba el servicio procesando directamente un ReporteNeumaticoCreateDTO sin precio ni tipo_bus."""
     conductor_id = seed_test_data["conductor"].id
     dto = ReporteNeumaticoCreateDTO(
         usuario_id=conductor_id,
         maquina="BUS-707",
-        tipo_bus="Clásico",
         ruedas=[{"posicion": "Trasera Derecha", "profundidad_mm": 10.0}],
         motivo="Desgaste parejo",
-        precio="200.000",
         marca_fuego="MF-111222",
     )
 
@@ -78,6 +73,8 @@ async def test_procesar_formulario_con_dto(db_session, seed_test_data):
     assert res.reporte_id is not None
     assert res.datos_recibidos["maquina"] == "BUS-707"
     assert res["reporte_id"] == res.reporte_id
+    assert "precio" not in res.datos_recibidos
+
 
 
 @pytest.mark.asyncio
@@ -95,7 +92,6 @@ async def test_get_reporte_by_id_flujo_completo(db_session, seed_test_data):
     dto = ReporteNeumaticoCreateDTO(
         usuario_id=conductor_id,
         maquina="BUS-808",
-        tipo_bus="Premium",
         motivo="Test consulta ID",
     )
     res_creacion = await formulario_neumatico_service.procesar_formulario(
@@ -184,4 +180,63 @@ async def test_procesar_formulario_evidencia_tamano_excedido(db_session, seed_te
             db=db_session,
         )
     assert "supera el tamaño máximo" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_listar_reportes_servicio_paginado(db_session, seed_test_data):
+    """Prueba el método listar_reportes del servicio con paginación y filtro por máquina."""
+    conductor_id = seed_test_data["conductor"].id
+
+    # Crear dos reportes con máquinas distintas
+    dto1 = ReporteNeumaticoCreateDTO(
+        usuario_id=conductor_id,
+        maquina="BUS-LIST-1",
+        motivo="Reporte 1",
+    )
+    dto2 = ReporteNeumaticoCreateDTO(
+        usuario_id=conductor_id,
+        maquina="BUS-LIST-2",
+        motivo="Reporte 2",
+    )
+    await formulario_neumatico_service.procesar_formulario(dto=dto1, db=db_session)
+    await formulario_neumatico_service.procesar_formulario(dto=dto2, db=db_session)
+
+    # 1. Listado general
+    res_todos = await formulario_neumatico_service.listar_reportes(
+        db=db_session, page=1, page_size=10
+    )
+    assert res_todos.total >= 2
+    assert len(res_todos.items) >= 2
+    assert res_todos.page == 1
+    assert res_todos.page_size == 10
+    assert res_todos.pages >= 1
+
+    # 2. Listado filtrado por máquina
+    res_filtrado = await formulario_neumatico_service.listar_reportes(
+        db=db_session, page=1, page_size=10, n_bus="BUS-LIST-1"
+    )
+    assert res_filtrado.total >= 1
+    assert all(item.n_bus == "BUS-LIST-1" for item in res_filtrado.items)
+
+
+@pytest.mark.asyncio
+async def test_formulario_neumatico_service_dip_injection():
+    """Prueba que FormularioNeumaticoService acepte inyección de dependencias (DIP)."""
+    from unittest.mock import AsyncMock, MagicMock
+    from app.modules.formularios.services.formulario_neumatico_service import FormularioNeumaticoService
+
+    mock_repo = MagicMock()
+    mock_storage = MagicMock()
+    mock_repo.get_by_id = AsyncMock(return_value=None)
+
+    servicio_custom = FormularioNeumaticoService(repository=mock_repo, storage_srv=mock_storage)
+    assert servicio_custom.repository is mock_repo
+    assert servicio_custom.storage_service is mock_storage
+
+    fake_db = AsyncMock()
+    with pytest.raises(NotFoundException):
+        await servicio_custom.get_reporte_by_id(db=fake_db, reporte_id=123)
+
+    mock_repo.get_by_id.assert_awaited_once_with(fake_db, 123)
+
 

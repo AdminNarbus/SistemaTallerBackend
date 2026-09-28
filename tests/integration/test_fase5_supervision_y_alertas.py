@@ -1,6 +1,6 @@
-import pytest
+﻿import pytest
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem
+from app.modules.taller.models.pauta_taller import PautaTallerItem
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_flujo_fase5_supervision_metricas_y_alertas(
             {"falla_id": 2, "descripcion_personalizada": "Válvula pedalera con fuga continua"},
         ],
     }
-    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=payload_sol, headers=auth_headers_conductor)
+    res_crear = await client.post("/api/v1/taller/solicitudes", json=payload_sol, headers=auth_headers_conductor)
     assert res_crear.status_code == 201
     data_sol = res_crear.json()
     sol_id = data_sol["id"]
@@ -47,7 +47,7 @@ async def test_flujo_fase5_supervision_metricas_y_alertas(
 
     # 2. Mecánico reporta falta de repuesto para Falla 1
     res_repuesto = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{det1_id}/repuesto",
+        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/repuesto",
         json={"falta_repuesto": True, "comentario": "Falta kit de reparación para compresor Knorr"},
         headers=auth_headers_mecanico1,
     )
@@ -55,7 +55,7 @@ async def test_flujo_fase5_supervision_metricas_y_alertas(
 
     # 3. Mecánico registra pauta con defecto
     res_pauta = await client.post(
-        f"/api/v1/mantencion/{sol_id}/pauta",
+        f"/api/v1/taller/{sol_id}/pauta",
         json={"respuestas": [{"item_id": 1, "estado": "DEFECTO", "observacion": "Balatas con desgaste crítico bajo límite"}]},
         headers=auth_headers_mecanico1,
     )

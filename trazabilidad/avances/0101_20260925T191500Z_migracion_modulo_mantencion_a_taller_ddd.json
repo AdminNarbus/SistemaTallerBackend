@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 101,
+  "id": "AV-0101",
+  "timestamp": "2026-09-25T19:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-1",
+    "name": "Migración y Renombramiento Canónico de Módulo Mantención a Taller (DDD)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Migración arquitectónica y renombramiento canónico del módulo 'app/modules/mantencion' a 'app/modules/taller' y actualización del prefijo de rutas HTTP de '/api/v1/mantencion' a '/api/v1/taller'. Se alineó 100% el diseño de software con el modelo relacional (cuyas tablas y entidades ya operan bajo 'taller_*'). Se renombraron repositorios y servicios a 'TallerRepository' y 'TallerService', se actualizaron todos los imports en los módulos auth, buses, formularios, supervision y tests, y se actualizaron las suites de pruebas unitarias, de integración y E2E. 193 de 193 pruebas automatizadas pasando al 100% de éxito.",
+  "scope": {
+    "planned": [
+      "Mover directorio app/modules/mantencion a app/modules/taller",
+      "Renombrar internamente mantencion_repository a taller_repository y mantencion_service a taller_service",
+      "Actualizar prefijo de rutas FastAPI en router principal a '/api/v1/taller'",
+      "Actualizar imports en app/models/__init__.py, app/core/seed.py, app/modules/buses, app/modules/supervision y app/modules/formularios",
+      "Renombrar y adaptar suites de prueba (test_taller_api.py, test_taller_service.py)",
+      "Actualizar rutas HTTP en tests de /api/v1/mantencion a /api/v1/taller",
+      "Actualizar GUIA_MIGRACION_FRONTEND_NUEVA_REALIDAD.md",
+      "Verificar que el 100% de los 193 tests pase exitosamente"
+    ],
+    "completed": [
+      "Directorio app/modules/mantencion migrado a app/modules/taller",
+      "taller_repository.py, taller_service.py y taller_catalogo_service.py formalizados",
+      "Prefijo de router FastAPI actualizado a '/taller' en app/modules/taller/api/router.py y registrado en app/api/v1/router.py",
+      "Imports en toda la base de código actualizados a app.modules.taller",
+      "Pruebas renombradas a test_taller_api.py y test_taller_service.py con rutas '/api/v1/taller'",
+      "GUIA_MIGRACION_FRONTEND_NUEVA_REALIDAD.md enriquecida con tabla comparativa de endpoints de taller y cliente frontend",
+      "193 de 193 tests automatizados aprobados (100% éxito en pytest)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend UI"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller",
+      "action": "created",
+      "summary": "Módulo de taller renombrado y reestructurado desde mantención"
+    },
+    {
+      "path": "app/modules/mantencion",
+      "action": "deleted",
+      "summary": "Carpeta obsoleta mantención eliminada físicamente mediante Move-Item"
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Inclusión de taller_router con prefijo canónico /taller"
+    },
+    {
+      "path": "app/modules/taller/api/router.py",
+      "action": "modified",
+      "summary": "Router de taller configurado con prefix='/taller' y tags=['Taller']"
+    },
+    {
+      "path": "app/modules/formularios/api/taller_router.py",
+      "action": "modified",
+      "summary": "Soporte oficial de /taller/solicitudes en módulo formularios"
+    },
+    {
+      "path": "tests/integration/test_taller_api.py",
+      "action": "modified",
+      "summary": "Suite de integración adaptada a las nuevas URLs /api/v1/taller"
+    },
+    {
+      "path": "tests/unit/test_taller_service.py",
+      "action": "modified",
+      "summary": "Suite unitaria adaptada a TallerService"
+    },
+    {
+      "path": "trazabilidad/GUIA_MIGRACION_FRONTEND_NUEVA_REALIDAD.md",
+      "action": "modified",
+      "summary": "Documentación actualizada con el mapa completo de endpoints /api/v1/taller"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-085",
+      "title": "Renombramiento Integral de Mantención a Taller para Coherencia DDD con Base de Datos",
+      "rationale": "El sistema almacena las entidades relacionales bajo tablas prefijadas como 'taller_*' ('taller_solicitudes', 'taller_solicitud_detalles', 'taller_solicitud_mecanicos', 'taller_solicitud_estadias', etc.). Mantener la carpeta y rutas como 'mantencion' generaba disonancia cognitiva y acoplamiento semántico ambiguo. Con la creación del módulo independiente 'formularios' (que absorbió los reportes iniciales y checklists), el taller opera como el dominio puro de maestranza física. El usuario aprobó explícitamente la eliminación de retrocompatibilidad y la adopción de la arquitectura canónica.",
+      "consequences": "Coherencia del 100% entre modelos relacionales, código Python, DTOs y URLs RESTful (/api/v1/taller). Mayor facilidad de mantenimiento y desacoplamiento limpio."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "193 passed, 1 warning in 68.57s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Sincronizar el cliente frontend para consumir los nuevos endpoints bajo /api/v1/taller y /api/v1/formularios.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "e7c34882bb4acd269aaec678f7daf42e81bf91d3",
+    "dirty": true
+  },
+  "notes": [
+    "Hito 101 de trazabilidad. Coherencia DDD completa en todo el Backend Narbus."
+  ]
+}

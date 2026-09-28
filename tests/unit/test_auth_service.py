@@ -195,51 +195,73 @@ async def test_auth_service_buscar_mecanicos_paginado():
         )
 
 
+from app.modules.auth.services.user_service import user_service
+from app.modules.auth.services.mechanic_service import mechanic_service
+
+
 # =====================================================================
 # PRUEBAS DE INTEGRACIÓN CON BASE DE DATOS (db_session)
 # =====================================================================
 
 @pytest.mark.asyncio
 async def test_user_repository_create_and_authenticate(db_session):
-    """Prueba la creación de un usuario y la autenticación mediante user_repository."""
-    user_in = UsuarioCreateDTO(
+    """Prueba la creación de un usuario con Usuario ORM y la autenticación vía auth_service."""
+    rol_mec = await user_repository.get_rol_by_nombre(db_session, RolUsuario.MECANICO.value)
+    if not rol_mec:
+        rol_mec = Rol(nombre=RolUsuario.MECANICO.value, descripcion="Rol Mecanico")
+        db_session.add(rol_mec)
+        await db_session.flush()
+
+    usuario_entity = Usuario(
         nombre="Test",
         apellido="User",
         username="testuser",
-        password="mysecretpassword",
-        rol=RolUsuario.MECANICO,
+        password_hash=get_password_hash("mysecretpassword"),
+        rol_id=rol_mec.id,
+        is_active=True,
     )
 
-    created_user = await user_repository.create(db_session, user_in)
+    created_user = await user_repository.create(db_session, usuario_entity)
     assert created_user.id is not None
     assert created_user.username == "testuser"
     assert created_user.is_active is True
 
-    # Autenticación exitosa
-    authenticated = await user_repository.authenticate(db_session, "testuser", "mysecretpassword")
-    assert authenticated is not None
-    assert authenticated.id == created_user.id
+    # Autenticación exitosa vía auth_service
+    login_dto = UsuarioLoginDTO(username="testuser", password="mysecretpassword")
+    token_response = await auth_service.login(db_session, login_dto)
+    assert token_response is not None
+    assert token_response.user.id == created_user.id
+    assert token_response.access_token is not None
 
     # Autenticación fallida con clave errónea
-    fail_pass = await user_repository.authenticate(db_session, "testuser", "wrongpass")
-    assert fail_pass is None
+    fail_pass_dto = UsuarioLoginDTO(username="testuser", password="wrongpass")
+    with pytest.raises(AuthenticationException):
+        await auth_service.login(db_session, fail_pass_dto)
 
     # Autenticación fallida con usuario inexistente
-    fail_user = await user_repository.authenticate(db_session, "nonexistent", "mysecretpassword")
-    assert fail_user is None
+    fail_user_dto = UsuarioLoginDTO(username="nonexistent", password="mysecretpassword")
+    with pytest.raises(AuthenticationException):
+        await auth_service.login(db_session, fail_user_dto)
 
 
 @pytest.mark.asyncio
 async def test_user_repository_desactivar_soft_delete(db_session):
     """Prueba la funcionalidad de deshabilitar (soft-delete) un usuario."""
-    user_in = UsuarioCreateDTO(
+    rol_cond = await user_repository.get_rol_by_nombre(db_session, RolUsuario.CONDUCTOR.value)
+    if not rol_cond:
+        rol_cond = Rol(nombre=RolUsuario.CONDUCTOR.value, descripcion="Rol Conductor")
+        db_session.add(rol_cond)
+        await db_session.flush()
+
+    usuario_entity = Usuario(
         nombre="ToDeactivate",
         apellido="User",
         username="user_deactivate",
-        password="password123",
-        rol=RolUsuario.CONDUCTOR,
+        password_hash=get_password_hash("password123"),
+        rol_id=rol_cond.id,
+        is_active=True,
     )
-    user = await user_repository.create(db_session, user_in)
+    user = await user_repository.create(db_session, usuario_entity)
     assert user.is_active is True
 
     desactivated = await user_repository.desactivar(db_session, user.id)

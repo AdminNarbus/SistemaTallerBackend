@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 97,
+  "id": "AV-0097",
+  "timestamp": "2026-09-25T16:38:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEUMAT-2",
+    "name": "Simplificación de Formulario de Neumáticos (Eliminación de Monto y Tipo de Bus, Marca de Fuego Opcional)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Actualización y depuración de los campos del formulario de neumáticos según requerimientos: eliminación completa del campo 'precio/monto', remoción de 'tipo_bus' como entrada manual del formulario (resolviéndose automáticamente a partir de la máquina en base de datos si existe), y preservación explícita de 'marca_fuego' como campo opcional.",
+  "scope": {
+    "planned": [
+      "Eliminar el campo monto/precio de DTOs, endpoint y servicio",
+      "Remover tipo_bus del formulario multipart y DTOs de entrada",
+      "Resolver automáticamente tipo_bus a partir de la entidad Bus si existe",
+      "Mantener marca_fuego como opcional",
+      "Actualizar tests unitarios, de integración y E2E"
+    ],
+    "completed": [
+      "precio eliminado de ReporteNeumaticoBaseDTO, ReporteNeumaticoCreateDTO y ReporteNeumaticoResponseDTO",
+      "tipo_bus removido de ReporteNeumaticoCreateDTO y del formulario multipart POST /formularioNeumatico",
+      "tipo_bus resuelto automáticamente desde la entidad Bus en FormularioNeumaticoService",
+      "marca_fuego preservado como Optional[str] = Form(None)",
+      "Lógica de parseo y guardado de precio removida de FormularioNeumaticoService",
+      "crear_reporte en NeumaticoRepository actualizado con defaults opcionales",
+      "Tests actualizados en test_neumaticos_service.py, test_neumaticos_api.py y test_flujo_neumaticos_e2e.py",
+      "Suite global de 187 tests pasando al 100%"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend UI"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/neumaticos/dtos/reporte_neumatico_dto.py",
+      "action": "modified",
+      "summary": "Eliminado precio de los DTOs y removido tipo_bus de CreateDTO"
+    },
+    {
+      "path": "app/modules/neumaticos/api/router.py",
+      "action": "modified",
+      "summary": "Removidos tipo_bus y precio de los parámetros Form del endpoint POST /formularioNeumatico"
+    },
+    {
+      "path": "app/modules/neumaticos/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Eliminada lógica de cálculo de precio, tipo_bus autocompletado desde el Bus de BD y datos_recibidos saneado"
+    },
+    {
+      "path": "app/modules/neumaticos/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Actualizado crear_reporte con defaults opcionales para tipo_bus y precio"
+    },
+    {
+      "path": "tests/unit/test_neumaticos_service.py",
+      "action": "modified",
+      "summary": "Adaptados tests unitarios eliminando precio y tipo_bus en llamadas"
+    },
+    {
+      "path": "tests/integration/test_neumaticos_api.py",
+      "action": "modified",
+      "summary": "Adaptados tests de integración API a los nuevos campos del formulario"
+    },
+    {
+      "path": "tests/e2e/test_flujo_neumaticos_e2e.py",
+      "action": "modified",
+      "summary": "Adaptado test E2E sin precio ni tipo_bus"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-097",
+      "title": "Eliminación de Monto y Auto-resolución de Tipo de Bus",
+      "rationale": "El costo o monto de neumático no forma parte del proceso operativo de reporte en terreno. Asimismo, el tipo de bus es un dato estructural del vehículo que el backend ya conoce en su catálogo de flota, por lo que pedirlo al usuario generaba inconsistencias y sobrecarga manual innecesaria.",
+      "consequences": "Formulario mucho más ágil y ligero para el usuario, manteniendo la integridad de datos en el backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_neumaticos_service.py tests/integration/test_neumaticos_api.py tests/e2e/test_flujo_neumaticos_e2e.py -v",
+      "result": "passed",
+      "evidence": "15 passed in 4.69s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "187 passed, 1 warning in 66.99s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Listo para recibir nuevas instrucciones.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": []
+}

@@ -7,15 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.base import Base
 import app.models  # asegura la carga de todos los modelos en Base.metadata
-import app.modules.mantencion.models
+import app.modules.taller.models
 
 from app.core.database import get_db
 from app.core.security import create_access_token, get_password_hash
 from app.main import app
 from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.models.rol import Rol
-from app.modules.mantencion.models.categoria_falla import CategoriaFalla
-from app.modules.mantencion.models.falla_taller import FallaTaller
+from app.modules.taller.models.categoria_falla import CategoriaFalla
+from app.modules.taller.models.falla_taller import FallaTaller
 
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -32,10 +32,10 @@ def event_loop():
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Crea una base de datos en memoria limpia para cada prueba."""
     from app.api.deps import clear_user_cache
-    from app.modules.mantencion.repository.mantencion_repository import clear_mantencion_repository_caches
+    from app.modules.taller.repository.taller_repository import clear_taller_repository_caches
 
     clear_user_cache()
-    clear_mantencion_repository_caches()
+    clear_taller_repository_caches()
 
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
@@ -53,7 +53,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         app.dependency_overrides.clear()
 
     clear_user_cache()
-    clear_mantencion_repository_caches()
+    clear_taller_repository_caches()
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

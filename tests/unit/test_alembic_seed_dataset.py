@@ -1,6 +1,6 @@
 import pytest
 from app.core.seeds.buses_dataset import BUSES_DATASET
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem
+from app.modules.taller.models.pauta_taller import PautaTallerItem
 
 
 def test_buses_dataset_consistency():

@@ -1,6 +1,6 @@
-import pytest
+﻿import pytest
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem
+from app.modules.taller.models.pauta_taller import PautaTallerItem
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
             {"falla_id": 2, "descripcion_personalizada": "Bomba de agua con fuga intermitente"},
         ],
     }
-    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
+    res_crear = await client.post("/api/v1/taller/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
     assert res_crear.status_code == 201
     data_sol = res_crear.json()
     sol_id = data_sol["id"]
@@ -51,7 +51,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
 
     # 2. Mecánico reporta falta de repuesto en Falla 2 — responde DetalleUpdateDTO (Nivel 3)
     res_repuesto = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{det2_id}/repuesto",
+        f"/api/v1/taller/{sol_id}/detalles/{det2_id}/repuesto",
         json={"falta_repuesto": True, "comentario": "Se requiere kit de empaquetaduras y rodamiento"},
         headers=auth_headers_mecanico1,
     )
@@ -63,20 +63,20 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
 
     # Mecánico resuelve Falla 1 — responde DetalleUpdateDTO (Nivel 3)
     res_check1 = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{det1_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check?resuelto=true",
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200
     assert res_check1.json()["resuelto"] is True
 
     # 3. Consultar ítems de la pauta preventiva
-    res_pauta_items = await client.get("/api/v1/mantencion/pauta/items", headers=auth_headers_mecanico1)
+    res_pauta_items = await client.get("/api/v1/taller/pauta/items", headers=auth_headers_mecanico1)
     assert res_pauta_items.status_code == 200
     pauta_items = res_pauta_items.json()
     assert len(pauta_items) >= 11
 
     # Consultar estado de pauta para esta solicitud
-    res_pauta_sol = await client.get(f"/api/v1/mantencion/{sol_id}/pauta", headers=auth_headers_mecanico1)
+    res_pauta_sol = await client.get(f"/api/v1/taller/{sol_id}/pauta", headers=auth_headers_mecanico1)
     assert res_pauta_sol.status_code == 200
     data_pauta = res_pauta_sol.json()
     assert data_pauta["respondidos"] == 0
@@ -85,7 +85,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     # 4. Registrar 6 respuestas de pauta
     respuestas_6 = [{"item_id": i, "estado": "OK", "observacion": "Conforme"} for i in range(1, 7)]
     res_guardar_pauta = await client.post(
-        f"/api/v1/mantencion/{sol_id}/pauta",
+        f"/api/v1/taller/{sol_id}/pauta",
         json={"respuestas": respuestas_6},
         headers=auth_headers_mecanico1,
     )
@@ -97,7 +97,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
 
     # 5. Intentar liberar con pauta incompleta sin motivo_incompleto_checklist -> 422 (BusinessRuleException)
     res_lib_invalida_pauta = await client.post(
-        f"/api/v1/mantencion/{sol_id}/liberar",
+        f"/api/v1/taller/{sol_id}/liberar",
         json={"comentario_cierre": "Listo para salir"},
         headers=auth_headers_mecanico1,
     )
@@ -106,7 +106,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
 
     # 6. Intentar liberar justificando pauta, pero sin motivo_cierre_parcial para la falla 2 pendiente -> 422
     res_lib_invalida_fallas = await client.post(
-        f"/api/v1/mantencion/{sol_id}/liberar",
+        f"/api/v1/taller/{sol_id}/liberar",
         json={
             "motivo_incompleto_checklist": "No se revisaron items 7 a 11 por urgencia de horario",
             "comentario_cierre": "Liberando bus",
@@ -118,7 +118,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
 
     # 7. Liberar correctamente con justificaciones completas
     res_lib_ok = await client.post(
-        f"/api/v1/mantencion/{sol_id}/liberar",
+        f"/api/v1/taller/{sol_id}/liberar",
         json={
             "motivo_incompleto_checklist": "No se revisaron items 7 a 11 por urgencia de horario",
             "motivo_cierre_parcial": "Falla 2 postergada por repuesto de bomba en tránsito desde Santiago",

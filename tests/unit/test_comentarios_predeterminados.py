@@ -1,7 +1,7 @@
 import pytest
 import re
-from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.taller.services.taller_service import taller_service
+from app.modules.taller.dtos import (
     SolicitudCreateDTO,
     SolicitudDetalleCreateDTO,
     TomarTrabajoDTO,
@@ -46,7 +46,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
             SolicitudDetalleCreateDTO(falla_id=falla2_id, descripcion_personalizada="Foco roto"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(db_session, dto_crear, conductor_id)
+    solicitud = await taller_service.create_solicitud(db_session, dto_crear, conductor_id)
     det1_id = solicitud.detalles[0].id
     det2_id = solicitud.detalles[1].id
 
@@ -55,7 +55,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
         colaboradores_ids=[mecanico2_id],
         comentario_inicial="Revisión general en fosa",
     )
-    sol_tomada = await mantencion_service.tomar_trabajo(db_session, solicitud.id, mecanico1_id, dto_tomar)
+    sol_tomada = await taller_service.tomar_trabajo(db_session, solicitud.id, mecanico1_id, dto_tomar)
     assert len(sol_tomada.comentarios) >= 1
     com_inicio = sol_tomada.comentarios[-1]
     assert com_inicio.tipo == "ASIGNACION"
@@ -66,11 +66,11 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 3. Check detalle: Mecánico 1 resuelve falla 1
     # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
-    dto_check1 = await mantencion_service.check_detalle(db_session, solicitud.id, det1_id, mecanico1_id, True)
+    dto_check1 = await taller_service.check_detalle(db_session, solicitud.id, det1_id, mecanico1_id, True)
     assert dto_check1.detalle_id == det1_id
     assert dto_check1.resuelto is True
     # Para verificar el comentario de bitácora, obtenemos la solicitud completa
-    sol_check1 = await mantencion_service.get_solicitud(db_session, solicitud.id)
+    sol_check1 = await taller_service.get_solicitud(db_session, solicitud.id)
     com_check = sol_check1.comentarios[-1]
     assert com_check.tipo == "RESOLUCION"
     assert mecanico1_nom in com_check.comentario
@@ -80,9 +80,9 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     # 4. Reportar falta de repuesto en falla 2
     dto_rep = ReportarRepuestoDTO(falta_repuesto=True, comentario="Esperando pedido de foco")
     # reportar_repuesto retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
-    dto_rep_result = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep, mecanico1_id)
+    dto_rep_result = await taller_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep, mecanico1_id)
     assert dto_rep_result.falta_repuesto is True
-    sol_rep = await mantencion_service.get_solicitud(db_session, solicitud.id)
+    sol_rep = await taller_service.get_solicitud(db_session, solicitud.id)
     com_rep = sol_rep.comentarios[-1]
     assert com_rep.tipo == "FALTA_REPUESTO"
     assert mecanico1_nom in com_rep.comentario
@@ -92,9 +92,9 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 5. Reportar repuesto disponible para desbloquear
     dto_rep_ok = ReportarRepuestoDTO(falta_repuesto=False, comentario="Llegó repuesto a pañol")
-    dto_rep_ok_result = await mantencion_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep_ok, mecanico1_id)
+    dto_rep_ok_result = await taller_service.reportar_repuesto(db_session, solicitud.id, det2_id, dto_rep_ok, mecanico1_id)
     assert dto_rep_ok_result.falta_repuesto is False
-    sol_rep_ok = await mantencion_service.get_solicitud(db_session, solicitud.id)
+    sol_rep_ok = await taller_service.get_solicitud(db_session, solicitud.id)
     com_rep_ok = sol_rep_ok.comentarios[-1]
     assert com_rep_ok.tipo == "REPUESTO_DISPONIBLE"
     assert "REPUESTO DISPONIBLE" in com_rep_ok.comentario
@@ -105,7 +105,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
         colaboradores_ids=[mecanico2_id],
         comentario="Instalando repuesto",
     )
-    sol_auto = await mantencion_service.autoasignar_fallas(db_session, solicitud.id, dto_auto, mecanico1_id)
+    sol_auto = await taller_service.autoasignar_fallas(db_session, solicitud.id, dto_auto, mecanico1_id)
     com_auto = sol_auto.comentarios[-1]
     assert com_auto.tipo == "ASIGNACION"
     assert mecanico1_nom in com_auto.comentario
@@ -118,7 +118,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
         detalles_ids=[det1_id],
         comentario="Revisión cruzada de frenos",
     )
-    sol_sup = await mantencion_service.asignar_fallas_supervisora(db_session, solicitud.id, dto_sup, supervisor_id)
+    sol_sup = await taller_service.asignar_fallas_supervisora(db_session, solicitud.id, dto_sup, supervisor_id)
     com_sup = sol_sup.comentarios[-1]
     assert com_sup.tipo == "ASIGNACION"
     assert supervisor_nom in com_sup.comentario
@@ -127,7 +127,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 8. Terminar avance en equipo
     dto_avance = TerminarAvanceDTO(detalles_ids=[det1_id, det2_id], comentario="Corte de turno mediodía")
-    sol_avance = await mantencion_service.terminar_avance(db_session, solicitud.id, dto_avance, mecanico1_id)
+    sol_avance = await taller_service.terminar_avance(db_session, solicitud.id, dto_avance, mecanico1_id)
     com_avance = sol_avance.comentarios[-1]
     assert com_avance.tipo == "ENTREGA_TURNO"
     assert "finalizó avance grupal" in com_avance.comentario
@@ -135,24 +135,24 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
 
     # 9. Resolver falla 2 y completar pauta preventiva
     # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
-    dto_check2 = await mantencion_service.check_detalle(db_session, solicitud.id, det2_id, mecanico2_id, True)
+    dto_check2 = await taller_service.check_detalle(db_session, solicitud.id, det2_id, mecanico2_id, True)
     assert dto_check2.resuelto is True
-    sol_check2 = await mantencion_service.get_solicitud(db_session, solicitud.id)
+    sol_check2 = await taller_service.get_solicitud(db_session, solicitud.id)
     assert sol_check2.comentarios[-1].tipo == "RESOLUCION"
 
-    items_pauta = await mantencion_service.get_pauta_items(db_session)
+    items_pauta = await taller_service.get_pauta_items(db_session)
     if items_pauta:
         dto_pauta = PautaBatchUpdateDTO(
             respuestas=[PautaRespuestaCreateDTO(item_id=it.id, estado="OK") for it in items_pauta]
         )
-        await mantencion_service.guardar_respuestas_pauta(db_session, solicitud.id, dto_pauta, mecanico2_id)
+        await taller_service.guardar_respuestas_pauta(db_session, solicitud.id, dto_pauta, mecanico2_id)
 
     # 10. Finalizar solicitud
     dto_fin = FinalizarSolicitudDTO(
         comentario_cierre="Trabajos de frenos y luces 100% terminados",
         liberar_bus_taller=True,
     )
-    sol_final = await mantencion_service.finalizar_solicitud(db_session, solicitud.id, mecanico2_id, dto_fin)
+    sol_final = await taller_service.finalizar_solicitud(db_session, solicitud.id, mecanico2_id, dto_fin)
     com_cierre = sol_final.comentarios[-1]
     assert com_cierre.tipo == "CIERRE"
     assert mecanico2_nom in com_cierre.comentario

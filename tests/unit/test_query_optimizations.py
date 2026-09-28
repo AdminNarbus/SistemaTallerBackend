@@ -5,11 +5,11 @@ from app.api.deps import get_current_user, clear_user_cache, _USER_CACHE
 from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.models.rol import Rol
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.categoria_falla import CategoriaFalla
-from app.modules.mantencion.models.falla_taller import FallaTaller
-from app.modules.mantencion.dtos.mantencion_dto import SolicitudCreateDTO, SolicitudDetalleCreateDTO
-from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.repository.mantencion_repository import mantencion_repository
+from app.modules.taller.models.categoria_falla import CategoriaFalla
+from app.modules.taller.models.falla_taller import FallaTaller
+from app.modules.taller.dtos import SolicitudCreateDTO, SolicitudDetalleCreateDTO
+from app.modules.taller.services.taller_service import taller_service
+from app.modules.taller.repository.taller_repository import taller_repository
 from app.core.security import create_access_token
 
 
@@ -26,7 +26,7 @@ async def test_get_bus_info_by_n_bus_single_query(db_session: AsyncSession):
     db_session.add(bus)
     await db_session.commit()
 
-    info = await mantencion_repository.get_bus_info_by_n_bus(db_session, "350")
+    info = await taller_repository.get_bus_info_by_n_bus(db_session, "350")
     assert info is not None
     bus_id, bus_patente = info
     assert bus_id == bus.id
@@ -76,7 +76,7 @@ async def test_create_solicitud_batch_fallas_and_fast_dto(db_session: AsyncSessi
         ],
     )
 
-    sol_dto = await mantencion_service.create_solicitud(db_session, dto, creador_id=chofer.id)
+    sol_dto = await taller_service.create_solicitud(db_session, dto, creador_id=chofer.id)
 
     assert sol_dto.id is not None
     assert sol_dto.n_bus == "400"
@@ -176,7 +176,7 @@ async def test_create_solicitud_con_falla_id_y_falla_nombre_zero_queries(db_sess
         ],
     )
 
-    sol_dto = await mantencion_service.create_solicitud(
+    sol_dto = await taller_service.create_solicitud(
         db_session, dto, creador_id=chofer.id, creador_nombre="Pedro Pascal"
     )
 
@@ -224,7 +224,7 @@ async def test_create_solicitud_con_falla_id_sin_falla_nombre_fallback(db_sessio
         ],
     )
 
-    sol_dto = await mantencion_service.create_solicitud(
+    sol_dto = await taller_service.create_solicitud(
         db_session, dto, creador_id=chofer.id, creador_nombre="Lucia Hiriart"
     )
 

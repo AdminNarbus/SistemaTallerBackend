@@ -13,13 +13,16 @@ from app.modules.buses.dtos import (
     BusSimpleDTO,
     BusUpdateEnTallerDTO,
 )
-
 from app.modules.buses.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
 )
-from app.modules.buses.services.bus_service import bus_service
+from app.modules.buses.services import (
+    bus_catalog_service,
+    bus_fleet_service,
+    bus_workshop_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ async def buscar_buses(
     db: AsyncSession = SessionDep,
 ) -> List[BusSimpleDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
-    return await bus_service.buscar_sugerencias_buses(
+    return await bus_catalog_service.buscar_sugerencias_buses(
         db, query=query, solo_flota_taller=solo_flota_taller, limit=limit
     )
 
@@ -60,9 +63,11 @@ async def listar_buses(
     db: AsyncSession = SessionDep,
 ) -> List[BusAutocompleteDTO]:
     response.headers["Cache-Control"] = "private, max-age=120, stale-while-revalidate=60"
-    total = await bus_service.count_buses(db, solo_activos=solo_activos)
+    total = await bus_catalog_service.count_buses(
+        db, solo_activos=solo_activos, solo_flota_taller=solo_flota_taller
+    )
     response.headers["X-Total-Count"] = str(total)
-    return await bus_service.listar_buses(
+    return await bus_catalog_service.listar_buses(
         db,
         solo_activos=solo_activos,
         solo_flota_taller=solo_flota_taller,
@@ -81,7 +86,7 @@ async def get_bus_por_id(
     bus_id: int = Path(..., description="ID numérico del bus", ge=1),
     db: AsyncSession = SessionDep,
 ) -> BusResponseDTO:
-    return await bus_service.get_bus_by_id(db, bus_id=bus_id)
+    return await bus_catalog_service.get_bus_by_id(db, bus_id=bus_id)
 
 
 @router.get(
@@ -94,7 +99,7 @@ async def get_bus_por_numero(
     n_bus: str = Path(..., description="Número de bus (ej. '339')"),
     db: AsyncSession = SessionDep,
 ) -> BusResponseDTO:
-    return await bus_service.get_bus_by_n_bus(db, n_bus=n_bus)
+    return await bus_catalog_service.get_bus_by_n_bus(db, n_bus=n_bus)
 
 
 @router.patch(
@@ -115,7 +120,7 @@ async def actualizar_en_taller(
         payload.en_taller,
         current_user.id,
     )
-    return await bus_service.actualizar_en_taller(
+    return await bus_workshop_service.actualizar_en_taller(
         db, bus_id=bus_id, en_taller=payload.en_taller, motivo=payload.motivo
     )
 
@@ -138,7 +143,7 @@ async def create_bus(
         payload.n_bus,
         current_user.id,
     )
-    return await bus_service.create_bus(db, dto=payload, usuario_id=current_user.id)
+    return await bus_fleet_service.create_bus(db, dto=payload, usuario_id=current_user.id)
 
 
 @router.patch(
@@ -160,7 +165,7 @@ async def dar_de_baja_bus(
         payload.forzar,
         current_user.id,
     )
-    return await bus_service.dar_de_baja_bus(
+    return await bus_fleet_service.dar_de_baja_bus(
         db, bus_id=bus_id, dto=payload, usuario_id=current_user.id
     )
 
@@ -181,7 +186,7 @@ async def dar_de_baja_bus_delete(
         bus_id,
         current_user.id,
     )
-    return await bus_service.dar_de_baja_bus(
+    return await bus_fleet_service.dar_de_baja_bus(
         db, bus_id=bus_id, dto=BusDarDeBajaDTO(), usuario_id=current_user.id
     )
 
@@ -202,7 +207,6 @@ async def reactivar_bus(
         bus_id,
         current_user.id,
     )
-    return await bus_service.reactivar_bus(
+    return await bus_fleet_service.reactivar_bus(
         db, bus_id=bus_id, usuario_id=current_user.id
     )
-

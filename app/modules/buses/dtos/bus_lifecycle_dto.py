@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import Any, Optional
 from decimal import Decimal
+from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BusBaseDTO(BaseModel):
+    """Atributos comunes y ficha técnica de un bus."""
+
     n_bus: Optional[str] = None
     patente: str
     marca: Optional[str] = None
@@ -36,12 +38,16 @@ class BusBaseDTO(BaseModel):
 
 
 class BusResponseDTO(BusBaseDTO):
+    """Representación completa de ficha de bus serializada desde modelo ORM."""
+
     id: int
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class BusCreateDTO(BaseModel):
+    """Payload para dar de alta un nuevo bus en la flota."""
+
     patente: str = Field(..., min_length=4, max_length=20, description="Patente del vehículo")
     n_bus: Optional[str] = Field(None, max_length=50, description="Número de máquina único")
     marca: Optional[str] = Field(None, max_length=100)
@@ -79,43 +85,7 @@ class BusCreateDTO(BaseModel):
 
 
 class BusDarDeBajaDTO(BaseModel):
+    """Payload para dar de baja auditada a un bus de la flota."""
+
     motivo: Optional[str] = Field(None, max_length=500, description="Motivo de la baja del bus")
     forzar: bool = Field(False, description="Forzar la baja aun si hay OTs abiertas en taller")
-
-
-class BusAutocompleteDTO(BaseModel):
-    id: int
-    n_bus: Optional[str] = None
-    patente: str
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    tipo_bus: Optional[str] = None
-    is_active: Optional[bool] = True
-    en_taller: bool = False
-
-    @field_validator("en_taller", mode="before")
-    @classmethod
-    def validar_en_taller(cls, v: Any) -> bool:
-        return bool(v) if v is not None else False
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BusSimpleDTO(BaseModel):
-    id: int
-    n_bus: str
-    patente: Optional[str] = None
-    en_taller: bool = False
-
-    @field_validator("en_taller", mode="before")
-    @classmethod
-    def validar_en_taller(cls, v: Any) -> bool:
-        return bool(v) if v is not None else False
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BusUpdateEnTallerDTO(BaseModel):
-    en_taller: bool
-    motivo: Optional[str] = None
-

@@ -2,15 +2,16 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
-from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
-from app.modules.mantencion.models.falla_taller import FallaTaller
-from app.modules.mantencion.models.categoria_falla import CategoriaFalla
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
+from app.modules.taller.models.falla_taller import FallaTaller
+from app.modules.taller.models.categoria_falla import CategoriaFalla
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.dtos import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
+    SolicitudResumenDTO,
 )
 from app.modules.supervision.services import supervision_service, SupervisionService
 from app.modules.supervision.repository import supervision_repository, SupervisionRepository
@@ -270,7 +271,7 @@ def test_supervision_service_init_custom_dependencies():
 
 @pytest.mark.asyncio
 async def test_supervision_service_get_auditoria_aislado():
-    """Verifica que get_auditoria_solicitudes delegue al repo y mapee SolicitudAuditoriaDTO correctamente."""
+    """Verifica que get_auditoria_solicitudes delegue al repo y mapee SolicitudResumenDTO correctamente."""
     # Arrange
     mock_repo = AsyncMock(spec=SupervisionRepository)
     mock_mantencion = MagicMock()
@@ -281,7 +282,9 @@ async def test_supervision_service_get_auditoria_aislado():
         "n_bus": "500",
         "estado": "EN_REPARACION",
         "fecha_creacion": datetime(2026, 9, 21, 12, 0, 0),
-        "total_fallas": 1,
+        "usuario_creador_nombre": "Carlos Conductor",
+        "horas_en_taller": 4.5,
+        "total_fallas": 2,
         "fallas_pendientes": 1,
         "mecanicos": [{"mecanico_nombre": "Juan Pérez", "is_activo": True}],
     }
@@ -301,9 +304,13 @@ async def test_supervision_service_get_auditoria_aislado():
 
     # Assert
     assert len(resultado) == 1
+    assert isinstance(resultado[0], SolicitudResumenDTO)
     assert resultado[0].id == 100
     assert resultado[0].n_bus == "500"
-    assert resultado[0].mecanicos[0].mecanico_nombre == "Juan Pérez"
+    assert resultado[0].estado == "EN_REPARACION"
+    assert resultado[0].chofer == "Carlos Conductor"
+    assert resultado[0].tiempo_taller == 4.5
+    assert resultado[0].numero_fallas == 1
     mock_repo.get_auditoria.assert_awaited_once_with(
         mock_db,
         n_bus="500",
@@ -354,7 +361,7 @@ async def test_supervision_service_get_alertas_aislado():
 
 @pytest.mark.asyncio
 async def test_supervision_service_asignar_fallas_aislado():
-    """Verifica que asignar_fallas_supervisora coordine con mantencion_service."""
+    """Verifica que asignar_fallas_supervisora coordine con taller_service."""
     # Arrange
     mock_mantencion = AsyncMock()
     mock_db = AsyncMock()
@@ -406,7 +413,7 @@ def test_supervision_utils_formatear_comentario_cambio_estado():
 
 @pytest.mark.asyncio
 async def test_supervision_service_cambiar_estado_aislado():
-    """Verifica que cambiar_estado_solicitud coordine con mantencion_service aplicando DIP."""
+    """Verifica que cambiar_estado_solicitud coordine con taller_service aplicando DIP."""
     mock_mantencion = AsyncMock()
     mock_db = AsyncMock()
     dto = CambiarEstadoSolicitudDTO(estado="PENDIENTE", comentario="Pausa operacional")
@@ -661,16 +668,20 @@ async def test_auditoria_solicitudes_mapeo_dict_sin_fecha_asignacion(db_session)
     dtos = await service.get_auditoria_solicitudes(db_session, n_bus="BUS-999")
 
     assert len(dtos) == 1
+    assert isinstance(dtos[0], SolicitudResumenDTO)
     assert dtos[0].id == 999
-    assert len(dtos[0].mecanicos) == 1
-    assert dtos[0].mecanicos[0].mecanico_nombre == "Juan Mecanico"
-    assert dtos[0].mecanicos[0].is_activo is True
+    assert dtos[0].n_bus == "BUS-999"
+    assert dtos[0].estado == "EN_REPARACION"
+    assert dtos[0].chofer == "Test Conductor"
+    assert dtos[0].tiempo_taller == 2.5
+    assert dtos[0].numero_fallas == 1
     # Validar que los campos innecesarios no existen en el DTO ultraligero
     assert not hasattr(dtos[0], "bus_patente")
     assert not hasattr(dtos[0], "bus_id")
     assert not hasattr(dtos[0], "descripcion_general")
     assert not hasattr(dtos[0], "foto_url")
     assert not hasattr(dtos[0], "comentarios")
+    assert not hasattr(dtos[0], "mecanicos")
 
 
 

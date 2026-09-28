@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 102,
+  "id": "AV-0102",
+  "timestamp": "2026-09-28T09:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-FALLAS-RESUMEN",
+    "name": "Conteo Contextual de Fallas en Listados de Taller (Pendientes y Mis Trabajos)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Incorporación del campo 'numero_fallas' en SolicitudResumenDTO y cálculo contextual de fallas para la bandeja de pendientes y la bandeja de mis trabajos en el módulo taller. En pendientes computa la totalidad de fallas disponibles sin resolver en la orden; en mis trabajos computa únicamente las fallas que el mecánico autenticado tiene activamente asignadas a su cargo. Se implementó sin queries adicionales (Zero RTT) mapeando directamente sobre los arreglos agregados en memoria en mappers.py.",
+  "scope": {
+    "planned": [
+      "Agregar campo 'numero_fallas' a SolicitudResumenDTO",
+      "Actualizar mappers dict_to_solicitud_resumen_dto y orm_to_solicitud_resumen_dto para recibir mecanico_id opcional y calcular conteo contextual de fallas",
+      "Propagar mecanico_id desde SolicitudService.list_mis_trabajos",
+      "Actualizar contratos y guías de frontend (05_CONTRATOS_API_FRONTEND.md, GUIA_FRONTEND_MODULO_MECANICOS.md, 06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md)",
+      "Crear y ejecutar pruebas automatizadas unitarias, de integración y E2E"
+    ],
+    "completed": [
+      "Campo numero_fallas: int = Field(0, ...) agregado en SolicitudResumenDTO",
+      "Lógica de cálculo contextual implementada en app/modules/taller/services/mappers.py",
+      "Propagación de mecanico_id en app/modules/taller/services/solicitud_service.py y taller_service.py",
+      "Documentación técnica y guías frontend actualizadas con especificaciones de numero_fallas",
+      "Prueba de integración test_numero_fallas_en_pendientes_y_mis_trabajos añadida en tests/integration/test_taller_api.py",
+      "Suite completa de 194 pruebas automatizadas aprobada al 100% (194 passed)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (consumo exclusivo de los contratos actualizados)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/solicitud_dto.py",
+      "action": "modified",
+      "summary": "Adición del campo numero_fallas: int = Field(0, description=...) en SolicitudResumenDTO"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Soporte de parámetro opcional mecanico_id y conteo contextual de fallas no resueltas vs fallas asignadas al mecánico"
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Paso de mecanico_id=mecanico_id en el mapeo de list_mis_trabajos"
+    },
+    {
+      "path": "app/modules/taller/services/taller_service.py",
+      "action": "modified",
+      "summary": "Actualización de firma auxiliar _dict_to_solicitud_resumen_dto con mecanico_id"
+    },
+    {
+      "path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py",
+      "action": "modified",
+      "summary": "Aserciones de numero_fallas en pendientes y mis trabajos"
+    },
+    {
+      "path": "tests/integration/test_taller_api.py",
+      "action": "modified",
+      "summary": "Prueba de integración end-to-end HTTP verificando numero_fallas en GET /api/v1/taller/pendientes y GET /api/v1/taller/mis-trabajos"
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Adición de numero_fallas: number en SolicitudResumenDTO"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_MODULO_MECANICOS.md",
+      "action": "modified",
+      "summary": "Documentación de numero_fallas en Vistas 1 y 2 con ejemplos JSON"
+    },
+    {
+      "path": "trazabilidad/06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md",
+      "action": "modified",
+      "summary": "Actualización de catálogo de endpoints 6.5 y 6.6 reflejando SolicitudResumenDTO y numero_fallas"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-086",
+      "title": "Cálculo Contextual de Fallas en Memoria sobre DTO Resumen (Zero RTT)",
+      "rationale": "Las consultas CTE de alto rendimiento de list_pendientes y list_mis_trabajos ya agregan en un único viaje a la base de datos la estructura de detalles y los mecánicos asignados en formato JSON (detalles_json). Ejecutar queries SQL adicionales (como subconsultas COUNT) aumentaría la latencia. En su lugar, el mapper dict_to_solicitud_resumen_dto evalúa en memoria el contexto: si mecanico_id está presente (mis-trabajos), filtra las fallas donde dicho mecánico figure asignado; si no se provee (pendientes), cuenta todas las fallas sin resolver ('not resuelto').",
+      "consequences": "Latencia mínima sin rondas de red adicionales (Zero RTT), total consistencia entre el modo ORM y CTE, y compatibilidad total con la paginación existente."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit tests/integration tests/e2e",
+      "result": "passed",
+      "evidence": "194 passed, 1 warning in 69.05s (0:01:09)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "El frontend de la aplicación de mecánicos puede renderizar los badges o indicadores de cantidad de fallas en las tarjetas de pendientes y mis trabajos directamente desde el campo 'numero_fallas'.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/refactor-arquitectura-limpia-auth",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "Cumplimiento estricto de arquitectura por capas (Router -> Service -> Repository -> DTO).",
+    "Sin efectos secundarios en ningún otro endpoint del sistema."
+  ]
+}

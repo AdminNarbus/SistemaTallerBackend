@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 99,
+  "id": "AV-0099",
+  "timestamp": "2026-09-25T18:10:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CLEAN-1",
+    "name": "Purga de Carpetas Obsoletas: Eliminación de Módulo Neumáticos y Scratch",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Purga y saneamiento de carpetas y código obsoleto tras la unificación en el módulo 'formularios'. Se migró el modelo ORM 'ReporteNeumatico' a app/modules/formularios/models, se actualizaron todos los imports en los tests unitarios, de integración y E2E hacia app.modules.formularios, y se eliminaron definitivamente las carpetas 'app/modules/neumaticos' y 'scratch/'. La suite completa de 193 pruebas se mantiene en verde al 100%.",
+  "scope": {
+    "planned": [
+      "Mover modelo ReporteNeumatico a app/modules/formularios/models/reporte_neumatico.py",
+      "Actualizar imports en app/models/__init__.py y app/core/seed.py hacia formularios",
+      "Remover neumaticos_router de app/api/v1/router.py",
+      "Actualizar suite de tests de neumáticos hacia los nuevos contratos y rutas de formularios",
+      "Eliminar carpeta app/modules/neumaticos",
+      "Eliminar carpeta temporal scratch/",
+      "Verificar que la suite global de 193 pruebas pase al 100%"
+    ],
+    "completed": [
+      "app/modules/formularios/models/reporte_neumatico.py y __init__.py creados",
+      "app/models/__init__.py y app/core/seed.py actualizados hacia app.modules.formularios.models",
+      "app/api/v1/router.py saneado sin rutas legacy de neumaticos",
+      "tests/unit/test_neumaticos_service.py, tests/integration/test_neumaticos_api.py y tests/e2e/test_flujo_neumaticos_e2e.py actualizados",
+      "Carpeta app/modules/neumaticos eliminada con Remove-Item",
+      "Carpeta scratch/ eliminada",
+      "Suite global de 193 pruebas aprobada al 100% (0 errores, 0 regresiones)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend UI"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/formularios/models/reporte_neumatico.py",
+      "action": "created",
+      "summary": "Modelo ORM ReporteNeumatico reubicado en el dominio de formularios"
+    },
+    {
+      "path": "app/modules/formularios/models/__init__.py",
+      "action": "created",
+      "summary": "Exportación de ReporteNeumatico desde formularios.models"
+    },
+    {
+      "path": "app/modules/formularios/repository/neumatico_repository.py",
+      "action": "modified",
+      "summary": "Importación de ReporteNeumatico actualizada a formularios.models"
+    },
+    {
+      "path": "app/modules/formularios/services/formulario_neumatico_service.py",
+      "action": "modified",
+      "summary": "Importación de ReporteNeumatico actualizada a formularios.models"
+    },
+    {
+      "path": "app/models/__init__.py",
+      "action": "modified",
+      "summary": "Importación canónica de ReporteNeumatico desde app.modules.formularios.models"
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Importación de ReporteNeumatico desde app.modules.formularios.models"
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Removido router legacy de neumaticos"
+    },
+    {
+      "path": "tests/unit/test_neumaticos_service.py",
+      "action": "modified",
+      "summary": "Imports actualizados a app.modules.formularios"
+    },
+    {
+      "path": "tests/integration/test_neumaticos_api.py",
+      "action": "modified",
+      "summary": "Rutas HTTP actualizadas a /api/v1/formularios/neumaticos"
+    },
+    {
+      "path": "tests/e2e/test_flujo_neumaticos_e2e.py",
+      "action": "modified",
+      "summary": "Ruta HTTP actualizada a /api/v1/formularios/neumaticos"
+    },
+    {
+      "path": "app/modules/neumaticos",
+      "action": "deleted",
+      "summary": "Carpeta eliminada por obsolescencia tras unificación en formularios"
+    },
+    {
+      "path": "scratch",
+      "action": "deleted",
+      "summary": "Carpeta temporal eliminada"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-099",
+      "title": "Eliminación Definitiva de Carpetas y Código Obsoleto",
+      "rationale": "En cumplimiento de la directriz de no mantener retrocompatibilidad ni código zombi, la carpeta app/modules/neumaticos se erradicó una vez que sus responsabilidades fueron absorbidas limpiamente por app/modules/formularios. Asimismo, se depuraron archivos temporales en scratch/.",
+      "consequences": "Base de código limpia, sin artefactos redundantes, con una arquitectura DDD clara y 100% de cobertura en tests."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_neumaticos_service.py tests/integration/test_neumaticos_api.py tests/e2e/test_flujo_neumaticos_e2e.py -v",
+      "result": "passed",
+      "evidence": "15 passed in 4.73s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest",
+      "result": "passed",
+      "evidence": "193 passed, 1 warning in 66.67s (100% éxito)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Evaluar renombrar el módulo 'mantencion' a 'taller' para alinear el dominio de maestranza con la base de datos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": []
+}

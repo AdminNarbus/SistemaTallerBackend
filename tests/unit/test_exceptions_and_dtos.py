@@ -8,7 +8,7 @@ from app.core.exceptions import (
     PermissionException,
     _error_body,
 )
-from app.modules.mantencion.dtos.mantencion_dto import SolicitudCreateDTO
+from app.modules.taller.dtos import SolicitudCreateDTO
 
 
 def test_domain_exceptions_status_codes_and_payload():

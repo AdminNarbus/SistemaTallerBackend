@@ -587,19 +587,19 @@ Para optimizar el rendimiento y la experiencia de usuario, todos los endpoints c
 
 ---
 
-### 6.5 `GET /api/v1/mantencion/pendientes`
+### 6.5 `GET /api/v1/taller/pendientes` (alias `/api/v1/mantencion/pendientes`)
 - **Autenticación:** Token Bearer (`require_mecanico_or_admin`).
-- **Propósito:** Bandeja principal de trabajo del mecánico (Pestaña 1). Lista todos los buses que están esperando atención en taller (estados `REPORTADO`, `PENDIENTE`).
+- **Propósito:** Bandeja principal de trabajo del mecánico (Pestaña 1). Lista todos los buses que están esperando atención en taller (estados `REPORTADO`, `PENDIENTE`). Incluye el campo `numero_fallas` con la cantidad total de fallas pendientes y disponibles para ser atendidas en la orden.
 - **Payload:** Ninguno.
-- **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de solicitudes pendientes ordenadas cronológicamente.
+- **Respuesta (`List[SolicitudResumenDTO]` - 200 OK):** Lista de solicitudes pendientes ordenadas cronológicamente con `numero_fallas` disponible.
 
 ---
 
-### 6.6 `GET /api/v1/mantencion/mis-trabajos`
+### 6.6 `GET /api/v1/taller/mis-trabajos` (alias `/api/v1/mantencion/mis-trabajos`)
 - **Autenticación:** Token Bearer (`require_mecanico_or_admin`).
-- **Propósito:** Bandeja personal del mecánico (Pestaña 2). Retorna exclusivamente aquellas órdenes de trabajo donde el mecánico autenticado tiene fallas asignadas activamente.
+- **Propósito:** Bandeja personal del mecánico (Pestaña 2). Retorna exclusivamente aquellas órdenes de trabajo donde el mecánico autenticado tiene fallas asignadas activamente. Incluye el campo `numero_fallas` indicando exactamente cuántas fallas tiene autoasignadas dicho mecánico en esa orden.
 - **Payload:** Ninguno.
-- **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de órdenes activas del mecánico.
+- **Respuesta (`List[SolicitudResumenDTO]` - 200 OK):** Lista de órdenes activas del mecánico con `numero_fallas` asignadas al mecánico consultante.
 
 ---
 
@@ -960,7 +960,7 @@ Para optimizar el rendimiento y la experiencia de usuario, todos los endpoints c
 
 ### 7.2 `GET /api/v1/supervision/auditoria/buses-taller`
 - **Autenticación:** Token Bearer (`require_supervisor_or_admin`).
-- **Propósito:** Tablero de auditoría y trazabilidad exhaustiva en vivo para supervisores y auditores con soporte de paginación canónica. Permite inspeccionar el historial completo de solicitudes, cambios de turno cronometrados, resolución de averías y notas de bitácora.
+- **Propósito:** Tablero de auditoría y monitoreo en vivo para supervisores y auditores con soporte de paginación canónica. Retorna la lista resumen de órdenes de trabajo en taller con estructura idéntica a la respuesta del mecánico (`SolicitudResumenDTO`), optimizada para alto rendimiento y bajo peso de transferencia de red.
 - **Parámetros Query:**
   - `n_bus` *(string, opcional)*: Filtrar por número de bus específico (ej: `"339"`).
   - `estado` *(string, opcional)*: Filtrar por estado (`REPORTADO`, `PENDIENTE`, `EN_REPARACION`, `LIBERADO`, `FINALIZADO`).
@@ -969,7 +969,28 @@ Para optimizar el rendimiento y la experiencia de usuario, todos los endpoints c
   - `limit` *(integer, opcional, default: 20, ge: 1, le: 100)*: Cantidad máxima de solicitudes a retornar por página.
 - **Cabeceras de Respuesta:** `X-Total-Count: <total_solicitudes>` (expuesta en CORS).
 - **Payload:** Ninguno.
-- **Respuesta (`List[SolicitudDTO]` - 200 OK):** Lista de solicitudes completas con todo su historial de auditoría.
+- **Respuesta (`List[SolicitudResumenDTO]` - 200 OK):**
+```json
+[
+  {
+    "id": 101,
+    "estado": "EN_REPARACION",
+    "n_bus": "330",
+    "fecha_ingreso": "2026-09-09T08:00:00Z",
+    "chofer": "Juan Pérez",
+    "tiempo_taller": 2.5,
+    "numero_fallas": 2
+  }
+]
+```
+- **Campos del Objeto:**
+  - `id` *(integer)*: Número de la orden de trabajo.
+  - `estado` *(string)*: Estado actual de la orden.
+  - `n_bus` *(string)*: Número de bus.
+  - `fecha_ingreso` *(datetime | null)*: Fecha de primer ingreso al taller o creación.
+  - `chofer` *(string | null)*: Nombre del conductor/creador de la orden.
+  - `tiempo_taller` *(float | null)*: Horas transcurridas en taller.
+  - `numero_fallas` *(integer)*: Total de averías no resueltas/pendientes en la orden.
 
 ---
 

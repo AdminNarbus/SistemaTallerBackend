@@ -414,39 +414,29 @@ Content-Type: application/json
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/supervision/resumen-taller` | Supervisor, Admin | KPIs globales, desglose de fallas por categoría y centro de alertas en tiempo real. |
 | `GET` | `/api/v1/supervision/alertas` | Supervisor, Admin | Alertas operacionales activas (`REPUESTO_FALTANTE`, `DEFECTO_PAUTA`, `BUS_SIN_MECANICOS`). |
-| `GET` | `/api/v1/supervision/buses/taller` | Supervisor, Admin | Paginación y auditoría profunda de buses en taller con filtros por estado y buscador. |
+| `GET` | `/api/v1/supervision/auditoria/buses-taller` | Supervisor, Admin | Lista de órdenes de trabajo en taller con formato idéntico al mecánico (`SolicitudResumenDTO`). |
 
-### `GET /api/v1/supervision/buses/taller` (Paginación y Auditoría)
+### `GET /api/v1/supervision/auditoria/buses-taller` (Lista de OTs en Taller - Formato Idéntico al Mecánico)
 * **Query Params:**
   * `limit`: int (default `20`, máx `100`).
   * `skip`: int (default `0`).
-  * `estado`: string opcional (`"REPORTADO"`, `"PENDIENTE"`, `"EN_REPARACION"`, `"FINALIZADO"`, etc.).
-  * `q`: string opcional (búsqueda por patente o `n_bus`).
-* **Respuesta (200 OK):** `AuditoriaBusesPaginadaDTO`:
+  * `estado`: string opcional (`"REPORTADO"`, `"PENDIENTE"`, `"EN_REPARACION"`, `"LIBERADO"`, `"FINALIZADO"`).
+  * `n_bus`: string opcional (búsqueda por número de bus).
+  * `mecanico_nombre`: string opcional (búsqueda por mecánico).
+* **Headers:** `X-Total-Count: <total_count>`
+* **Respuesta (200 OK):** `List[SolicitudResumenDTO]`:
 ```json
-{
-  "total": 35,
-  "page": 1,
-  "limit": 20,
-  "pages": 2,
-  "items": [
-    {
-      "bus_id": 15,
-      "n_bus": "330",
-      "patente": "KLSW-89",
-      "estado_taller": "EN_REPARACION",
-      "en_taller": true,
-      "solicitud_id": 101,
-      "fecha_ingreso": "2026-09-09T08:00:00Z",
-      "total_fallas": 3,
-      "fallas_resueltas": 1,
-      "fallas_pendientes": 2,
-      "mecanicos_asignados": ["Carlos Mecánico", "Juan Pérez"],
-      "pauta_completada": false,
-      "alertas_activas": ["REPUESTO_FALTANTE"]
-    }
-  ]
-}
+[
+  {
+    "id": 101,
+    "estado": "EN_REPARACION",
+    "n_bus": "330",
+    "fecha_ingreso": "2026-09-09T08:00:00Z",
+    "chofer": "Juan Pérez",
+    "tiempo_taller": 2.5,
+    "numero_fallas": 2
+  }
+]
 ```
 
 ---
@@ -592,7 +582,15 @@ export interface SolicitudDTO {
   pauta_respuestas: PautaRespuestaDTO[];
 }
 
-export interface SolicitudResumenDTO extends SolicitudDTO {}
+export interface SolicitudResumenDTO {
+  id: number;
+  estado: string;
+  n_bus: string;
+  fecha_ingreso: string | null;
+  chofer: string | null;
+  tiempo_taller: number | null;
+  numero_fallas: number;
+}
 
 export interface PautaEstadoResumenDTO {
   total_items: number;

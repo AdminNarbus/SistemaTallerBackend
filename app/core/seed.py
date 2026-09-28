@@ -16,12 +16,12 @@ from app.modules.auth.dtos.usuario_dto import UsuarioCreateDTO
 from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.repository.user_repository import user_repository
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.categoria_falla import CategoriaFalla
-from app.modules.mantencion.models.falla_taller import FallaTaller
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
-from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
-from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
-from app.modules.neumaticos.models.reporte_neumatico import ReporteNeumatico
+from app.modules.taller.models.categoria_falla import CategoriaFalla
+from app.modules.taller.models.falla_taller import FallaTaller
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
+from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 103,
+  "id": "AV-0103",
+  "timestamp": "2026-09-28T10:04:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUPERVISION-DTO-UNIFICADO",
+    "name": "Unificación de Respuesta de Auditoría de Supervisión con Formato del Mecánico (SolicitudResumenDTO)",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Unificación de la respuesta del endpoint de lista de órdenes de trabajo para supervisión (GET /api/v1/supervision/auditoria/buses-taller) con el formato ultraligero del mecánico (SolicitudResumenDTO). Se optimiza drásticamente el payload eliminando colecciones innecesarias (detalles, mecánicos, historiales) para el listado general y proveyendo exactamente los campos: id, estado, n_bus, fecha_ingreso, chofer, tiempo_taller y numero_fallas (fallas pendientes totales de la OT). Además, tiempo_taller fue alineado para reflejar el tiempo neto real que el bus ha permanecido en maestranza (mediante telemetría de estadías y horas_taller_acumuladas, descartando el tiempo en que estuvo esperando afuera en pendiente).",
+  "scope": {
+    "planned": [
+      "Cambiar response_model del endpoint GET /api/v1/supervision/auditoria/buses-taller a List[SolicitudResumenDTO]",
+      "Actualizar SupervisionService para mapear a SolicitudResumenDTO tanto desde diccionarios SQL (PostgreSQL CTE) como desde entidades ORM (SQLite test runner)",
+      "Proyectar fecha_primer_ingreso_taller, horas_taller_acumuladas y estadias en la consulta CTE de PostgreSQL de supervision_repository",
+      "Alinear tiempo_taller al tiempo neto de permanencia en taller (telemetría de estadías)",
+      "Actualizar tests unitarios, de integración y E2E que validan el endpoint de auditoría",
+      "Actualizar contratos y catálogo de endpoints (05_CONTRATOS_API_FRONTEND.md, 06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md, 01_ESTADO_ACTUAL_PROYECTO.md)"
+    ],
+    "completed": [
+      "Endpoint GET /api/v1/supervision/auditoria/buses-taller configurado con response_model=List[SolicitudResumenDTO]",
+      "Métodos _mapear_a_solicitud_resumen_dto y _mapear_dict_a_solicitud_resumen_dto implementados en SupervisionService con cálculo de numero_fallas pendientes y telemetría de estadías netas",
+      "Campos s.fecha_primer_ingreso_taller, s.horas_taller_acumuladas, b.en_taller y CTE estadias_agg agregados al SELECT de base_filtered y al SELECT principal en supervision_repository.py",
+      "Tests unitarios (test_supervision_service.py), de integración (test_supervision_api.py) y E2E (test_flujo_completo_taller_e2e.py) actualizados",
+      "Documentos de trazabilidad actualizados (01, 05, 06)",
+      "100% de la suite de pruebas automatizadas aprobada (194 passed)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de Frontend (consumo exclusivo de los contratos unificados)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Actualización de importación y decorador response_model=List[SolicitudResumenDTO] en /auditoria/buses-taller"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Implementación de mapeo a SolicitudResumenDTO en get_auditoria_solicitudes con cálculo de tiempo neto de taller (calcular_telemetria_estadias)"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Inclusión de fecha_primer_ingreso_taller, horas_taller_acumuladas, bus_en_taller y CTE estadias_agg en get_auditoria"
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Actualización de test_supervision_service_get_auditoria_aislado y test_auditoria_solicitudes_mapeo_dict_sin_fecha_asignacion para validar SolicitudResumenDTO"
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Actualización de aserciones en test_supervision_auditoria_campos_operacionales para verificar contrato de SolicitudResumenDTO"
+    },
+    {
+      "path": "tests/e2e/test_flujo_completo_taller_e2e.py",
+      "action": "modified",
+      "summary": "Actualización de aserciones de target_auditoria para verificar estructura ultraligera idéntica al mecánico"
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Actualización de especificación de respuesta de GET /api/v1/supervision/auditoria/buses-taller a List[SolicitudResumenDTO]"
+    },
+    {
+      "path": "trazabilidad/06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md",
+      "action": "modified",
+      "summary": "Actualización de respuesta y descripción del endpoint 7.2"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización de estado del módulo de Supervisión con el nuevo hito unificado"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-087",
+      "title": "Unificación de DTO de Resumen de OTs entre Supervisión y Mecánico",
+      "rationale": "El supervisor requería ver el listado de órdenes de trabajo con exactamente la misma estructura y agilidad que la interfaz del mecánico, reduciendo la redundancia de DTOs en el frontend y optimizando el peso de red al omitir colecciones pesadas innecesarias en vistas de tabla/tarjeta. Los detalles profundos de la OT continúan disponibles vía GET /api/v1/taller/{id}.",
+      "consequences": "Mayor coherencia arquitectónica, reutilización del DTO SolicitudResumenDTO en los paneles de supervisión y mecánico, menor latencia de carga en frontend y 100% de compatibilidad garantizada."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_supervision_service.py",
+      "result": "passed",
+      "evidence": "21 passed in 2.78s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_supervision_api.py tests/e2e/test_flujo_completo_taller_e2e.py",
+      "result": "passed",
+      "evidence": "11 passed in 4.98s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -q",
+      "result": "passed",
+      "evidence": "194 passed, 1 warning in 67.05s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumo del contrato unificado en las interfaces frontend de supervisión y monitoreo.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": null,
+    "dirty": true
+  },
+  "notes": [
+    "numero_fallas en la vista de supervisión refleja el total de averías no resueltas/pendientes en la orden.",
+    "Para auditoría profunda con colecciones completas de mecánicos, bitácora y pauta, se utiliza GET /api/v1/taller/{id}."
+  ]
+}

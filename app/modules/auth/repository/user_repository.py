@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Optional
+from typing import List, Optional
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,27 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 class UserRepository:
-    """Repositorio para la gestión de persistencia y consultas de usuarios y roles."""
-
-    async def get_or_create_rol(self, db: AsyncSession, nombre_rol: str) -> Rol:
-        """
-        [DEPRECADO] Busca o crea un rol en la tabla roles.
-        Usar get_rol_by_nombre; los roles deben ser estáticos y controlados por migraciones.
-        """
-        rol_clean = (nombre_rol or "CONDUCTOR").upper().strip()
-        rol = await self.get_rol_by_nombre(db, rol_clean)
-        if not rol:
-            logger.warning("[AUTH] Rol '%s' no encontrado; creándolo dinámicamente [DEPRECADO]", rol_clean)
-            rol = Rol(nombre=rol_clean, descripcion=f"Rol de {rol_clean.capitalize()}")
-            db.add(rol)
-            await db.flush()
-        return rol
+    """
+    Capa de persistencia pura SQL para usuarios y roles.
+    Cumple con el principio de Responsabilidad Única (SRP):
+    exclusivamente consultas, agregaciones, inserciones y actualizaciones en base de datos.
+    """
 
     async def get_by_username(
         self, db: AsyncSession, username: str
     ) -> Optional[Usuario]:
         """Busca un usuario por su username (case-insensitive) con su rol en un solo JOIN."""
-        logger.debug("[AUTH] Buscando usuario por username='%s'", username.strip())
+        logger.debug("[AUTH-REPO] Buscando usuario por username='%s'", username.strip())
         stmt = (
             select(Usuario)
             .options(joinedload(Usuario.rol_rel))
@@ -41,14 +31,14 @@ class UserRepository:
         res = await db.execute(stmt)
         user = res.scalar_one_or_none()
         if not user:
-            logger.warning("[AUTH] Usuario no encontrado | username='%s'", username.strip())
+            logger.debug("[AUTH-REPO] Usuario no encontrado | username='%s'", username.strip())
         return user
 
     async def get_by_id(
         self, db: AsyncSession, user_id: int
     ) -> Optional[Usuario]:
         """Busca un usuario por su ID de clave primaria con su rol en un solo JOIN."""
-        logger.debug("[AUTH] Buscando usuario por id=%s", user_id)
+        logger.debug("[AUTH-REPO] Buscando usuario por id=%s", user_id)
         stmt = (
             select(Usuario)
             .options(joinedload(Usuario.rol_rel))
@@ -111,7 +101,7 @@ class UserRepository:
         q: Optional[str] = None,
         is_active: Optional[bool] = None,
     ) -> List[Usuario]:
-        """Lista usuarios registrados con su rol aplicando paginación (default: 20) y filtros opcionales."""
+        """Lista usuarios registrados con su rol aplicando paginación y filtros opcionales."""
         stmt = (
             select(Usuario)
             .options(joinedload(Usuario.rol_rel))
@@ -150,46 +140,18 @@ class UserRepository:
         return usuario
 
     async def create(
-        self, db: AsyncSession, usuario_or_dto: Any
+        self, db: AsyncSession, usuario: Usuario
     ) -> Usuario:
         """
         Persiste una entidad Usuario en la BD con flush atómico en sesión (sin commit).
-        Acepta una entidad Usuario ya configurada o un DTO UsuarioCreateDTO por retrocompatibilidad.
+        Acepta exclusivamente la entidad ORM configurada, sin mezcla de DTOs ni hashing.
         """
-        if isinstance(usuario_or_dto, Usuario):
-            db.add(usuario_or_dto)
-            await db.flush()
-            return usuario_or_dto
-
-        logger.warning("[AUTH] Invocación de user_repository.create con DTO en lugar de entidad Usuario [DEPRECADO]")
-        rol_nombre = getattr(usuario_or_dto, "rol", None)
-        rol_str = getattr(rol_nombre, "value", rol_nombre) or "CONDUCTOR"
-        rol_obj = await self.get_rol_by_nombre(db, rol_str)
-        if not rol_obj:
-            rol_obj = await self.get_or_create_rol(db, rol_str)
-
-        pwd = getattr(usuario_or_dto, "password", "")
-        if pwd.startswith("$2b$") or pwd.startswith("$2a$"):
-            password_hash = pwd
-        else:
-            from app.core.security import get_password_hash
-            password_hash = get_password_hash(pwd)
-
-        db_usuario = Usuario(
-            nombre=getattr(usuario_or_dto, "nombre", None),
-            apellido=getattr(usuario_or_dto, "apellido", None),
-            username=usuario_or_dto.username.strip(),
-            password_hash=password_hash,
-            rol_id=rol_obj.id,
-            is_active=getattr(usuario_or_dto, "is_active", True) if getattr(usuario_or_dto, "is_active", None) is not None else True,
-        )
-        db_usuario.rol_rel = rol_obj
-        db.add(db_usuario)
+        db.add(usuario)
         await db.flush()
-        return db_usuario
+        return usuario
 
     async def desactivar(
-        self, db: AsyncSession, user_or_id: Any
+        self, db: AsyncSession, user_or_id: Usuario | int
     ) -> Optional[Usuario]:
         """Soft-delete: Deshabilita la cuenta estableciendo is_active = False con flush atómico."""
         if isinstance(user_or_id, Usuario):
@@ -197,27 +159,12 @@ class UserRepository:
         else:
             user = await self.get_by_id(db, user_id=int(user_or_id))
             if not user:
-                logger.warning("[AUTH] Intento de desactivar usuario inexistente | id=%s", user_or_id)
+                logger.warning("[AUTH-REPO] Intento de desactivar usuario inexistente | id=%s", user_or_id)
                 return None
 
         user.is_active = False
         await db.flush()
-        logger.info("[AUTH] Usuario desactivado en sesión (soft-delete) | id=%s | username='%s'", user.id, user.username)
-        return user
-
-    async def authenticate(
-        self, db: AsyncSession, username: str, password: str
-    ) -> Optional[Usuario]:
-        """
-        [DEPRECADO] Valida credenciales contra la BD.
-        Se recomienda delegar la autenticación exclusivamente a AuthService.login().
-        """
-        user = await self.get_by_username(db, username)
-        if not user:
-            return None
-        from app.core.security import verify_password
-        if not verify_password(password, user.password_hash):
-            return None
+        logger.info("[AUTH-REPO] Usuario desactivado en sesión (soft-delete) | id=%s | username='%s'", user.id, user.username)
         return user
 
     def _construir_filtro_mecanico_q(self, q: Optional[str]):
@@ -262,7 +209,7 @@ class UserRepository:
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[Usuario]:
-        """Busca usuarios activos con rol MECÁNICO con paginación (default: 20) y filtros opcionales."""
+        """Busca usuarios activos con rol MECÁNICO con paginación y filtros opcionales."""
         stmt = self._construir_stmt_mecanicos(q, exclude_id).offset(skip).limit(limit)
         res = await db.execute(stmt)
         return list(res.scalars().all())
@@ -333,3 +280,5 @@ class UserRepository:
 
 
 user_repository = UserRepository()
+
+__all__ = ["UserRepository", "user_repository"]

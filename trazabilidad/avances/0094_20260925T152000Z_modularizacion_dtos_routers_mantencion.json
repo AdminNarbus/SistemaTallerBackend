@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 94,
+  "id": "AV-0094",
+  "timestamp": "2026-09-25T15:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-MODULARIZACION-DTOS-ROUTERS",
+    "name": "Modularización y Descomposición SRP de DTOs y Routers de Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Descomposición y modularización profunda del módulo app/modules/mantencion: separación del router monolítico de 579 líneas en 6 sub-routers especializados por caso de uso (catalogo_router, solicitud_router, pauta_router, cuadrilla_router, averias_router, cierre_router), desintegración de mantencion_dto.py en 6 módulos de contratos atómicos (catalogo_dto, pauta_dto, averias_dto, cuadrilla_dto, bitacora_dto, solicitud_dto) con exportación directa sin fachadas redundantes, erradicación de código muerto y verificación exitosa de 184 de 184 tests verdes (100%).",
+  "scope": {
+    "planned": [
+      "Dividir dtos/mantencion_dto.py en contratos específicos orientados a casos de uso",
+      "Eliminar el archivo monolítico redundante mantencion_dto.py",
+      "Dividir api/router.py en 6 sub-routers especializados agrupados por APIRouter principal",
+      "Actualizar referencias de importaciones directas en tests y módulos dependientes (supervisión)",
+      "Verificar la suite completa de 184 tests sin regresiones"
+    ],
+    "completed": [
+      "Dividir dtos/mantencion_dto.py en contratos específicos orientados a casos de uso",
+      "Eliminar el archivo monolítico redundante mantencion_dto.py",
+      "Dividir api/router.py en 6 sub-routers especializados agrupados por APIRouter principal",
+      "Actualizar referencias de importaciones directas en tests y módulos dependientes (supervisión)",
+      "Verificar la suite completa de 184 tests sin regresiones"
+    ],
+    "pending": [
+      "Fase 3: Descomposición de la capa de servicios mantencion_service.py en servicios atómicos"
+    ],
+    "outOfScope": [
+      "Modificaciones de Frontend",
+      "Cambios en tablas relacionales o esquemas de migración Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/catalogo_dto.py",
+      "action": "created",
+      "summary": "DTOs para categorías y fallas preconcebidas (CategoriaFallaDTO, FallaTallerDTO)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/pauta_dto.py",
+      "action": "created",
+      "summary": "DTOs para la pauta preventiva (PautaTallerItemDTO, PautaRespuestaCreateDTO, PautaRespuestaDTO, PautaBatchUpdateDTO, PautaEstadoResumenDTO)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/averias_dto.py",
+      "action": "created",
+      "summary": "DTOs para gestión de averías y fallas en OTs (SolicitudDetalleDTO, AgregarFallaDTO, ResolverFallaSupervisoraDTO, ReportarRepuestoDTO, DetalleUpdateDTO, etc.)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/cuadrilla_dto.py",
+      "action": "created",
+      "summary": "DTOs para asignaciones, cuadrilla y avances (SolicitudMecanicoDTO, TomarTrabajoDTO, AutoasignarFallasDTO, AsignarFallasSupervisoraDTO, TerminarAvanceDTO, etc.)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/bitacora_dto.py",
+      "action": "created",
+      "summary": "DTOs para bitácora, comentarios y cambios de estado (ComentarioCreateDTO, SolicitudComentarioDTO, ComentarioAddedDTO, CambiarEstadoSolicitudDTO, FinalizarSolicitudDTO, LiberarSolicitudDTO)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/solicitud_dto.py",
+      "action": "created",
+      "summary": "DTOs de cabecera de la OT, evidencias y telemetría de estadías (SolicitudCreateDTO, SolicitudDTO, SolicitudResumenDTO, SolicitudEvidenciaDTO, EstadiaTallerDTO)"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación centralizada de todos los DTOs de mantención agrupados desde sus submódulos especializados"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/mantencion_dto.py",
+      "action": "deleted",
+      "summary": "Erradicación definitiva de archivo monolítico redundante"
+    },
+    {
+      "path": "app/modules/mantencion/api/catalogo_router.py",
+      "action": "created",
+      "summary": "Sub-router para catálogos maestros de maestranza (/pauta/items, /categorias, /fallas)"
+    },
+    {
+      "path": "app/modules/mantencion/api/solicitud_router.py",
+      "action": "created",
+      "summary": "Sub-router para creación de solicitudes (form/multipart), consulta por ID y bandejas (/pendientes, /mis-trabajos)"
+    },
+    {
+      "path": "app/modules/mantencion/api/pauta_router.py",
+      "action": "created",
+      "summary": "Sub-router para consulta y actualización en lote de la pauta preventiva (GET/POST /{id}/pauta)"
+    },
+    {
+      "path": "app/modules/mantencion/api/cuadrilla_router.py",
+      "action": "created",
+      "summary": "Sub-router para operaciones de cuadrilla (/autoasignar, /asignar, /terminar-avance, /tomar, /desasignarme, /liberar-turno, /agregar-colaborador)"
+    },
+    {
+      "path": "app/modules/mantencion/api/averias_router.py",
+      "action": "created",
+      "summary": "Sub-router para gestión atómica de averías (POST /{id}/detalles, PATCH /check, PATCH /repuesto)"
+    },
+    {
+      "path": "app/modules/mantencion/api/cierre_router.py",
+      "action": "created",
+      "summary": "Sub-router para finalización, liberación a ruta, bitácora y cambio de estado administrativo (/estado, /comentarios, /finalizar, /liberar)"
+    },
+    {
+      "path": "app/modules/mantencion/api/router.py",
+      "action": "modified",
+      "summary": "Router maestro componiendo limpiamente los 6 sub-routers especializados bajo el prefijo canónico /mantencion"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Descomposición de Routers por Flujo Operacional de Maestranza",
+      "rationale": "El router monolítico de 579 líneas concentraba 18 endpoints dispares dificultando la trazabilidad de errores y el principio de responsabilidad única. Dividirlo en 6 sub-routers por afinidad de caso de uso clarifica la intención de cada endpoint y minimiza el riesgo de conflictos.",
+      "consequences": "Mayor claridad de código, aislamiento de dependencias y modularidad sin modificar los contratos REST ni las rutas HTTP hacia el Frontend."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Erradicación de Archivos Intermediarios Monolíticos en DTOs",
+      "rationale": "Mantener mantencion_dto.py como un pasamanos monolítico de re-exportación duplica la superficie de código sin valor arquitectónico. Se eliminó directamente exportando desde los submódulos en dtos/__init__.py.",
+      "consequences": "Menor deuda técnica, imports directos y estructura desacoplada."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_mantencion_service.py -v",
+      "result": "passed",
+      "evidence": "34 passed in 5.27s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_mantencion_api.py -v",
+      "result": "passed",
+      "evidence": "12 passed in 4.98s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "184 passed, 1 warning in 64.14s (100% éxito)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Fase 3: Descomposición modular de mantencion_service.py en servicios especializados por caso de uso.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "dirty": true
+  },
+  "notes": [
+    "Todos los endpoints continúan expuestos en /api/v1/mantencion sin romper la retrocompatibilidad con el Frontend ni los contratos de API existentes."
+  ]
+}

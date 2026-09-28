@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 96,
+  "id": "AV-0096",
+  "timestamp": "2026-09-25T17:42:30Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-REDUCCION-PAYLOAD-MECANICOS",
+    "name": "Reducción de Payload de Listados de Mecánicos a Campos Esenciales",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Optimización del DTO SolicitudResumenDTO utilizado en los endpoints GET /api/v1/taller/pendientes y GET /api/v1/taller/mis-trabajos para retornar exclusivamente los 6 campos requeridos por el mecánico (id, estado, n_bus, fecha_ingreso, chofer, tiempo_taller), eliminando arrays redundantes de fallas, comentarios, evidencias e historial de mecánicos. Se implementaron los mapeadores atómicos dict_to_solicitud_resumen_dto y orm_to_solicitud_resumen_dto, y se validó el 100% de la suite de pruebas (193 tests verdes).",
+  "scope": {
+    "planned": [
+      "Redefinir SolicitudResumenDTO con solo id, estado, n_bus, fecha_ingreso, chofer y tiempo_taller",
+      "Actualizar dict_to_solicitud_resumen_dto y crear orm_to_solicitud_resumen_dto en mappers.py",
+      "Conectar el mapeador ligero en SolicitudService para list_pendientes y list_mis_trabajos",
+      "Actualizar contratos y guías de integración de frontend",
+      "Ejecutar y validar la suite completa de pruebas automatizadas"
+    ],
+    "completed": [
+      "Redefinir SolicitudResumenDTO con solo id, estado, n_bus, fecha_ingreso, chofer y tiempo_taller",
+      "Actualizar dict_to_solicitud_resumen_dto y crear orm_to_solicitud_resumen_dto en mappers.py",
+      "Conectar el mapeador ligero en SolicitudService para list_pendientes y list_mis_trabajos",
+      "Actualizar contratos y guías de integración de frontend",
+      "Ejecutar y validar la suite completa de pruebas automatizadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones al detalle completo de la OT (GET /{id})",
+      "Cambios en tablas relacionales o migraciones de BD"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/solicitud_dto.py",
+      "action": "modified",
+      "summary": "Redefinición de SolicitudResumenDTO a BaseModel puro con exactamente los 6 campos requeridos."
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Adaptación de dict_to_solicitud_resumen_dto e inclusión de orm_to_solicitud_resumen_dto para mapeo conciso y cálculo de telemetría."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Invocación directa de orm_to_solicitud_resumen_dto en ramas ORM de list_pendientes y list_mis_trabajos."
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Actualización de la interfaz TypeScript SolicitudResumenDTO."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_MODULO_MECANICOS.md",
+      "action": "modified",
+      "summary": "Actualización de ejemplos de payloads JSON para las vistas 1 y 2 del mecánico."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Alineación de SolicitudResumenDTO a Campos Esenciales de UI",
+      "rationale": "Los endpoints de listado para mecánicos enviaban anteriormente objetos completos con colecciones vacías o anidadas innecesarias para la tarjeta o fila de resumen. Restringir el DTO a los 6 atributos minimiza el consumo de ancho de banda y simplifica el consumo en React/TypeScript.",
+      "consequences": "Cargas más rápidas en el cliente y un contrato REST desacoplado de las relaciones complejas de la OT."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "193 passed, 1 warning in 67.52s (100% de la suite de pruebas del backend)."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir el nuevo contrato ultraligero de SolicitudResumenDTO en DashboardMecanico.tsx en el Frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "El endpoint de ficha técnica GET /api/v1/taller/{id} se mantiene intacto entregando SolicitudDTO con el 100% de los detalles y relaciones."
+  ]
+}

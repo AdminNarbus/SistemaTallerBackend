@@ -17,15 +17,13 @@ async def test_flujo_neumaticos_e2e(client, seed_test_data):
     data = {
         "usuario_id": str(user_id),
         "maquina": "BUS-909",
-        "tipo_bus": "MiniBus",
         "ruedas": '[{"posicion": "Delantera Derecha", "profundidad_mm": 8.5}]',
         "motivo": "Pinchazo en ruta",
-        "precio": "85000",
         "marca_fuego": "MF-777",
     }
 
     # 1. Enviar formulario multipart
-    res_post = await client.post("/api/v1/formularioNeumatico", data=data, files=files)
+    res_post = await client.post("/api/v1/formularios/neumaticos", data=data, files=files)
     assert res_post.status_code == 200
     res_json = res_post.json()
     assert res_json["status"] == "success"

@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from app.modules.buses.models.bus import Bus
 
 
@@ -37,7 +37,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
             {"falla_id": 2, "descripcion_personalizada": "Pastillas delanteras desgastadas al 90%"},
         ],
     }
-    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
+    res_crear = await client.post("/api/v1/taller/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
     assert res_crear.status_code == 201
     data_sol = res_crear.json()
     sol_id = data_sol["id"]
@@ -48,7 +48,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
 
     # 2. Mecánico 1 se autoasigna Falla 1
     res_auto1 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        f"/api/v1/taller/{sol_id}/autoasignar",
         json={"detalles_ids": [det1_id], "comentario": "Revisando manguera de radiador"},
         headers=auth_headers_mecanico1,
     )
@@ -62,7 +62,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
 
     # 3. Mecánico 2 intenta autoasignarse Falla 1 ya tomada -> BLOQUEO ESTRICTO (422 BUSINESS_RULE_VIOLATION)
     res_auto2_falla1 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        f"/api/v1/taller/{sol_id}/autoasignar",
         json={"detalles_ids": [det1_id], "comentario": "Apoyando en purga de sistema"},
         headers=auth_headers_mecanico2,
     )
@@ -71,7 +71,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
 
     # 4. Mecánico 2 se autoasigna Falla 2
     res_auto2_falla2 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        f"/api/v1/taller/{sol_id}/autoasignar",
         json={"detalles_ids": [det2_id], "comentario": "Desmontando calipers"},
         headers=auth_headers_mecanico2,
     )
@@ -96,7 +96,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
 
     # 6. Mecánico 1 termina avance en Falla 1 (donde ambos mecánicos trabajaban como equipo)
     res_fin_mec1_f1 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/terminar-avance",
+        f"/api/v1/taller/{sol_id}/terminar-avance",
         json={"detalles_ids": [det1_id], "comentario": "Reemplazo de abrazadera completado por el equipo"},
         headers=auth_headers_mecanico1,
     )
@@ -112,7 +112,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
 
     # 7. Cualquiera del equipo termina el avance restante del grupo
     res_fin_total = await client.post(
-        f"/api/v1/mantencion/{sol_id}/terminar-avance",
+        f"/api/v1/taller/{sol_id}/terminar-avance",
         json={"comentario": "Fin de jornada del equipo sin cerrar todas las fallas"},
         headers=auth_headers_mecanico2,
     )
@@ -124,7 +124,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
     # 8. Verificación de permisos (RBAC)
     # Conductor intenta autoasignarse -> 403
     res_cond_auto = await client.post(
-        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        f"/api/v1/taller/{sol_id}/autoasignar",
         json={"detalles_ids": [det1_id]},
         headers=auth_headers_conductor,
     )
@@ -147,7 +147,7 @@ async def test_autoasignar_fallas_con_colaboradores_api(
     auth_headers_conductor,
     auth_headers_mecanico1,
 ):
-    """Verifica el endpoint /api/v1/mantencion/{id}/autoasignar enviando colaboradores_ids."""
+    """Verifica el endpoint /api/v1/taller/{id}/autoasignar enviando colaboradores_ids."""
     bus = Bus(id=11, n_bus="302", patente="BC3002", marca="Scania", modelo="K400", is_active=True, en_taller=False)
     db_session.add(bus)
     await db_session.commit()
@@ -160,7 +160,7 @@ async def test_autoasignar_fallas_con_colaboradores_api(
             {"falla_id": 2, "descripcion_personalizada": "Falla freno"},
         ],
     }
-    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
+    res_crear = await client.post("/api/v1/taller/solicitudes", json=payload_solicitud, headers=auth_headers_conductor)
     assert res_crear.status_code == 201
     sol_id = res_crear.json()["id"]
     detalles = res_crear.json()["detalles"]
@@ -168,7 +168,7 @@ async def test_autoasignar_fallas_con_colaboradores_api(
 
     # Mecánico 1 se autoasigna las fallas e invita a Mecánico 2 (id=3)
     res_auto = await client.post(
-        f"/api/v1/mantencion/{sol_id}/autoasignar",
+        f"/api/v1/taller/{sol_id}/autoasignar",
         json={
             "detalles_ids": det_ids,
             "comentario": "Asignación colaborativa en equipo",

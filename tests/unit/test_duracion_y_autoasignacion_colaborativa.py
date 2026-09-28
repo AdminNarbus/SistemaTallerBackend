@@ -1,11 +1,11 @@
 import pytest
 from datetime import datetime, timezone, timedelta
-from app.modules.mantencion.repository.mantencion_repository import (
+from app.modules.taller.repository.taller_repository import (
     _calcular_duracion_minutos,
-    mantencion_repository,
+    taller_repository,
 )
-from app.modules.mantencion.services.mantencion_service import mantencion_service
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.taller.services.taller_service import taller_service
+from app.modules.taller.dtos import (
     SolicitudCreateDTO,
     SolicitudDetalleCreateDTO,
     AutoasignarFallasDTO,
@@ -65,7 +65,7 @@ async def test_autoasignacion_colaborativa_con_colaboradores_ids(db_session, see
             SolicitudDetalleCreateDTO(falla_id=falla2_id, descripcion_personalizada="Falla 2"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(db_session, dto_crear, conductor_id)
+    solicitud = await taller_service.create_solicitud(db_session, dto_crear, conductor_id)
     det1_id = solicitud.detalles[0].id
     det2_id = solicitud.detalles[1].id
 
@@ -75,7 +75,7 @@ async def test_autoasignacion_colaborativa_con_colaboradores_ids(db_session, see
         comentario="Trabajando en equipo en fallas 1 y 2",
         colaboradores_ids=[mecanico2_id],
     )
-    sol_auto = await mantencion_service.autoasignar_fallas(
+    sol_auto = await taller_service.autoasignar_fallas(
         db_session, solicitud_id=solicitud.id, dto=dto_auto, mecanico_id=mecanico1_id
     )
 
@@ -107,12 +107,12 @@ async def test_finalizar_solicitud_con_fechas_timezone_aware(db_session, seed_te
             SolicitudDetalleCreateDTO(falla_id=falla1_id, descripcion_personalizada="Falla para cierre"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(db_session, dto_crear, conductor_id)
+    solicitud = await taller_service.create_solicitud(db_session, dto_crear, conductor_id)
     det_id = solicitud.detalles[0].id
 
     # Autoasignar falla
     dto_auto = AutoasignarFallasDTO(detalles_ids=[det_id])
-    sol_auto = await mantencion_service.autoasignar_fallas(
+    sol_auto = await taller_service.autoasignar_fallas(
         db_session, solicitud_id=solicitud.id, dto=dto_auto, mecanico_id=mecanico1_id
     )
 
@@ -121,7 +121,7 @@ async def test_finalizar_solicitud_con_fechas_timezone_aware(db_session, seed_te
         mec.fecha_asignacion = datetime.now(timezone.utc) - timedelta(minutes=45)
 
     # Marcar falla resuelta
-    await mantencion_service.check_detalle(
+    await taller_service.check_detalle(
         db_session, solicitud_id=solicitud.id, detalle_id=det_id, mecanico_id=mecanico1_id, resuelto=True
     )
 
@@ -131,7 +131,7 @@ async def test_finalizar_solicitud_con_fechas_timezone_aware(db_session, seed_te
         motivo_incompleto_checklist="Pauta no requerida para test",
         liberar_bus_taller=False,
     )
-    sol_fin = await mantencion_service.finalizar_solicitud(
+    sol_fin = await taller_service.finalizar_solicitud(
         db_session, solicitud_id=solicitud.id, mecanico_cierre_id=mecanico1_id, dto=dto_fin
     )
 
@@ -158,7 +158,7 @@ async def test_create_solicitud_con_categoria_id_directa(db_session, seed_test_d
             ),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(db_session, dto_crear, conductor_id)
+    solicitud = await taller_service.create_solicitud(db_session, dto_crear, conductor_id)
 
     assert solicitud.id is not None
     assert len(solicitud.detalles) == 1
@@ -175,7 +175,7 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
     Verifica que terminar_avance cierre la sesión para todos los integrantes del grupo,
     calculando inicio, fin y duracion_minutos para cada mecánico involucrado.
     """
-    from app.modules.mantencion.dtos.mantencion_dto import TerminarAvanceDTO
+    from app.modules.taller.dtos import TerminarAvanceDTO
 
     conductor_id = seed_test_data["conductor"].id
     mecanico1_id = seed_test_data["mecanico1"].id
@@ -190,7 +190,7 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
             SolicitudDetalleCreateDTO(falla_id=falla1_id, descripcion_personalizada="Avería compartida"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(db_session, dto_crear, conductor_id)
+    solicitud = await taller_service.create_solicitud(db_session, dto_crear, conductor_id)
     det_id = solicitud.detalles[0].id
 
     # 2. Mecánico 1 toma la falla con Mecánico 2 como colaborador
@@ -199,10 +199,16 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
         comentario="Inicio de reparación en pareja",
         colaboradores_ids=[mecanico2_id],
     )
-    sol_auto = await mantencion_service.autoasignar_fallas(
+    sol_auto = await taller_service.autoasignar_fallas(
         db_session, solicitud_id=solicitud.id, dto=dto_auto, mecanico_id=mecanico1_id
     )
     assert sol_auto.estado == "EN_REPARACION"
+
+    # Validar que para mec1 y mec2 aparece en mis_trabajos con numero_fallas == 1
+    trabajos_m1 = await taller_service.list_mis_trabajos(db_session, mecanico1_id)
+    sol_trabajo_m1 = next((s for s in trabajos_m1 if s.id == solicitud.id), None)
+    assert sol_trabajo_m1 is not None
+    assert sol_trabajo_m1.numero_fallas == 1
 
     # Simular que comenzaron hace 30 minutos
     hace_30 = datetime.now() - timedelta(minutes=30)
@@ -213,7 +219,7 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
     dto_terminar = TerminarAvanceDTO(
         comentario="Pausa de almuerzo del equipo; avanzamos un 50%",
     )
-    sol_fin_avance = await mantencion_service.terminar_avance(
+    sol_fin_avance = await taller_service.terminar_avance(
         db_session,
         solicitud_id=solicitud.id,
         dto=dto_terminar,
@@ -239,14 +245,17 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
     assert "Pausa de almuerzo" in ultimo_comentario.comentario
 
     # 7. Validar que NO aparece en mis_trabajos y SÍ aparece en pendientes
-    mis_trabajos_m1 = await mantencion_service.list_mis_trabajos(db_session, mecanico1_id)
+    mis_trabajos_m1 = await taller_service.list_mis_trabajos(db_session, mecanico1_id)
     assert not any(s.id == solicitud.id for s in mis_trabajos_m1)
 
-    mis_trabajos_m2 = await mantencion_service.list_mis_trabajos(db_session, mecanico2_id)
+    mis_trabajos_m2 = await taller_service.list_mis_trabajos(db_session, mecanico2_id)
     assert not any(s.id == solicitud.id for s in mis_trabajos_m2)
 
-    pendientes = await mantencion_service.list_pendientes(db_session)
-    assert any(s.id == solicitud.id for s in pendientes)
+    pendientes = await taller_service.list_pendientes(db_session)
+    sol_en_pends = next((s for s in pendientes if s.id == solicitud.id), None)
+    assert sol_en_pends is not None
+    # Como la única falla sigue sin resolver, queda 1 disponible
+    assert sol_en_pends.numero_fallas == 1
 
 
 @pytest.mark.asyncio
@@ -268,13 +277,13 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
             SolicitudDetalleCreateDTO(descripcion_personalizada="Pulmón de aire pinchado"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(
+    solicitud = await taller_service.create_solicitud(
         db_session, dto=dto_crear, creador_id=conductor_id
     )
     detalle_id = solicitud.detalles[0].id
 
     # 2. Reportar falta de repuesto para este detalle
-    await mantencion_service.reportar_repuesto(
+    await taller_service.reportar_repuesto(
         db_session,
         solicitud_id=solicitud.id,
         detalle_id=detalle_id,
@@ -286,7 +295,7 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
     )
 
     # 3. Flujo desacoplado: ahora se permite resolver la falla directamente sin bloqueo de repuestos
-    dto_check = await mantencion_service.check_detalle(
+    dto_check = await taller_service.check_detalle(
         db_session,
         solicitud_id=solicitud.id,
         detalle_id=detalle_id,
@@ -296,7 +305,7 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
     assert dto_check.resuelto is True
 
     # 4. Reportar que el repuesto llegó (falta_repuesto=False)
-    await mantencion_service.reportar_repuesto(
+    await taller_service.reportar_repuesto(
         db_session,
         solicitud_id=solicitud.id,
         detalle_id=detalle_id,
@@ -309,7 +318,7 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
 
     # 5. Ahora sí debe permitir marcarla como resuelta
     # check_detalle retorna DetalleUpdateDTO (Nivel 3 - DTO atómico)
-    dto_ok = await mantencion_service.check_detalle(
+    dto_ok = await taller_service.check_detalle(
         db_session,
         solicitud_id=solicitud.id,
         detalle_id=detalle_id,
@@ -321,7 +330,7 @@ async def test_bloqueo_resolver_falla_con_falta_repuesto(db_session):
 
     # 6. Intentar reportar falta de repuesto en una falla que ya está resuelta -> Debe fallar con BusinessRuleException
     with pytest.raises(BusinessRuleException) as exc_rep:
-        await mantencion_service.reportar_repuesto(
+        await taller_service.reportar_repuesto(
             db_session,
             solicitud_id=solicitud.id,
             detalle_id=detalle_id,
@@ -356,7 +365,7 @@ async def test_mecanicos_asignados_solo_activos_sin_duplicados(db_session):
             SolicitudDetalleCreateDTO(descripcion_personalizada="Pastillas gastadas"),
         ],
     )
-    solicitud = await mantencion_service.create_solicitud(
+    solicitud = await taller_service.create_solicitud(
         db_session, dto=dto_crear, creador_id=conductor_id
     )
     det1_id = solicitud.detalles[0].id
@@ -368,7 +377,7 @@ async def test_mecanicos_asignados_solo_activos_sin_duplicados(db_session):
         colaboradores_ids=[mecanico2_id],
         comentario="Turno mañana",
     )
-    sol_t1 = await mantencion_service.autoasignar_fallas(
+    sol_t1 = await taller_service.autoasignar_fallas(
         db_session, solicitud_id=solicitud.id, dto=dto_asig1, mecanico_id=mecanico1_id
     )
     # Deben estar M1 y M2 activos exactamente una vez
@@ -380,7 +389,7 @@ async def test_mecanicos_asignados_solo_activos_sin_duplicados(db_session):
 
     # 3. Terminar avance: el equipo pausa la orden
     dto_terminar = TerminarAvanceDTO(comentario="Fin de turno mañana")
-    sol_fin = await mantencion_service.terminar_avance(
+    sol_fin = await taller_service.terminar_avance(
         db_session, solicitud_id=solicitud.id, dto=dto_terminar, mecanico_id=mecanico1_id
     )
     # En estado PENDIENTE no hay mecánicos activos en 'mecanicos'
@@ -394,7 +403,7 @@ async def test_mecanicos_asignados_solo_activos_sin_duplicados(db_session):
         colaboradores_ids=[],
         comentario="Turno tarde solo Mecánico 1",
     )
-    sol_t2 = await mantencion_service.autoasignar_fallas(
+    sol_t2 = await taller_service.autoasignar_fallas(
         db_session, solicitud_id=solicitud.id, dto=dto_asig2, mecanico_id=mecanico1_id
     )
 

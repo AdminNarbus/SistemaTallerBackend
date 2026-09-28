@@ -7,7 +7,14 @@ El backend de Narbus Taller se ejecuta comunicándose con la base de datos Postg
 Para lograr una experiencia de usuario instantánea y fluida ("Zero-Lag UX") en las tabletas y computadores de los mecánicos en el taller, el Backend ha sido optimizado con los siguientes principios:
 
 1. **Listados Ultrarrápidos en 1 Sola Consulta SQL (Single-Roundtrip CTE + json_agg):** Las vistas de listado (`/pendientes` y `/mis-trabajos`) se ejecutan en **exactamente 1 consulta SQL nativa** en la base de datos de Neon. PostgreSQL genera directamente el JSON consolidado de detalles y mecánicos en ~1.1 ms en el servidor, eliminando de raíz las cascadas de roundtrips secuenciales y reduciendo la latencia de ~5 segundos a < 0.9s en frío y ~0.16s en caliente.
-2. **DTO Dedicado de Listado (`SolicitudResumenDTO`):** Los endpoints devuelven `List[SolicitudResumenDTO]`. Este DTO hereda directamente de `SolicitudDTO`, por lo que **no requiere ningún cambio destructivo en el Frontend**: mantiene todas las propiedades necesarias para las tarjetas (`id`, `n_bus`, `bus_patente`, `estado`, `detalles`, `total_fallas`, `mecanicos`, etc.) con arreglos vacíos `[]` en campos pesados como `comentarios` y `pauta_respuestas`.
+2. **DTO Dedicado de Listado (`SolicitudResumenDTO`):** Los endpoints `/pendientes` y `/mis-trabajos` devuelven `List[SolicitudResumenDTO]`. Este DTO ultraligero entrega de manera concisa exactamente los campos requeridos para renderizar las tarjetas de la orden sin cargar relaciones pesadas:
+   - `id`: Número identificador de la OT.
+   - `estado`: Estado actual (`REPORTADO`, `PENDIENTE`, etc.).
+   - `n_bus`: Número de la unidad.
+   - `fecha_ingreso`: Fecha de ingreso al taller (o fecha de creación).
+   - `chofer`: Conductor / creador de la OT.
+   - `tiempo_taller`: Horas acumuladas / transcurridas en taller.
+   - `numero_fallas`: Conteo contextual de averías (en Pendientes: todas las fallas disponibles sin resolver; en Mis Trabajos: las fallas asignadas al mecánico).
 3. **Caché HTTP con Revalidación en Segundo Plano:** Los endpoints de lectura implementan la cabecera estándar:
    ```http
    Cache-Control: private, max-age=15, stale-while-revalidate=30
@@ -21,53 +28,50 @@ Para lograr una experiencia de usuario instantánea y fluida ("Zero-Lag UX") en 
 
 ### Vista 1: "Buses en Taller / Bandeja de Pendientes"
 * **Propósito:** Mostrar los buses que han ingresado al taller y requieren atención o reasignación de turno.
-* **Método y Ruta:** `GET /api/v1/mantencion/pendientes`
+* **Método y Ruta:** `GET /api/v1/taller/pendientes`
 * **Parámetros Query Soportados:**
-  * `limit` *(opcional, entero, default `50`)*: Cantidad máxima de solicitudes a recuperar para paginación o scroll infinito.
-* **Estados retornados:** `REPORTADO`, `PENDIENTE`, `PENDIENTE_REASIGNACION`.
-* **Payload de Respuesta:** Lista de `SolicitudDTO`:
+  * `limit` *(opcional, entero, default `20`)*: Cantidad máxima de solicitudes a recuperar para paginación o scroll infinito.
+  * `skip` *(opcional, entero, default `0`)*.
+* **Estados retornados:** `REPORTADO`, `PENDIENTE`.
+* **Payload de Respuesta:** Lista de `SolicitudResumenDTO`:
   ```json
   [
     {
       "id": 42,
-      "n_bus": "330",
-      "bus_id": 15,
-      "bus_patente": "KLSW-89",
       "estado": "PENDIENTE",
-      "descripcion_general": "Fuga de aire en eje trasero",
-      "fecha_creacion": "2026-09-08T14:30:00",
-      "total_fallas": 2,
-      "fallas_resueltas": 0,
-      "fallas_con_falta_repuesto": 0,
-      "detalles": [
-        {
-          "id": 101,
-          "solicitud_id": 42,
-          "categoria_id": 3,
-          "categoria_nombre": "Neumática",
-          "descripcion_personalizada": "Pulmón de suspensión pinchado",
-          "resuelto": false,
-          "falta_repuesto": false,
-          "mecanicos_asignados": []
-        }
-      ],
-      "mecanicos": [],
-      "comentarios": [],
-      "pauta_respuestas": []
+      "n_bus": "330",
+      "fecha_ingreso": "2026-09-08T14:30:00",
+      "chofer": "Juan Pérez",
+      "tiempo_taller": 2.5,
+      "numero_fallas": 3
     }
   ]
   ```
-  > **Nota Clave:** `comentarios` y `pauta_respuestas` vienen como `[]` en esta vista para optimizar el peso del JSON y reducir el tiempo de carga a menos de 50 ms.
 
 ---
 
 ### Vista 2: "Mis Trabajos Activos / Mi Turno"
 * **Propósito:** Mostrar únicamente los trabajos donde el mecánico autenticado está asignado como responsable activo o tiene averías asignadas a su cargo.
-* **Método y Ruta:** `GET /api/v1/mantencion/mis-trabajos`
+* **Método y Ruta:** `GET /api/v1/taller/mis-trabajos`
 * **Parámetros Query Soportados:**
-  * `limit` *(opcional, entero, default `50`)*.
+  * `limit` *(opcional, entero, default `20`)*.
+  * `skip` *(opcional, entero, default `0`)*.
 * **Autenticación:** Requiere `Authorization: Bearer <token_mecanico>`.
-* **Payload de Respuesta:** Lista de `SolicitudDTO` idéntica a la Vista 1, filtrada por el usuario en sesión.
+* **Payload de Respuesta:** Lista de `SolicitudResumenDTO` idéntica a la Vista 1, filtrada por el usuario en sesión (donde `numero_fallas` indica las fallas asignadas al mecánico):
+  ```json
+  [
+    {
+      "id": 42,
+      "estado": "EN_REPARACION",
+      "n_bus": "330",
+      "fecha_ingreso": "2026-09-08T14:30:00",
+      "chofer": "Juan Pérez",
+      "tiempo_taller": 2.5,
+      "numero_fallas": 1
+    }
+  ]
+  ```
+
 
 ---
 

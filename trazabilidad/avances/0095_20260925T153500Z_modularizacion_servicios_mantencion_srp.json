@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 95,
+  "id": "AV-0095",
+  "timestamp": "2026-09-25T15:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-MODULARIZACION-SERVICIOS-SRP",
+    "name": "Modularización y Descomposición SRP de la Capa de Servicios de Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Descomposición y modularización profunda de la capa de servicios de mantención (app/modules/mantencion/services): separación del archivo monolítico de 2.816 líneas en 6 servicios atómicos especializados por caso de uso (MantencionCatalogoService, PautaService, SolicitudService, CuadrillaService, AveriasService, CierreService) más módulos de apoyo puros (mappers.py y estadias_helper.py). Actualización directa de los sub-routers en app/modules/mantencion/api/ para consumir sus respectivos servicios especializados, preservación de MantencionService como orquestador desacoplado para DIP en módulos dependientes (Supervisión) y verificación de la suite completa de 184 tests verdes (100%).",
+  "scope": {
+    "planned": [
+      "Extraer funciones de mapeo puro a mappers.py (dict_to_solicitud_dto, dict_to_solicitud_resumen_dto, orm_to_solicitud_dto, parse_evidencias_dtos)",
+      "Extraer utilidades de estadías y adjunción a estadias_helper.py (asegurar_ingreso_taller_y_estadia, cerrar_estadia_activa, attach_*_safe)",
+      "Crear MantencionCatalogoService para categorías, fallas y catálogo de pauta",
+      "Crear PautaService para estado y respuestas de checklist preventivo",
+      "Crear SolicitudService para creación, listados paginados y consultas de OTs",
+      "Crear CuadrillaService para toma de trabajo, asignaciones, presencia y término de avance",
+      "Crear AveriasService para agregar fallas en caliente, checks, repuestos y resolutor",
+      "Crear CierreService para finalización, liberación, cambio de estado y comentarios en bitácora",
+      "Actualizar sub-routers (catalogo_router, solicitud_router, pauta_router, cuadrilla_router, averias_router, cierre_router) para invocar servicios atómicos",
+      "Actualizar mantencion_service.py como orquestador limpio con DIP hacia los servicios especializados",
+      "Validar el 100% de la suite de pruebas automatizadas (184 tests)"
+    ],
+    "completed": [
+      "Extraer funciones de mapeo puro a mappers.py (dict_to_solicitud_dto, dict_to_solicitud_resumen_dto, orm_to_solicitud_dto, parse_evidencias_dtos)",
+      "Extraer utilidades de estadías y adjunción a estadias_helper.py (asegurar_ingreso_taller_y_estadia, cerrar_estadia_activa, attach_*_safe)",
+      "Crear MantencionCatalogoService para categorías, fallas y catálogo de pauta",
+      "Crear PautaService para estado y respuestas de checklist preventivo",
+      "Crear SolicitudService para creación, listados paginados y consultas de OTs",
+      "Crear CuadrillaService para toma de trabajo, asignaciones, presencia y término de avance",
+      "Crear AveriasService para agregar fallas en caliente, checks, repuestos y resolutor",
+      "Crear CierreService para finalización, liberación, cambio de estado y comentarios en bitácora",
+      "Actualizar sub-routers (catalogo_router, solicitud_router, pauta_router, cuadrilla_router, averias_router, cierre_router) para invocar servicios atómicos",
+      "Actualizar mantencion_service.py como orquestador limpio con DIP hacia los servicios especializados",
+      "Validar el 100% de la suite de pruebas automatizadas (184 tests)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones en contratos hacia el Frontend",
+      "Cambios en tablas relacionales o migraciones Alembic"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/services/mappers.py",
+      "action": "created",
+      "summary": "Mapeadores puros hacia SolicitudDTO y SolicitudResumenDTO (Zero-Lazy-Loading seguro)."
+    },
+    {
+      "path": "app/modules/mantencion/services/estadias_helper.py",
+      "action": "created",
+      "summary": "Lógica reutilizable de ciclo de vida de estadías en taller y mutación defensiva en memoria."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_catalogo_service.py",
+      "action": "created",
+      "summary": "Servicio de catálogos maestros de mantención (get_categorias, get_fallas, get_pauta_items)."
+    },
+    {
+      "path": "app/modules/mantencion/services/pauta_service.py",
+      "action": "created",
+      "summary": "Servicio para pauta preventiva (get_pauta_resumen, guardar_respuestas_pauta)."
+    },
+    {
+      "path": "app/modules/mantencion/services/solicitud_service.py",
+      "action": "created",
+      "summary": "Servicio para ciclo de vida de solicitudes de taller (create_solicitud, get_solicitud, list_pendientes, list_mis_trabajos, etc.)."
+    },
+    {
+      "path": "app/modules/mantencion/services/cuadrilla_service.py",
+      "action": "created",
+      "summary": "Servicio para gestión de cuadrillas (tomar_trabajo, autoasignar_fallas, asignar_fallas_supervisora, terminar_avance, etc.)."
+    },
+    {
+      "path": "app/modules/mantencion/services/averias_service.py",
+      "action": "created",
+      "summary": "Servicio para averías granulares (agregar_falla, check_detalle, reportar_repuesto, resolver_falla_supervisora)."
+    },
+    {
+      "path": "app/modules/mantencion/services/cierre_service.py",
+      "action": "created",
+      "summary": "Servicio para finalización, liberación de bus, cambio de estado y comentarios en bitácora."
+    },
+    {
+      "path": "app/modules/mantencion/services/mantencion_service.py",
+      "action": "modified",
+      "summary": "Reducción de 2.816 a 480 líneas como orquestador limpio y desacoplado delegando en servicios especializados."
+    },
+    {
+      "path": "app/modules/mantencion/services/__init__.py",
+      "action": "modified",
+      "summary": "Exportación organizada de la nueva arquitectura de servicios."
+    },
+    {
+      "path": "app/modules/mantencion/api/catalogo_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de mantencion_catalogo_service."
+    },
+    {
+      "path": "app/modules/mantencion/api/pauta_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de pauta_service."
+    },
+    {
+      "path": "app/modules/mantencion/api/solicitud_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de solicitud_service."
+    },
+    {
+      "path": "app/modules/mantencion/api/cuadrilla_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de cuadrilla_service."
+    },
+    {
+      "path": "app/modules/mantencion/api/averias_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de averias_service."
+    },
+    {
+      "path": "app/modules/mantencion/api/cierre_router.py",
+      "action": "modified",
+      "summary": "Consumo directo de cierre_service."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Descomposición Atómica de la Capa de Servicios por Caso de Uso",
+      "rationale": "El archivo mantencion_service.py acumulaba 2.816 líneas violando el Principio de Responsabilidad Única (SRP). Dividir el servicio en 6 componentes atómicos por dominio funcional facilita el mantenimiento, testing aislado y lectura clara de la lógica de taller.",
+      "consequences": "Cada router ahora se comunica directamente con su servicio especializado sin depender de un objeto dios gigante."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Preservación de MantencionService como Orquestador Desacoplado",
+      "rationale": "Módulos externos como SupervisionService y los tests unitarios de integración se benefician de una fachada orquestadora que delega directamente a los servicios atómicos mediante Inversión de Dependencias (DIP).",
+      "consequences": "Cero roturas de contratos en otros módulos y compatibilidad 100% con tests existentes."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_mantencion_service.py -v",
+      "result": "passed",
+      "evidence": "34 unit tests de mantencion_service pasando en 4.88s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_supervision_service.py -v",
+      "result": "passed",
+      "evidence": "21 unit tests de supervision_service pasando en 2.53s."
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest -v",
+      "result": "passed",
+      "evidence": "184 tests pasando (100% de la suite) en 65.41s."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "El módulo app/modules/mantencion y el módulo app/modules/buses han sido completamente modularizados bajo SRP en DTOs, Routers y Servicios.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": null,
+    "dirty": true
+  },
+  "notes": [
+    "La modularización de Mantención completó sus 3 fases: Fase 1 (DTOs), Fase 2 (Routers) y Fase 3 (Servicios).",
+    "Todos los endpoints conservan 100% idénticos contratos REST y serialización hacia el Frontend."
+  ]
+}

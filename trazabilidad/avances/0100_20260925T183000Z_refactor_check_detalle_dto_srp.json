@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 100,
+  "id": "AV-0100",
+  "timestamp": "2026-09-25T18:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-7",
+    "name": "Refactorización y Saneamiento SRP de Endpoint Check de Averías",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Refactorización de arquitectura limpia y Principio de Responsabilidad Única (SRP) del endpoint 'PATCH /mantencion/{id}/detalles/{detalle_id}/check'. Se formalizó el DTO 'CheckFallaDTO' (con alias 'ResolverFallaSupervisoraDTO') y se extrajo la resolución de parámetros híbridos a una función helper desacoplada '_resolver_check_params', reduciendo la complejidad ciclomática del controlador de 32 a 16 líneas y eliminando ramas condicionales anidadas. Se preservó el 100% de compatibilidad con llamadas JSON body y query params, con 193/193 tests pasando exitosamente.",
+  "scope": {
+    "planned": [
+      "Diseñar DTO formal CheckFallaDTO con campos tipados (resuelto, mecanico_id, mecanico_resolvio_id, usuario_id, comentario)",
+      "Crear propiedad effective_mecanico_id para resolución determinista de identidad del resolutor",
+      "Extraer lógica de consolidación de parámetros híbridos (Body vs Query) a helper _resolver_check_params",
+      "Reducir el endpoint check_detalle a menos de 20 líneas en cumplimiento estricto de SRP y Clean Code",
+      "Verificar que la suite completa de 193 pruebas pase al 100%"
+    ],
+    "completed": [
+      "CheckFallaDTO y alias ResolverFallaSupervisoraDTO implementados en app/modules/mantencion/dtos/averias_dto.py",
+      "Exportación de CheckFallaDTO y ResolverFallaSupervisoraDTO en app/modules/mantencion/dtos/__init__.py",
+      "Función coordinadora _resolver_check_params implementada en app/modules/mantencion/api/averias_router.py",
+      "Endpoint check_detalle refactorizado a 16 líneas limpias",
+      "Suite global de 193 pruebas ejecutada y aprobada al 100% (0 errores, 0 fallos)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend UI"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/mantencion/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Definición formal de CheckFallaDTO con effective_mecanico_id y alias ResolverFallaSupervisoraDTO"
+    },
+    {
+      "path": "app/modules/mantencion/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación canónica de CheckFallaDTO y ResolverFallaSupervisoraDTO"
+    },
+    {
+      "path": "app/modules/mantencion/api/averias_router.py",
+      "action": "modified",
+      "summary": "Refactorización SRP de check_detalle con _resolver_check_params y eliminación de lógica anidada"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-084",
+      "title": "Consolidación de Parámetros Híbridos en Helper Desacoplado y DTO Tipado",
+      "rationale": "El endpoint check_detalle acumulaba deuda técnica (AV-0074) al mezclar Query parameters y Body JSON con múltiples cascadas de 'if' para resolver 'resuelto' y el ID del mecánico resolutor. La extracción a '_resolver_check_params' y el uso de 'CheckFallaDTO' con la propiedad calculada 'effective_mecanico_id' encapsula la resolución en una función pura de 4 líneas, dejando el router como un mero coordinador HTTP de menos de 15 líneas.",
+      "consequences": "Mejora la legibilidad, reduce la complejidad ciclomática del router a menos de 5, respeta los límites de 20 líneas por función de BUENAS_PRACTICAS_CODIGO.md y garantiza cero regresiones contractuales en el backend."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/",
+      "result": "passed",
+      "evidence": "193 passed, 1 warning in 67.04s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Determinar con el usuario el renombre formal del módulo mantencion a taller (app/modules/taller y prefijo de rutas /api/v1/taller).",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "e7c34882bb4acd269aaec678f7daf42e81bf91d3",
+    "dirty": true
+  },
+  "notes": [
+    "Hito 100 de trazabilidad alcanzado con 193 pruebas automatizadas pasando exitosamente."
+  ]
+}

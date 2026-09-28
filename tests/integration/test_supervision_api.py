@@ -1,6 +1,6 @@
 import pytest
 from app.modules.buses.models.bus import Bus
-from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
 
 
 @pytest.mark.asyncio
@@ -204,15 +204,20 @@ async def test_supervision_mecanicos_carga_access_control(client, auth_headers_c
 
 @pytest.mark.asyncio
 async def test_supervision_auditoria_campos_operacionales(client, auth_headers_supervisor, seed_test_data):
-    """Prueba que el endpoint de auditoría incluya horas_en_taller, reincidencias_30d y fecha_liberacion."""
+    """Prueba que el endpoint de auditoría retorne SolicitudResumenDTO con campos idénticos al mecánico."""
     res = await client.get("/api/v1/supervision/auditoria/buses-taller", headers=auth_headers_supervisor)
     assert res.status_code == 200
     items = res.json()
     assert isinstance(items, list)
     for sol in items:
-        assert "horas_en_taller" in sol
-        assert "reincidencias_30d" in sol
-        assert "fecha_liberacion" in sol
+        assert "id" in sol
+        assert "estado" in sol
+        assert "n_bus" in sol
+        assert "fecha_ingreso" in sol
+        assert "chofer" in sol
+        assert "tiempo_taller" in sol
+        assert "numero_fallas" in sol
+        assert isinstance(sol["numero_fallas"], int)
 
 
 @pytest.mark.asyncio
@@ -227,7 +232,7 @@ async def test_supervision_agregar_falla_y_detalle_ot(
         "n_bus": "BUS-SUP-FALLAS",
         "descripcion_general": "Revisión técnica supervisada",
     }
-    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    create_res = await client.post("/api/v1/taller/solicitudes", json=sol_payload, headers=auth_headers_conductor)
     assert create_res.status_code == 201
     sol_id = create_res.json()["id"]
 
@@ -278,7 +283,7 @@ async def test_supervision_agregar_falla_resuelta_con_mecanico(
         "n_bus": "BUS-SUP-RESUELTA",
         "descripcion_general": "Inspección de egreso",
     }
-    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    create_res = await client.post("/api/v1/taller/solicitudes", json=sol_payload, headers=auth_headers_conductor)
     assert create_res.status_code == 201
     sol_id = create_res.json()["id"]
 
@@ -320,7 +325,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
             }
         ],
     }
-    create_res = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    create_res = await client.post("/api/v1/taller/solicitudes", json=sol_payload, headers=auth_headers_conductor)
     assert create_res.status_code == 201
     sol_data = create_res.json()
     sol_id = sol_data["id"]
@@ -377,7 +382,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
 
     # 6. Probar endpoint de mantención /detalles/{id}/check invocado por supervisora con query params
     res_mant_check = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check?resuelto=true&mecanico_id={mecanico1.id}",
+        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check?resuelto=true&mecanico_id={mecanico1.id}",
         headers=auth_headers_supervisor,
     )
     assert res_mant_check.status_code == 200
@@ -386,7 +391,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
 
     # 7. Probar endpoint de mantención /detalles/{id}/check enviando Body JSON puro (sin query params)
     res_mant_body = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{detalle_id}/check",
+        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check",
         json={"resuelto": True, "mecanico_id": mecanico1.id},
         headers=auth_headers_supervisor,
     )

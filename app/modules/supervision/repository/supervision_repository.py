@@ -6,14 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload, aliased
 
 from app.core.config import settings
-from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
-from app.modules.mantencion.models.taller_solicitud_detalle import TallerSolicitudDetalle
-from app.modules.mantencion.models.taller_solicitud_mecanico import TallerSolicitudMecanico
-from app.modules.mantencion.models.taller_solicitud_comentario import TallerSolicitudComentario
-from app.modules.mantencion.models.taller_asignacion_falla import TallerAsignacionFalla
-from app.modules.mantencion.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
-from app.modules.mantencion.models.falla_taller import FallaTaller
-from app.modules.mantencion.models.categoria_falla import CategoriaFalla
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
+from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudMecanico
+from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.models.falla_taller import FallaTaller
+from app.modules.taller.models.categoria_falla import CategoriaFalla
 from app.modules.buses.models.bus import Bus
 from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.models.rol import Rol
@@ -88,7 +88,7 @@ class SupervisionRepository:
             .group_by(CategoriaFalla.id, CategoriaFalla.nombre)
         )
         res = await db.execute(stmt)
-        return list(res.all())
+        return [(r[0], r[1], r[2]) for r in res.all()]
 
     async def get_mecanicos_con_carga(self, db: AsyncSession) -> List[dict]:
         """
@@ -673,8 +673,10 @@ class SupervisionRepository:
         if db.bind and db.bind.dialect.name == "postgresql":
             sql = text("""
                 WITH base_filtered AS (
-                    SELECT s.id, s.n_bus, s.usuario_creador_id, s.mecanico_cierre_id,
+                    SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.fecha_primer_ingreso_taller,
+                           COALESCE(s.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                            ROUND((EXTRACT(EPOCH FROM (COALESCE(s.fecha_cierre, now()) - s.fecha_creacion)) / 3600)::numeric, 1) as horas_en_taller,
                            COALESCE((
                                SELECT COUNT(*)::int
@@ -763,6 +765,24 @@ class SupervisionRepository:
                     LEFT JOIN fallas_taller f ON f.id = d.falla_id
                     LEFT JOIN categorias_falla cf ON cf.id = f.categoria_id
                     GROUP BY d.solicitud_id
+                ),
+                estadias_agg AS (
+                    SELECT
+                        es.solicitud_id,
+                        json_agg(
+                            json_build_object(
+                                'id', es.id,
+                                'solicitud_id', es.solicitud_id,
+                                'numero_visita', es.numero_visita,
+                                'fecha_ingreso', es.fecha_ingreso,
+                                'fecha_salida', es.fecha_salida,
+                                'horas_estadia', es.horas_estadia,
+                                'motivo_salida', es.motivo_salida
+                            ) ORDER BY es.numero_visita ASC, es.id ASC
+                        ) as estadias_json
+                    FROM taller_solicitud_estadias es
+                    JOIN base_filtered bf ON bf.id = es.solicitud_id
+                    GROUP BY es.solicitud_id
                 )
                 SELECT 
                     bf.id,
@@ -771,6 +791,10 @@ class SupervisionRepository:
                     bf.fecha_creacion,
                     bf.fecha_cierre,
                     bf.fecha_liberacion,
+                    bf.fecha_primer_ingreso_taller,
+                    bf.horas_taller_acumuladas,
+                    COALESCE(b.en_taller, false) as bus_en_taller,
+                    COALESCE(esa.estadias_json, '[]'::json) as estadias_json,
                     CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
                     bf.horas_en_taller,
@@ -805,10 +829,12 @@ class SupervisionRepository:
                         '[]'::json
                     ) as mecanicos
                 FROM base_filtered bf
+                LEFT JOIN buses b ON b.id = bf.bus_id
                 LEFT JOIN usuarios u ON u.id = bf.usuario_creador_id
                 LEFT JOIN usuarios mc ON mc.id = bf.mecanico_cierre_id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = bf.id
                 LEFT JOIN detalles_agg da ON da.solicitud_id = bf.id
+                LEFT JOIN estadias_agg esa ON esa.solicitud_id = bf.id
                 ORDER BY bf.fecha_creacion DESC;
             """)
             params = {
@@ -837,6 +863,7 @@ class SupervisionRepository:
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
+                selectinload(TallerSolicitud.estadias),
             )
         )
 

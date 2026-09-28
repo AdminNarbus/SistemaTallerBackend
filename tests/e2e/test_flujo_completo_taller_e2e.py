@@ -32,7 +32,7 @@ async def test_flujo_completo_taller_e2e(
             {"falla_id": falla2_id, "descripcion_personalizada": "Sonido metálico al frenar"},
         ],
     }
-    res_crear = await client.post("/api/v1/mantencion/solicitudes", json=sol_payload, headers=auth_headers_conductor)
+    res_crear = await client.post("/api/v1/taller/solicitudes", json=sol_payload, headers=auth_headers_conductor)
     assert res_crear.status_code == 201
     sol_data = res_crear.json()
     sol_id = sol_data["id"]
@@ -47,7 +47,7 @@ async def test_flujo_completo_taller_e2e(
     # -------------------------------------------------------------------------
     # PASO 2: Mecánico 1 consulta solicitudes pendientes en Pestaña 1
     # -------------------------------------------------------------------------
-    res_pends = await client.get("/api/v1/mantencion/pendientes", headers=auth_headers_mecanico1)
+    res_pends = await client.get("/api/v1/taller/pendientes", headers=auth_headers_mecanico1)
     assert res_pends.status_code == 200
     assert any(s["id"] == sol_id for s in res_pends.json())
 
@@ -55,7 +55,7 @@ async def test_flujo_completo_taller_e2e(
     # PASO 3: Mecánico 1 toma el trabajo como Líder e invita a Mecánico 2
     # -------------------------------------------------------------------------
     res_tomar = await client.post(
-        f"/api/v1/mantencion/{sol_id}/tomar",
+        f"/api/v1/taller/{sol_id}/tomar",
         json={"colaboradores_ids": [mecanico2_id], "comentario_inicial": "Mecánico 1 y 2 asumen la reparación"},
         headers=auth_headers_mecanico1,
     )
@@ -68,7 +68,7 @@ async def test_flujo_completo_taller_e2e(
     # PASO 4: Mecánico 1 resuelve la primera falla (det1) y agrega comentario
     # -------------------------------------------------------------------------
     res_check1 = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{det1_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check?resuelto=true",
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200
@@ -76,7 +76,7 @@ async def test_flujo_completo_taller_e2e(
     assert res_check1.json()["resuelto"] is True
 
     res_com1 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/comentarios",
+        f"/api/v1/taller/{sol_id}/comentarios",
         json={"tipo": "AVANCE", "comentario": "Se ajustó manguera del radiador."},
         headers=auth_headers_mecanico1,
     )
@@ -86,7 +86,7 @@ async def test_flujo_completo_taller_e2e(
     # PASO 5: Mecánico 1 realiza entrega de turno al finalizar la jornada
     # -------------------------------------------------------------------------
     res_liberar = await client.post(
-        f"/api/v1/mantencion/{sol_id}/liberar-turno",
+        f"/api/v1/taller/{sol_id}/liberar-turno",
         json={"comentario": "Falta cambiar pastillas de freno en el turno noche."},
         headers=auth_headers_mecanico1,
     )
@@ -97,7 +97,7 @@ async def test_flujo_completo_taller_e2e(
     # PASO 6: Mecánico 2 toma el turno nocturno como Líder
     # -------------------------------------------------------------------------
     res_tomar2 = await client.post(
-        f"/api/v1/mantencion/{sol_id}/tomar",
+        f"/api/v1/taller/{sol_id}/tomar",
         json={"colaboradores_ids": [], "comentario_inicial": "Mecánico 2 retoma orden en turno noche"},
         headers=auth_headers_mecanico2,
     )
@@ -108,13 +108,13 @@ async def test_flujo_completo_taller_e2e(
     # PASO 7: Mecánico 2 resuelve la segunda falla (det2) y finaliza la orden
     # -------------------------------------------------------------------------
     res_check2 = await client.patch(
-        f"/api/v1/mantencion/{sol_id}/detalles/{det2_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det2_id}/check?resuelto=true",
         headers=auth_headers_mecanico2,
     )
     assert res_check2.status_code == 200
 
     res_finalizar = await client.post(
-        f"/api/v1/mantencion/{sol_id}/finalizar",
+        f"/api/v1/taller/{sol_id}/finalizar",
         json={"comentario_cierre": "Pastillas instaladas y probadas. Bus liberado."},
         headers=auth_headers_mecanico2,
     )
@@ -134,19 +134,21 @@ async def test_flujo_completo_taller_e2e(
     assert target_auditoria is not None
     assert target_auditoria["n_bus"] == "BUS-808"
     assert target_auditoria["estado"] == "FINALIZADO"
-    # La lista de auditoría omite deliberadamente colecciones pesadas e IDs secundarios para optimizar las tarjetas:
+    assert "fecha_ingreso" in target_auditoria
+    assert "tiempo_taller" in target_auditoria
+    assert "numero_fallas" in target_auditoria
+    # La lista de auditoría ahora responde como SolicitudResumenDTO (ultraligero igual que el mecánico):
     assert "comentarios" not in target_auditoria
     assert "pauta_respuestas" not in target_auditoria
     assert "bus_patente" not in target_auditoria
     assert "bus_id" not in target_auditoria
     assert "descripcion_general" not in target_auditoria
     assert "foto_url" not in target_auditoria
-    assert len(target_auditoria["mecanicos"]) == 2
-    assert target_auditoria["mecanicos"][0]["mecanico_nombre"] is not None
-    assert "mecanico_id" not in target_auditoria["mecanicos"][0]
+    assert "mecanicos" not in target_auditoria
+    assert "detalles" not in target_auditoria
 
     # Para auditoría profunda y bitácora completa de comentarios, se consulta el detalle de la solicitud:
-    res_detalle = await client.get(f"/api/v1/mantencion/{sol_id}", headers=auth_headers_supervisor)
+    res_detalle = await client.get(f"/api/v1/taller/{sol_id}", headers=auth_headers_supervisor)
     assert res_detalle.status_code == 200
     detalle = res_detalle.json()
     assert len(detalle["comentarios"]) >= 4

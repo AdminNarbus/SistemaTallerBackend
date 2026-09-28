@@ -4,20 +4,23 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.mantencion.models.taller_solicitud import TallerSolicitud
-from app.modules.mantencion.utils import calcular_horas_en_taller
-from app.modules.mantencion.services.mantencion_service import (
-    MantencionService,
-    mantencion_service,
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.utils import calcular_horas_en_taller, calcular_telemetria_estadias
+from app.modules.taller.services.taller_service import (
+    TallerService,
+    taller_service,
 )
-from app.modules.mantencion.dtos.mantencion_dto import (
+from app.modules.taller.dtos import (
     AsignarFallasSupervisoraDTO,
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
+    SolicitudResumenDTO,
+    EstadiaTallerDTO,
     AgregarFallaDTO,
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
 )
+from app.modules.taller.services.mappers import orm_to_solicitud_resumen_dto
 
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
@@ -48,10 +51,71 @@ class SupervisionService:
     def __init__(
         self,
         repository: Optional[SupervisionRepository] = None,
-        mantencion_srv: Optional[MantencionService] = None,
+        mantencion_srv: Optional[TallerService] = None,
     ) -> None:
         self.repo = repository or supervision_repository
-        self.mantencion = mantencion_srv or mantencion_service
+        self.mantencion = mantencion_srv or taller_service
+
+    def _mapear_a_solicitud_resumen_dto(self, item: dict | TallerSolicitud) -> SolicitudResumenDTO:
+        if isinstance(item, dict):
+            return self._mapear_dict_a_solicitud_resumen_dto(item)
+        res = orm_to_solicitud_resumen_dto(item, mecanico_id=None)
+        if res is None:
+            # Fallback en caso extremo
+            return SolicitudResumenDTO(
+                id=item.id,
+                estado=item.estado,
+                n_bus=item.n_bus or "S/N",
+                fecha_ingreso=getattr(item, "fecha_primer_ingreso_taller", None) or item.fecha_creacion,
+                chofer=item.creador.nombre_completo if getattr(item, "creador", None) else None,
+                tiempo_taller=calcular_horas_en_taller(item.fecha_creacion, item.fecha_cierre),
+                numero_fallas=sum(1 for d in getattr(item, "detalles", []) if not getattr(d, "resuelto", False)),
+            )
+        return res
+
+    def _mapear_dict_a_solicitud_resumen_dto(self, data: dict) -> SolicitudResumenDTO:
+        fecha_ingreso = data.get("fecha_primer_ingreso_taller") or data.get("fecha_creacion")
+        conteo_fallas = data.get("fallas_pendientes")
+        if conteo_fallas is None:
+            detalles_raw = data.get("detalles") or data.get("detalles_json") or []
+            if isinstance(detalles_raw, str):
+                try:
+                    detalles_raw = json.loads(detalles_raw)
+                except Exception:
+                    detalles_raw = []
+            conteo_fallas = sum(1 for d in detalles_raw if not d.get("resuelto"))
+
+        # Cálculo de tiempo neto real en maestranza (idéntico a la lógica del mecánico)
+        estadias_raw = data.get("estadias") or data.get("estadias_json") or []
+        if isinstance(estadias_raw, str):
+            try:
+                estadias_raw = json.loads(estadias_raw)
+            except Exception:
+                estadias_raw = []
+        estadias_dtos = [
+            EstadiaTallerDTO(**e) for e in estadias_raw if isinstance(e, dict)
+        ]
+
+        bus_en_taller = bool(data.get("bus_en_taller", False))
+        horas_acum, total_vis = calcular_telemetria_estadias(
+            estadias=estadias_dtos,
+            horas_taller_acumuladas_db=data.get("horas_taller_acumuladas"),
+            en_taller=bus_en_taller,
+        )
+        tiempo_taller_val = (
+            horas_acum if (total_vis > 0 or data.get("horas_taller_acumuladas") is not None)
+            else data.get("horas_en_taller")
+        )
+
+        return SolicitudResumenDTO(
+            id=data["id"],
+            estado=data["estado"],
+            n_bus=data.get("n_bus") or "S/N",
+            fecha_ingreso=fecha_ingreso,
+            chofer=data.get("usuario_creador_nombre"),
+            tiempo_taller=tiempo_taller_val,
+            numero_fallas=conteo_fallas,
+        )
 
     def _mapear_a_auditoria_dto(self, item: dict | TallerSolicitud) -> SolicitudAuditoriaDTO:
         if isinstance(item, dict):
@@ -212,10 +276,10 @@ class SupervisionService:
         mecanico_nombre: Optional[str] = None,
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
-    ) -> List[SolicitudAuditoriaDTO]:
-        """Obtiene la auditoría de solicitudes de taller optimizada para tarjetas de supervisión."""
+    ) -> List[SolicitudResumenDTO]:
+        """Obtiene la lista resumen de solicitudes de taller para supervisión (idéntico al formato del mecánico)."""
         logger.info(
-            "[SUPERVISION_SERVICE] Obteniendo auditoria de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
+            "[SUPERVISION_SERVICE] Obteniendo lista de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
             n_bus,
             estado,
             mecanico_nombre,
@@ -230,7 +294,7 @@ class SupervisionService:
             skip=skip,
             limit=limit,
         )
-        return [self._mapear_a_auditoria_dto(item) for item in solicitudes]
+        return [self._mapear_a_solicitud_resumen_dto(item) for item in solicitudes]
 
     async def count_auditoria_solicitudes(
         self,
@@ -269,7 +333,7 @@ class SupervisionService:
     ) -> SolicitudDTO:
         """
         Caso de uso de supervisión: Asignación directa de fallas por parte de la supervisora
-        a un mecánico específico. Coordina con MantencionService para la ejecución de la regla de taller.
+        a un mecánico específico. Coordina con TallerService para la ejecución de la regla de taller.
         """
         logger.info(
             "[SUPERVISION_SERVICE] Asignando fallas a mecánico | supervisor_id=%s | mecanico_id=%s | solicitud_id=%s",
@@ -292,7 +356,7 @@ class SupervisionService:
         """
         Caso de uso de supervisión: Cambio de estado de una OT por parte de la supervisora
         con justificación en la bitácora inmutable.
-        Coordina con MantencionService para la ejecución de las reglas de taller.
+        Coordina con TallerService para la ejecución de las reglas de taller.
         """
         logger.info(
             "[SUPERVISION_SERVICE] Cambiando estado de solicitud | supervisor_id=%s | solicitud_id=%s | nuevo_estado=%s",

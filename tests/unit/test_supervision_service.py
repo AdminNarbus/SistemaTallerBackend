@@ -27,9 +27,6 @@ from app.modules.supervision.dtos import (
 )
 from app.modules.supervision.utils import (
     calcular_porcentaje_resolucion,
-    formatear_mensaje_alerta_repuesto,
-    formatear_mensaje_alerta_pauta,
-    formatear_mensaje_alerta_bus_sin_mecanicos,
     formatear_mensaje_tiempo_taller_excedido,
     formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
@@ -95,51 +92,56 @@ async def test_supervision_resumen_taller_kpis(db_session, seed_test_data):
 
 @pytest.mark.asyncio
 async def test_supervision_alertas_operacionales(db_session, seed_test_data):
-    """Prueba la generación de alertas operacionales de taller."""
+    """Prueba la generación de alertas operacionales de taller (TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO)."""
+    from datetime import datetime, timedelta, timezone
     conductor = seed_test_data["conductor"]
 
-    # 1. Sembrar ítem de pauta
-    pauta_item = PautaTallerItem(id=88, categoria="Motor", item="Nivel de aceite", orden=1, is_active=True)
-    db_session.add(pauta_item)
-
-    # 2. Sembrar orden con falta de repuestos y pauta con defecto
-    sol = TallerSolicitud(
-        id=702,
-        n_bus="888",
-        usuario_creador_id=conductor.id,
-        estado="EN_REPARACION",
-        descripcion_general="Prueba de alertas",
-    )
-    db_session.add(sol)
+    # 1. Sembrar bus en taller
+    bus = Bus(id=770, n_bus="888", patente="SUP888", marca="Scania", modelo="K400", is_active=True, en_taller=True)
+    db_session.add(bus)
     await db_session.flush()
 
-    det = TallerSolicitudDetalle(
-        id=803,
-        solicitud_id=702,
-        descripcion_personalizada="Filtro de combustible tapado",
-        falta_repuesto=True,
-        comentario_repuesto="Esperando repuesto desde Santiago",
-        resuelto=False,
+    # 2. Sembrar orden con fecha_creacion antigua (excediendo umbral de permanencia en taller: 72 horas)
+    fecha_antigua = datetime.now(timezone.utc) - timedelta(hours=72)
+    sol1 = TallerSolicitud(
+        id=702,
+        n_bus="888",
+        bus_id=770,
+        usuario_creador_id=conductor.id,
+        estado="EN_REPARACION",
+        descripcion_general="Prueba de alertas permanencia taller",
+        fecha_creacion=fecha_antigua,
     )
-    pauta_resp = TallerSolicitudPauta(
-        solicitud_id=702,
-        item_id=88,
-        estado="DEFECTO",
-        observacion="Aceite negro con virutas",
+    # Sembrar orden en estado LIBERADO con fecha_liberacion antigua (excediendo umbral: 96 horas)
+    fecha_lib_antigua = datetime.now(timezone.utc) - timedelta(hours=96)
+    sol2 = TallerSolicitud(
+        id=703,
+        n_bus="889",
+        usuario_creador_id=conductor.id,
+        estado="LIBERADO",
+        descripcion_general="Prueba de alertas liberado",
+        fecha_creacion=fecha_lib_antigua,
+        fecha_liberacion=fecha_lib_antigua,
     )
-    db_session.add_all([det, pauta_resp])
+    db_session.add_all([sol1, sol2])
     await db_session.commit()
 
     # 3. Consultar centro de alertas
     alertas = await supervision_service.get_alertas_taller(db_session)
     tipos = [a.tipo for a in alertas]
 
-    assert "REPUESTO_FALTANTE" in tipos
-    assert "DEFECTO_PAUTA" in tipos
+    assert TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO in tipos
+    assert TipoAlertaSupervision.LIBERADO_TIEMPO_EXCEDIDO in tipos
 
-    alerta_rep = next(a for a in alertas if a.tipo == "REPUESTO_FALTANTE" and a.solicitud_id == 702)
-    assert "Esperando repuesto" in alerta_rep.mensaje
-    assert alerta_rep.severidad == "ALTA"
+    alerta_taller = next(a for a in alertas if a.tipo == TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO and a.solicitud_id == 702)
+    assert "888" in alerta_taller.mensaje
+    assert alerta_taller.horas_acumuladas is not None
+    assert alerta_taller.horas_acumuladas >= 71.0
+
+    alerta_lib = next(a for a in alertas if a.tipo == TipoAlertaSupervision.LIBERADO_TIEMPO_EXCEDIDO and a.solicitud_id == 703)
+    assert "889" in alerta_lib.mensaje
+    assert alerta_lib.horas_acumuladas is not None
+    assert alerta_lib.horas_acumuladas >= 95.0
 
 
 @pytest.mark.asyncio
@@ -154,9 +156,10 @@ async def test_supervision_repository_consultas_atomicas(db_session, seed_test_d
     assert isinstance(conteos, dict)
 
     # 3. get_conteos_fallas
-    total_f, resueltas_f = await supervision_repository.get_conteos_fallas(db_session)
+    total_f, resueltas_f, bloq_f = await supervision_repository.get_conteos_fallas(db_session)
     assert isinstance(total_f, int)
     assert isinstance(resueltas_f, int)
+    assert isinstance(bloq_f, int)
     assert total_f >= resueltas_f
 
     # 4. get_buses_activos_taller
@@ -202,51 +205,48 @@ def test_calcular_porcentaje_resolucion_completa():
 
 
 def test_formatear_mensajes_alertas():
-    """Valida la construcción semántica de los mensajes de alertas operacionales."""
-    # 1. Repuesto con comentario
-    msg1 = formatear_mensaje_alerta_repuesto(12, "105", "Esperando alternador")
-    assert msg1 == "Falla #12 en Bus 105 detenida por falta de repuestos: Esperando alternador"
+    """Valida la construcción semántica de los mensajes de alertas operacionales de permanencia."""
+    # 1. Tiempo en taller con horas < 48
+    msg1 = formatear_mensaje_tiempo_taller_excedido("101", 36.0, "EN_REPARACION")
+    assert msg1 == "Bus 101 lleva 36 horas en taller (EN_REPARACION) sin finalizar"
 
-    # 2. Repuesto sin comentario
-    msg2 = formatear_mensaje_alerta_repuesto(12, "105", None)
-    assert msg2 == "Falla #12 en Bus 105 detenida por falta de repuestos"
+    # 2. Tiempo en taller con días >= 48
+    msg2 = formatear_mensaje_tiempo_taller_excedido("102", 72.0, "PENDIENTE")
+    assert msg2 == "Bus 102 lleva 3.0 días en taller (PENDIENTE) sin finalizar"
 
-    # 3. Repuesto con bus vacío (usa fallback BUS_SIN_NUMERO)
-    msg3 = formatear_mensaje_alerta_repuesto(12, "", "")
-    assert msg3 == f"Falla #12 en Bus {BUS_SIN_NUMERO} detenida por falta de repuestos"
+    # 3. Tiempo en taller sin n_bus (usa fallback)
+    msg3 = formatear_mensaje_tiempo_taller_excedido("", 50.0)
+    assert msg3 == f"Bus {BUS_SIN_NUMERO} lleva 2.1 días en taller sin finalizar"
 
-    # 4. Pauta preventiva con ítem nombrado
-    msg4 = formatear_mensaje_alerta_pauta("202", item_nombre="Presión de frenos", item_id=3)
-    assert msg4 == "Ítem de pauta preventiva con defecto en Bus 202: Presión de frenos"
+    # 4. Liberado tiempo excedido
+    msg4 = formatear_mensaje_liberado_tiempo_excedido("103", 96.0)
+    assert msg4 == "Bus 103 lleva 4.0 días circulando en estado LIBERADO con fallas pendientes"
 
-    # 5. Pauta preventiva sin nombre de ítem (usa ID)
-    msg5 = formatear_mensaje_alerta_pauta("202", item_nombre=None, item_id=7)
-    assert msg5 == "Ítem de pauta preventiva con defecto en Bus 202: Ítem #7"
-
-    # 6. Bus sin mecánicos
-    msg6 = formatear_mensaje_alerta_bus_sin_mecanicos("303")
-    assert msg6 == "Bus 303 figura EN_REPARACION pero no tiene mecánicos activos asignados"
+    # 5. Liberado tiempo excedido < 48 horas
+    msg5 = formatear_mensaje_liberado_tiempo_excedido("104", 30.0)
+    assert msg5 == "Bus 104 lleva 30 horas circulando en estado LIBERADO con fallas pendientes"
 
 
 def test_construir_alerta_supervision():
     """Valida la instanciación de AlertaSupervisionDTO mediante el helper puro."""
     # Arrange & Act
     alerta = construir_alerta_supervision(
-        tipo=TipoAlertaSupervision.REPUESTO_FALTANTE,
+        tipo=TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO,
         severidad=SeveridadAlerta.ALTA,
         solicitud_id=501,
         n_bus="404",
         mensaje="Alerta de prueba",
-        detalle_id=99,
+        horas_acumuladas=220.5,
     )
 
     # Assert
     assert isinstance(alerta, AlertaSupervisionDTO)
-    assert alerta.tipo == TipoAlertaSupervision.REPUESTO_FALTANTE
+    assert alerta.tipo == TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO
     assert alerta.severidad == SeveridadAlerta.ALTA
     assert alerta.solicitud_id == 501
     assert alerta.n_bus == "404"
-    assert alerta.detalle_id == 99
+    assert alerta.detalle_id is None
+    assert alerta.horas_acumuladas == 220.5
     assert alerta.mensaje == "Alerta de prueba"
 
 

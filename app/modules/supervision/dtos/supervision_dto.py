@@ -31,7 +31,7 @@ class MecanicoCargaDTO(BaseModel):
 
 
 class AlertaSupervisionDTO(BaseModel):
-    tipo: TipoAlertaSupervision | str = Field(..., description="TIEMPO_EN_TALLER_EXCEDIDO | LIBERADO_TIEMPO_EXCEDIDO | REPUESTO_FALTANTE | DEFECTO_PAUTA | BUS_SIN_MECANICOS")
+    tipo: TipoAlertaSupervision | str = Field(..., description="TIEMPO_EN_TALLER_EXCEDIDO | LIBERADO_TIEMPO_EXCEDIDO")
     severidad: SeveridadAlerta | str = Field(SeveridadAlerta.MEDIA, description="BAJA | MEDIA | ALTA | CRITICA")
     solicitud_id: int
     n_bus: str

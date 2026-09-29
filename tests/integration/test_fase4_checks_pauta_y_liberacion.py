@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.pauta_taller import PautaTallerItem
 
@@ -15,16 +15,16 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     Verifica de punta a punta:
     1. Siembra de ítems de pauta preventiva y creación de solicitud con bus en taller.
     2. Reporte de falta de repuesto en una falla.
-    3. Consulta de ítems y estado inicial de pauta (0/11).
-    4. Carga parcial de pauta (6/11).
+    3. Consulta de ítems y estado inicial de pauta (0/10).
+    4. Carga parcial de pauta (6/10).
     5. Intento de liberación con pauta incompleta sin justificación -> 422.
     6. Liberación con justificación de pauta incompleta, pero con fallas abiertas sin motivo_cierre_parcial -> 422.
     7. Cierre parcial exitoso con motivo_incompleto_checklist y motivo_cierre_parcial -> 200 y bus pasa a en_taller=False.
     """
-    # 0. Sembrar 11 ítems de pauta preventiva si no existen
+    # 0. Sembrar 10 ítems de pauta preventiva si no existen
     items_exist = [
         PautaTallerItem(id=i, categoria="General", item=f"Revisión preventiva item {i}", orden=i, is_active=True)
-        for i in range(1, 12)
+        for i in range(1, 11)
     ]
     db_session.add_all(items_exist)
 
@@ -73,7 +73,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     res_pauta_items = await client.get("/api/v1/taller/pauta/items", headers=auth_headers_mecanico1)
     assert res_pauta_items.status_code == 200
     pauta_items = res_pauta_items.json()
-    assert len(pauta_items) >= 11
+    assert len(pauta_items) >= 10
 
     # Consultar estado de pauta para esta solicitud
     res_pauta_sol = await client.get(f"/api/v1/taller/{sol_id}/pauta", headers=auth_headers_mecanico1)
@@ -92,7 +92,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     assert res_guardar_pauta.status_code == 200
     data_pauta_post = res_guardar_pauta.json()
     assert data_pauta_post["respondidos"] == 6
-    assert data_pauta_post["pendientes"] == 5
+    assert data_pauta_post["pendientes"] == 4
     assert data_pauta_post["completado"] is False
 
     # 5. Intentar liberar con pauta incompleta sin motivo_incompleto_checklist -> 422 (BusinessRuleException)
@@ -108,7 +108,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     res_lib_invalida_fallas = await client.post(
         f"/api/v1/taller/{sol_id}/liberar",
         json={
-            "motivo_incompleto_checklist": "No se revisaron items 7 a 11 por urgencia de horario",
+            "motivo_incompleto_checklist": "No se revisaron items 7 a 10 por urgencia de horario",
             "comentario_cierre": "Liberando bus",
         },
         headers=auth_headers_mecanico1,
@@ -120,7 +120,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     res_lib_ok = await client.post(
         f"/api/v1/taller/{sol_id}/liberar",
         json={
-            "motivo_incompleto_checklist": "No se revisaron items 7 a 11 por urgencia de horario",
+            "motivo_incompleto_checklist": "No se revisaron items 7 a 10 por urgencia de horario",
             "motivo_cierre_parcial": "Falla 2 postergada por repuesto de bomba en tránsito desde Santiago",
             "comentario_cierre": "Bus liberado con cierre parcial autorizado",
             "liberar_bus_taller": True,
@@ -131,7 +131,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     data_lib = res_lib_ok.json()
     assert data_lib["estado"] == "LIBERADO"
     assert data_lib["fecha_cierre"] is None
-    assert data_lib["motivo_incompleto_checklist"] == "No se revisaron items 7 a 11 por urgencia de horario"
+    assert data_lib["motivo_incompleto_checklist"] == "No se revisaron items 7 a 10 por urgencia de horario"
     assert data_lib["motivo_cierre_parcial"] == "Falla 2 postergada por repuesto de bomba en tránsito desde Santiago"
 
     # Verificar que el bus ya NO está en taller

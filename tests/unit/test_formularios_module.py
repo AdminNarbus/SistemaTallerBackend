@@ -15,10 +15,10 @@ from app.modules.formularios.services import (
 
 
 async def _sembrar_pauta_items(db_session):
-    """Siembra 11 ítems estándar de pauta de taller para pruebas unitarias."""
+    """Siembra 10 ítems estándar de pauta de taller para pruebas unitarias."""
     items = [
         PautaTallerItem(id=i, categoria="General", item=f"Ítem Pauta {i}", orden=i, is_active=True)
-        for i in range(1, 12)
+        for i in range(1, 11)
     ]
     db_session.add_all(items)
     await db_session.commit()
@@ -30,7 +30,7 @@ async def test_formularios_pauta_repository_items(db_session):
     """Verifica que pauta_repository consulte el catálogo maestro de ítems."""
     await _sembrar_pauta_items(db_session)
     items = await pauta_repository.get_pauta_items(db_session)
-    assert len(items) >= 11
+    assert len(items) >= 10
     assert any(it.item for it in items)
 
 
@@ -51,7 +51,7 @@ async def test_formularios_pauta_service_resumen(db_session, seed_test_data):
     )
 
     resumen = await formulario_pauta_service.get_pauta_resumen(db_session, solicitud.id)
-    assert resumen.total_items >= 11
+    assert resumen.total_items >= 10
     assert isinstance(resumen.respondidos, int)
     assert isinstance(resumen.completado, bool)
     assert resumen.respondidos == 0
@@ -111,7 +111,7 @@ async def test_formularios_pauta_service_guardar_respuestas(db_session, seed_tes
         mecanico_id=mecanico.id,
     )
 
-    assert resumen.total_items >= 11
+    assert resumen.total_items >= 10
     assert resumen.respondidos == 2
     assert resumen.items_con_defecto == 1
     assert resumen.pendientes == resumen.total_items - 2

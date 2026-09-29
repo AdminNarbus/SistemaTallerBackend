@@ -452,6 +452,7 @@ class TallerRepository:
                     b.patente as bus_patente,
                     fs.usuario_creador_id,
                     CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
+                    u.telefono as usuario_creador_telefono,
                     fs.mecanico_cierre_id,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
                     fs.estado,

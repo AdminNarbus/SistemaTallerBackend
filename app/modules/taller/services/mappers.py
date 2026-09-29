@@ -133,6 +133,7 @@ def dict_to_solicitud_dto(
         bus_patente=r.get("bus_patente"),
         usuario_creador_id=r.get("usuario_creador_id"),
         usuario_creador_nombre=r.get("usuario_creador_nombre"),
+        usuario_creador_telefono=r.get("usuario_creador_telefono"),
         mecanico_cierre_id=r.get("mecanico_cierre_id"),
         mecanico_cierre_nombre=r.get("mecanico_cierre_nombre"),
         estado=r["estado"],
@@ -527,6 +528,7 @@ def orm_to_solicitud_dto(
 
     creador = _get_rel(sol, "creador")
     creador_nombre = creador.nombre_completo if creador else None
+    creador_telefono = getattr(creador, "telefono", None) if creador else None
     mec_cierre = _get_rel(sol, "mecanico_cierre")
     mecanico_cierre_nombre = (
         mec_cierre.nombre_completo
@@ -597,6 +599,7 @@ def orm_to_solicitud_dto(
         bus_patente=bus_patente,
         usuario_creador_id=sol.usuario_creador_id,
         usuario_creador_nombre=creador_nombre,
+        usuario_creador_telefono=creador_telefono,
         mecanico_cierre_id=sol.mecanico_cierre_id,
         mecanico_cierre_nombre=mecanico_cierre_nombre,
         estado=sol.estado,

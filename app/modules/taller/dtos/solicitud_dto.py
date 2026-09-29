@@ -67,6 +67,7 @@ class SolicitudDTO(BaseModel):
     bus_patente: Optional[str] = None
     usuario_creador_id: Optional[int] = None
     usuario_creador_nombre: Optional[str] = None
+    usuario_creador_telefono: Optional[str] = None
     mecanico_cierre_id: Optional[int] = None
     mecanico_cierre_nombre: Optional[str] = None
     estado: str

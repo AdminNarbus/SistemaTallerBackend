@@ -92,15 +92,14 @@ def test_calcular_horas_en_taller_none_o_fechas_vacias():
     assert horas >= 3.0
 
 
-def test_validar_pauta_preventiva_incompleta_sin_motivo_falla():
-    """Si la pauta está incompleta y no hay justificación, debe lanzar BusinessRuleException."""
-    with pytest.raises(BusinessRuleException) as exc:
-        validar_pauta_preventiva_cierre(
-            total_items=TOTAL_ITEMS_PAUTA_PREVENTIVA,
-            items_respondidos=5,
-            motivo_incompleto=None,
-        )
-    assert "La pauta preventiva está incompleta" in str(exc.value)
+def test_validar_pauta_preventiva_incompleta_sin_motivo_pasa():
+    """La pauta incompleta sin justificación no bloquea el cierre."""
+    resultado = validar_pauta_preventiva_cierre(
+        total_items=TOTAL_ITEMS_PAUTA_PREVENTIVA,
+        items_respondidos=5,
+        motivo_incompleto=None,
+    )
+    assert resultado is None
 
 
 def test_validar_pauta_preventiva_incompleta_con_motivo_pasa():
@@ -123,14 +122,13 @@ def test_validar_pauta_preventiva_completa_pasa():
     assert resultado is None
 
 
-def test_validar_fallas_cierre_parcial_sin_motivo_falla():
-    """Si quedan fallas abiertas y no hay justificación de cierre parcial, debe fallar."""
-    with pytest.raises(BusinessRuleException) as exc:
-        validar_fallas_cierre_parcial(
-            cantidad_fallas_no_resueltas=2,
-            motivo_cierre_parcial=None,
-        )
-    assert "Para liberar el bus con cierre parcial" in str(exc.value)
+def test_validar_fallas_cierre_parcial_sin_motivo_pasa():
+    """Las fallas abiertas sin justificación no bloquean el cierre parcial."""
+    resultado = validar_fallas_cierre_parcial(
+        cantidad_fallas_no_resueltas=2,
+        motivo_cierre_parcial=None,
+    )
+    assert resultado is None
 
 
 def test_validar_fallas_cierre_parcial_con_motivo_pasa():

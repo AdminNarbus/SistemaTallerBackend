@@ -95,36 +95,16 @@ def validar_pauta_preventiva_cierre(
     items_respondidos: int,
     motivo_incompleto: Optional[str],
 ) -> Optional[str]:
-    """
-    Regla de Dominio: Verifica si la pauta preventiva se completó en su totalidad.
-    Si faltan ítems por responder, exige una justificación no vacía.
-    """
-    if total_items > 0 and items_respondidos < total_items:
-        if not (motivo_incompleto and motivo_incompleto.strip()):
-            raise BusinessRuleException(
-                f"La pauta preventiva está incompleta ({items_respondidos}/{total_items} ítems respondidos). "
-                "Debe completar la pauta o ingresar una justificación en 'motivo_incompleto_checklist'."
-            )
-        return motivo_incompleto.strip()
-    return motivo_incompleto.strip() if motivo_incompleto else None
+    """Normaliza una justificación opcional sin bloquear el cierre por pauta incompleta."""
+    return motivo_incompleto.strip() if motivo_incompleto and motivo_incompleto.strip() else None
 
 
 def validar_fallas_cierre_parcial(
     cantidad_fallas_no_resueltas: int,
     motivo_cierre_parcial: Optional[str],
 ) -> Optional[str]:
-    """
-    Regla de Dominio: Si existen averías no resueltas o con falta de repuestos al finalizar,
-    exige obligatoriamente una justificación técnica en 'motivo_cierre_parcial'.
-    """
-    if cantidad_fallas_no_resueltas > 0:
-        if not (motivo_cierre_parcial and motivo_cierre_parcial.strip()):
-            raise BusinessRuleException(
-                f"Existen {cantidad_fallas_no_resueltas} falla(s) no resueltas o con falta de repuestos. "
-                "Para liberar el bus con cierre parcial, debe ingresar una justificación en 'motivo_cierre_parcial'."
-            )
-        return motivo_cierre_parcial.strip()
-    return motivo_cierre_parcial.strip() if motivo_cierre_parcial else None
+    """Normaliza una justificación opcional sin bloquear por averías pendientes."""
+    return motivo_cierre_parcial.strip() if motivo_cierre_parcial and motivo_cierre_parcial.strip() else None
 
 
 def formatear_comentario_cierre(

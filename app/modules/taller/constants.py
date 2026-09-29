@@ -38,7 +38,7 @@ class EstadoItemPauta(str, Enum):
 
 
 # Cantidad canónica de ítems en el catálogo maestro de pauta preventiva de taller
-TOTAL_ITEMS_PAUTA_PREVENTIVA: Final[int] = 11
+TOTAL_ITEMS_PAUTA_PREVENTIVA: Final[int] = 10
 
 # Parámetros estándar de paginación para consultas de listados de solicitudes
 DEFAULT_PAGE_SKIP: Final[int] = 0

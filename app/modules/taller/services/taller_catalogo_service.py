@@ -19,7 +19,7 @@ class TallerCatalogoService:
     """
     Servicio de capa de negocio responsable exclusivamente de los catálogos maestros
     de mantención: categorías de fallas, catálogo de averías preconcebidas y
-    los 11 ítems estándar de la pauta preventiva de maestranza.
+    los 10 ítems estándar de la pauta preventiva de maestranza.
     """
 
     def __init__(self, repository: Optional[TallerRepository] = None) -> None:

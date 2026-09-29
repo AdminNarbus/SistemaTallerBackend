@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 104,
+  "id": "AV-0104",
+  "timestamp": "2026-09-29T15:31:00Z",
+  "phase": "backend_taller",
+  "milestone": { "id": "PAUTA-2", "name": "Actualización Catálogo Pauta Preventiva a 10 Ítems Oficiales", "statusBefore": "in_progress", "statusAfter": "completed" },
+  "type": "completed",
+  "summary": "Actualización del catálogo oficial de pauta preventiva de taller de 11 a 10 ítems estándar, conforme a la nomenclatura operativa real del taller. Se reemplazaron los ítems anteriores (con denominaciones técnicas internas) por los 10 ítems con nombres cortos y exactos para uso por parte de mecánicos: 1) Control de niveles y fuga, 2) Luces exteriores, 3) Ventilación, calefacción y A/C, 4) Tablero e indicadores, 5) Engrase, 6) Correas y rodillos, 7) Baterías y terminales, 8) Revisión visual neumáticos, 9) Cerraduras, puertas, capó, 10) Parabrisas y cristales. Los cambios se propagan a constantes, seed, DTOs, docstrings, routers, migración Alembic y suite de pruebas.",
+  "scope": {
+    "planned": [
+      "Actualizar catálogo de ítems de pauta preventiva de 11 a 10 ítems",
+      "Crear migración Alembic 015 que desactiva ítems anteriores e inserta los 10 nuevos",
+      "Actualizar constante TOTAL_ITEMS_PAUTA_PREVENTIVA en constants.py",
+      "Actualizar seed.py con nuevo catálogo PAUTA_10_CATALOGO_SEED",
+      "Actualizar docstrings en servicios, DTOs y routers",
+      "Actualizar tests unitarios e integración"
+    ],
+    "completed": [
+      "Migración 015_update_pauta_items_10_oficiales.py creada con upgrade/downgrade idempotentes",
+      "TOTAL_ITEMS_PAUTA_PREVENTIVA: 11 -> 10 en app/modules/taller/constants.py",
+      "MAX_ITEMS_PAUTA_PREVENTIVA: 11 -> 10 en app/core/seed.py",
+      "PAUTA_10_CATALOGO_SEED con 10 ítems oficiales en seed.py (alias PAUTA_11_CATALOGO_SEED para retrocompatibilidad)",
+      "Docstrings actualizados en FormularioPautaService, TallerCatalogoService, DTOs (taller y formularios), y routers (catalogo_router, pauta_router)",
+      "test_alembic_seed_dataset.py: test reescrito para verificar los 10 ítems por nombre exacto y orden",
+      "test_formularios_module.py: siembra y aserciones actualizadas de 11 a 10",
+      "test_fase4_checks_pauta_y_liberacion.py: siembra, aserciones de pendientes (5->4) y mensajes actualizados"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Actualización de la base de datos en Neon — se realiza al ejecutar alembic upgrade head",
+      "Cambios en el Frontend (repositorio separado)"
+    ]
+  },
+  "changes": [
+    { "path": "alembic/versions/015_update_pauta_items_10_oficiales.py", "action": "created", "summary": "Migración que desactiva ítems anteriores e inserta los 10 ítems oficiales (idempotente)" },
+    { "path": "app/modules/taller/constants.py", "action": "modified", "summary": "TOTAL_ITEMS_PAUTA_PREVENTIVA: 11 -> 10" },
+    { "path": "app/core/seed.py", "action": "modified", "summary": "MAX_ITEMS_PAUTA_PREVENTIVA: 11->10, nuevo PAUTA_10_CATALOGO_SEED con 10 ítems, alias PAUTA_11_CATALOGO_SEED" },
+    { "path": "app/modules/formularios/services/formulario_pauta_service.py", "action": "modified", "summary": "Docstring: 11 -> 10 ítems estándar" },
+    { "path": "app/modules/taller/services/taller_catalogo_service.py", "action": "modified", "summary": "Docstring: 11 -> 10 ítems estándar" },
+    { "path": "app/modules/taller/dtos/pauta_dto.py", "action": "modified", "summary": "Docstring PautaTallerItemDTO: 11 -> 10 ítems" },
+    { "path": "app/modules/formularios/dtos/pauta_dto.py", "action": "modified", "summary": "Docstring PautaTallerItemDTO: 11 -> 10 ítems" },
+    { "path": "app/modules/taller/api/catalogo_router.py", "action": "modified", "summary": "Docstring endpoint: 11 -> 10 ítems" },
+    { "path": "app/modules/formularios/api/pauta_router.py", "action": "modified", "summary": "Docstring endpoint: 11 -> 10 ítems" },
+    { "path": "tests/unit/test_alembic_seed_dataset.py", "action": "modified", "summary": "Test reescrito con verificación de 10 ítems por nombre exacto y orden consecutivo" },
+    { "path": "tests/unit/test_formularios_module.py", "action": "modified", "summary": "Siembra y aserciones actualizadas de 11 a 10 ítems" },
+    { "path": "tests/integration/test_fase4_checks_pauta_y_liberacion.py", "action": "modified", "summary": "Siembra 10 ítems, pendientes 6/10 (4 pendientes), mensajes de justificación actualizados" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Migración idempotente con desactivación de ítems anteriores",
+      "rationale": "En lugar de DELETE (que eliminaría historial de respuestas vinculadas), se opta por UPDATE is_active=false en los ítems anteriores e INSERT/UPDATE de los nuevos ítems, preservando la integridad referencial de taller_solicitud_pauta con los ítems históricos.",
+      "consequences": "Los ítems anteriores permanecen en BD con is_active=false. Las respuestas históricas vinculadas a ellos no se pierden. La lógica de conteo en el repositorio solo cuenta ítems activos, por lo que el catálogo operativo refleja exactamente los 10 nuevos ítems."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Alias PAUTA_11_CATALOGO_SEED para retrocompatibilidad",
+      "rationale": "Mantener el nombre de variable antiguo como alias evita romper cualquier script externo o referencia que pudiera importar PAUTA_11_CATALOGO_SEED desde seed.py, mientras la variable canónica pasa a ser PAUTA_10_CATALOGO_SEED.",
+      "consequences": "Retrocompatibilidad garantizada. El alias se elimina en un ciclo de limpieza futuro."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Actualización del test de catálogo a verificación por nombre exacto",
+      "rationale": "El test anterior solo verificaba categorías (9 categorías), lo que era una cobertura incompleta. El nuevo test verifica: conteo exacto de ítems (10), secuencia de órdenes (1-10 sin saltos) y el conjunto exacto de nombres de ítems, dando garantía total del catálogo oficial.",
+      "consequences": "Cobertura de test del catálogo pasa de parcial (categorías) a exhaustiva (nombres, orden, conteo, estado activo)."
+    }
+  ],
+  "verification": [
+    { "command": ".\\venv\\Scripts\\pytest tests/unit -v", "result": "pending", "evidence": "140 tests pasaban antes del cambio; se ejecuta suite post-cambio para verificar" }
+  ],
+  "blockers": [],
+  "nextStep": "Ejecutar alembic upgrade head en el entorno local para aplicar la migración 015 a la BD de desarrollo. Verificar con GET /api/v1/formularios/pauta/items que retorna exactamente 10 ítems.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "develop", "commit": "pending", "dirty": true },
+  "notes": [
+    "El catálogo anterior tenía ítems con denominaciones largas/técnicas (ej. 'Inspección visual en cuanto a desgaste y daños', 'Cuadro de instrumentos en general / Check'). Los nuevos nombres son más cortos y directos para el uso en campo por mecánicos.",
+    "El ítem 9 anterior ('Verificar estado de correas') fue eliminado como redundante con el ítem 6 ('Correas y rodillos'), resultando en 10 ítems únicos en vez de 11."
+  ]
+}

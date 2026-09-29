@@ -29,17 +29,34 @@ def test_buses_dataset_consistency():
 
 
 def test_catalogo_pauta_items_oficiales():
-    """Verifica que el catálogo oficial de pauta preventiva contenga exactamente 11 ítems."""
-    categorias_esperadas = {
-        "MOTOR Y FLUIDOS",
-        "LUCES Y SISTEMA ELÉCTRICO",
-        "CLIMATIZACIÓN",
-        "CABINA E INSTRUMENTOS",
-        "CHASIS Y ENGRASE",
-        "MOTOR Y TRANSMISIÓN",
-        "ESTRUCTURA Y DESGASTE",
-        "CARROCERÍA Y SEGURIDAD",
-        "CARROCERÍA Y VISIBILIDAD",
+    """Verifica que el catálogo oficial de pauta preventiva contenga exactamente 10 ítems."""
+    from app.core.seed import PAUTA_10_CATALOGO_SEED
+
+    assert len(PAUTA_10_CATALOGO_SEED) == 10, (
+        f"Se esperaban 10 ítems en la pauta preventiva, pero hay {len(PAUTA_10_CATALOGO_SEED)}"
+    )
+
+    # Verificar que los órdenes sean del 1 al 10 sin saltos
+    ordenes = sorted(it["orden"] for it in PAUTA_10_CATALOGO_SEED)
+    assert ordenes == list(range(1, 11)), f"Órdenes incorrectos: {ordenes}"
+
+    # Verificar nombres oficiales esperados
+    nombres_esperados = {
+        "Control de niveles y fuga",
+        "Luces exteriores",
+        "Ventilación, calefacción y A/C",
+        "Tablero e indicadores",
+        "Engrase",
+        "Correas y rodillos",
+        "Baterías y terminales",
+        "Revisión visual neumáticos",
+        "Cerraduras, puertas, capó",
+        "Parabrisas y cristales",
     }
-    # Verificación de categorías representadas
-    assert len(categorias_esperadas) == 9
+    nombres_reales = {it["item"] for it in PAUTA_10_CATALOGO_SEED}
+    assert nombres_reales == nombres_esperados, (
+        f"Ítems inesperados: {nombres_reales.symmetric_difference(nombres_esperados)}"
+    )
+
+    # Verificar que todos estén activos
+    assert all(it["is_active"] for it in PAUTA_10_CATALOGO_SEED), "Todos los ítems deben ser is_active=True"

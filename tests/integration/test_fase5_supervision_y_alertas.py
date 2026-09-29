@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.pauta_taller import PautaTallerItem
 
@@ -71,23 +71,26 @@ async def test_flujo_fase5_supervision_metricas_y_alertas(
     assert metricas["fallas_bloqueadas_por_repuesto"] >= 1
     assert "305" in data_resumen["buses_activos_taller"]
 
-    # 5. Supervisora consulta Centro de Alertas
+    # 5. Supervisora consulta Centro de Alertas (debe retornar TIEMPO_EN_TALLER_EXCEDIDO para OTs que superan el umbral)
+    from datetime import datetime, timedelta, timezone
+    from app.modules.taller.models.taller_solicitud import TallerSolicitud
+    
+    # Simular que sol_id lleva 72 horas en taller para gatillar alerta TIEMPO_EN_TALLER_EXCEDIDO
+    ot_obj = await db_session.get(TallerSolicitud, sol_id)
+    ot_obj.fecha_creacion = datetime.now(timezone.utc) - timedelta(hours=72)
+    await db_session.commit()
+
     res_alertas = await client.get("/api/v1/supervision/alertas", headers=auth_headers_supervisor)
     assert res_alertas.status_code == 200
     alertas = res_alertas.json()
-    assert len(alertas) >= 2
+    assert len(alertas) >= 1
 
-    # Verificar alerta de repuesto
-    alerta_rep = next((a for a in alertas if a["tipo"] == "REPUESTO_FALTANTE" and a["solicitud_id"] == sol_id), None)
-    assert alerta_rep is not None
-    assert alerta_rep["severidad"] == "ALTA"
-    assert "Falta kit de reparación" in alerta_rep["mensaje"]
-
-    # Verificar alerta de defecto en pauta
-    alerta_def = next((a for a in alertas if a["tipo"] == "DEFECTO_PAUTA" and a["solicitud_id"] == sol_id), None)
-    assert alerta_def is not None
-    assert alerta_def["severidad"] == "MEDIA"
-    assert "Espesor de balatas delanteras" in alerta_def["mensaje"]
+    # Verificar alerta de tiempo en taller excedido
+    alerta_taller = next((a for a in alertas if a["tipo"] == "TIEMPO_EN_TALLER_EXCEDIDO" and a["solicitud_id"] == sol_id), None)
+    assert alerta_taller is not None
+    assert alerta_taller["n_bus"] == "305"
+    assert alerta_taller["horas_acumuladas"] is not None
+    assert alerta_taller["horas_acumuladas"] >= 71.0
 
     # 6. Restricción RBAC: mecánicos y conductores no tienen permiso a /alertas
     res_unauth_mec = await client.get("/api/v1/supervision/alertas", headers=auth_headers_mecanico1)

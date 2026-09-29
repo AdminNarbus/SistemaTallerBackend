@@ -102,7 +102,7 @@ class CierreService:
         dto: FinalizarSolicitudDTO,
         mecanico_cierre_nom: Optional[str] = None,
     ) -> SolicitudDTO:
-        """Finaliza los trabajos de la solicitud, verifica pauta preventiva y fallas, liberando el bus de taller."""
+        """Finaliza los trabajos de la solicitud sin exigir pauta ni justificaciones adicionales."""
         logger.info(
             "[MANTENCION] Finalizando solicitud | id=%s | mecanico_cierre_id=%s",
             solicitud_id,
@@ -177,7 +177,7 @@ class CierreService:
 
         texto_cierre = formatear_comentario_cierre(
             mecanico_nombre=mec_cierre_nom,
-            liberar_bus=dto.liberar_bus_taller,
+            liberar_bus=liberar_bus,
             comentario_cierre=dto.comentario_cierre,
             motivo_cierre_parcial=motivo_cierre_parcial_val,
             motivo_incompleto_checklist=motivo_incompleto_val,
@@ -231,7 +231,7 @@ class CierreService:
         mecanico_id: int,
         mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        """Cierra y libera el bus de taller. Exige justificación si la pauta o fallas están pendientes."""
+        """Cierra y libera el bus de taller sin exigir justificaciones por pendientes."""
         logger.info(
             "[MANTENCION] Liberación de solicitud solicitada | solicitud_id=%s, mecanico_id=%s, liberar_bus=%s",
             solicitud_id,

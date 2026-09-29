@@ -47,10 +47,10 @@ def upgrade() -> None:
     for it in ITEMS_OFICIALES_V2:
         conn.execute(sa.text("""
             INSERT INTO pauta_taller_items (orden, categoria, item, is_active)
-            SELECT :orden, :categoria, :item, true
+            SELECT CAST(:orden AS INTEGER), CAST(:categoria AS VARCHAR), CAST(:item AS VARCHAR), true
             WHERE NOT EXISTS (
                 SELECT 1 FROM pauta_taller_items
-                WHERE orden = :orden AND item = :item
+                WHERE orden = CAST(:orden AS INTEGER) AND item = CAST(:item AS VARCHAR)
             )
         """), {"orden": it["orden"], "categoria": it["categoria"], "item": it["item"]})
 
@@ -58,7 +58,7 @@ def upgrade() -> None:
     for it in ITEMS_OFICIALES_V2:
         conn.execute(sa.text("""
             UPDATE pauta_taller_items SET is_active = true
-            WHERE orden = :orden AND item = :item
+            WHERE orden = CAST(:orden AS INTEGER) AND item = CAST(:item AS VARCHAR)
         """), {"orden": it["orden"], "item": it["item"]})
 
     # 4. Sincronizar secuencia

@@ -23,6 +23,7 @@ class Usuario(Base):
     username: Mapped[str] = mapped_column(
         String(100), unique=True, index=True, nullable=False
     )
+    telefono: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     
     rol_id: Mapped[int] = mapped_column(

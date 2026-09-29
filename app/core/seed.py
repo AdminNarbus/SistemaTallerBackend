@@ -26,7 +26,7 @@ from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 logger = logging.getLogger(__name__)
 
 ROL_CONDUCTOR_ID: Final[int] = 3
-MAX_ITEMS_PAUTA_PREVENTIVA: Final[int] = 11
+MAX_ITEMS_PAUTA_PREVENTIVA: Final[int] = 10
 
 USUARIOS_BASE_SEED: Final[List[Tuple[str, str, str, str, str]]] = [
     ("admin", "admin123", "Administrador", "Sistema", "ADMIN"),
@@ -57,19 +57,22 @@ FALLAS_TALLER_SEED: Final[List[Tuple[str, str]]] = [
     ("OTRO", "Avería general / Otro"),
 ]
 
-PAUTA_11_CATALOGO_SEED: Final[List[Dict[str, object]]] = [
-    {"orden": 1, "categoria": "MOTOR Y FLUIDOS", "item": "Niveles y fugas de aceite motor", "is_active": True},
-    {"orden": 2, "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Control y operación de luces exteriores", "is_active": True},
-    {"orden": 3, "categoria": "CLIMATIZACIÓN", "item": "Ventilación - calefacción - A/C", "is_active": True},
-    {"orden": 4, "categoria": "CABINA E INSTRUMENTOS", "item": "Cuadro de instrumentos en general / Check", "is_active": True},
-    {"orden": 5, "categoria": "CHASIS Y ENGRASE", "item": "Engrase", "is_active": True},
-    {"orden": 6, "categoria": "MOTOR Y TRANSMISIÓN", "item": "Correas y rodillos", "is_active": True},
-    {"orden": 7, "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Batería y terminales", "is_active": True},
-    {"orden": 8, "categoria": "ESTRUCTURA Y DESGASTE", "item": "Inspección visual en cuanto a desgaste y daños", "is_active": True},
-    {"orden": 9, "categoria": "MOTOR Y TRANSMISIÓN", "item": "Verificar estado de correas", "is_active": True},
-    {"orden": 10, "categoria": "CARROCERÍA Y SEGURIDAD", "item": "Cerraduras - pestillos - puertas - capó", "is_active": True},
-    {"orden": 11, "categoria": "CARROCERÍA Y VISIBILIDAD", "item": "Revisión de parabrisas y cristales", "is_active": True},
+# Catálogo oficial v2 — 10 ítems estándar de pauta preventiva
+PAUTA_10_CATALOGO_SEED: Final[List[Dict[str, object]]] = [
+    {"orden": 1,  "categoria": "MOTOR Y FLUIDOS",           "item": "Control de niveles y fuga",          "is_active": True},
+    {"orden": 2,  "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Luces exteriores",                    "is_active": True},
+    {"orden": 3,  "categoria": "CLIMATIZACIÓN",             "item": "Ventilación, calefacción y A/C",      "is_active": True},
+    {"orden": 4,  "categoria": "CABINA E INSTRUMENTOS",     "item": "Tablero e indicadores",               "is_active": True},
+    {"orden": 5,  "categoria": "CHASIS Y ENGRASE",          "item": "Engrase",                             "is_active": True},
+    {"orden": 6,  "categoria": "MOTOR Y TRANSMISIÓN",       "item": "Correas y rodillos",                  "is_active": True},
+    {"orden": 7,  "categoria": "LUCES Y SISTEMA ELÉCTRICO", "item": "Baterías y terminales",               "is_active": True},
+    {"orden": 8,  "categoria": "ESTRUCTURA Y DESGASTE",     "item": "Revisión visual neumáticos",          "is_active": True},
+    {"orden": 9,  "categoria": "CARROCERÍA Y SEGURIDAD",    "item": "Cerraduras, puertas, capó",           "is_active": True},
+    {"orden": 10, "categoria": "CARROCERÍA Y VISIBILIDAD",  "item": "Parabrisas y cristales",              "is_active": True},
 ]
+
+# Alias de retrocompatibilidad — deprecado; usar PAUTA_10_CATALOGO_SEED
+PAUTA_11_CATALOGO_SEED = PAUTA_10_CATALOGO_SEED
 
 
 async def _seed_usuarios(db: AsyncSession) -> None:
@@ -251,8 +254,8 @@ async def _seed_reporte_neumatico(db: AsyncSession) -> None:
 
 
 async def _seed_pauta_preventiva(db: AsyncSession) -> None:
-    """Sincroniza el catálogo oficial de 11 ítems de la pauta preventiva."""
-    for p_data in PAUTA_11_CATALOGO_SEED:
+    """Sincroniza el catálogo oficial de 10 ítems de la pauta preventiva."""
+    for p_data in PAUTA_10_CATALOGO_SEED:
         res_p = await db.execute(select(PautaTallerItem).where(PautaTallerItem.orden == p_data["orden"]))
         p_obj = res_p.scalar_one_or_none()
         if not p_obj:
@@ -293,5 +296,6 @@ __all__ = [
     "USUARIOS_BASE_SEED",
     "CATEGORIAS_FALLAS_SEED",
     "FALLAS_TALLER_SEED",
-    "PAUTA_11_CATALOGO_SEED",
+    "PAUTA_10_CATALOGO_SEED",
+    "PAUTA_11_CATALOGO_SEED",  # alias retrocompatible
 ]

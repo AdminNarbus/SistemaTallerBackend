@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PautaTallerItemDTO(BaseModel):
-    """Ítem del catálogo maestro de la pauta preventiva (11 ítems estándar)."""
+    """Ítem del catálogo maestro de la pauta preventiva (10 ítems estándar)."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int

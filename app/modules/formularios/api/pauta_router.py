@@ -25,7 +25,7 @@ async def get_pauta_items(
     current_user: UsuarioResponseDTO = Depends(require_current_user),
     db: AsyncSession = SessionDep,
 ):
-    """Retorna el catálogo maestro de 11 ítems de inspección preventiva de taller."""
+    """Retorna el catálogo maestro de 10 ítems de inspección preventiva de taller."""
     response.headers["Cache-Control"] = "private, max-age=300, stale-while-revalidate=60"
     return await formulario_pauta_service.get_pauta_items(db)
 

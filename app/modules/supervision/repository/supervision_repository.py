@@ -34,9 +34,6 @@ from app.modules.supervision.constants import (
 )
 from app.modules.supervision.utils import (
     calcular_porcentaje_resolucion,
-    formatear_mensaje_alerta_repuesto,
-    formatear_mensaje_alerta_pauta,
-    formatear_mensaje_alerta_bus_sin_mecanicos,
     formatear_mensaje_tiempo_taller_excedido,
     formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
@@ -62,17 +59,20 @@ class SupervisionRepository:
         res = await db.execute(stmt)
         return {row[0]: row[1] for row in res.all()}
 
-    async def get_conteos_fallas(self, db: AsyncSession) -> Tuple[int, int]:
-        """Agregación SQL nativa: (total_fallas, total_resueltas)."""
+    async def get_conteos_fallas(self, db: AsyncSession) -> Tuple[int, int, int]:
+        """Agregación SQL nativa: (total_fallas, total_resueltas, fallas_bloqueadas)."""
         stmt = select(
             func.count(TallerSolicitudDetalle.id),
             func.count(TallerSolicitudDetalle.id).filter(TallerSolicitudDetalle.resuelto == True),
+            func.count(TallerSolicitudDetalle.id).filter(
+                and_(TallerSolicitudDetalle.falta_repuesto == True, TallerSolicitudDetalle.resuelto == False)
+            ),
         )
         res = await db.execute(stmt)
         row = res.one_or_none()
         if not row:
-            return 0, 0
-        return row[0] or 0, row[1] or 0
+            return 0, 0, 0
+        return row[0] or 0, row[1] or 0, row[2] or 0
 
     async def get_fallas_por_categoria(self, db: AsyncSession) -> List[Tuple[Optional[int], Optional[str], int]]:
         """Agregación SQL nativa: agrupa conteo de fallas registradas por categoría."""
@@ -152,11 +152,17 @@ class SupervisionRepository:
         Consulta analítica directa de alertas operacionales activas.
         Ejecuta 1 sola consulta SQL con UNION ALL consolidando las condiciones de anomalía.
         """
-        # 1. Alerta TIEMPO_EN_TALLER_EXCEDIDO (buses estancados en taller)
-        horas_taller_expr = func.round(
-            cast(func.extract("epoch", func.now() - TallerSolicitud.fecha_creacion) / 3600, Numeric),
-            1,
-        )
+        is_sqlite = db.bind and db.bind.dialect.name == "sqlite"
+        if is_sqlite:
+            horas_taller_expr = func.round(
+                (func.julianday("now") - func.julianday(TallerSolicitud.fecha_creacion)) * 24,
+                1,
+            )
+        else:
+            horas_taller_expr = func.round(
+                cast(func.extract("epoch", func.now() - TallerSolicitud.fecha_creacion) / 3600, Numeric),
+                1,
+            )
         sev_taller_expr = case(
             (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_CRITICA, literal("CRITICA")),
             (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_ALTA, literal("ALTA")),
@@ -184,10 +190,16 @@ class SupervisionRepository:
 
         # 2. Alerta LIBERADO_TIEMPO_EXCEDIDO (buses en ruta con fallas pendientes prolongadas)
         fecha_ref_liberado = func.coalesce(TallerSolicitud.fecha_liberacion, TallerSolicitud.fecha_creacion)
-        horas_liberado_expr = func.round(
-            cast(func.extract("epoch", func.now() - fecha_ref_liberado) / 3600, Numeric),
-            1,
-        )
+        if is_sqlite:
+            horas_liberado_expr = func.round(
+                (func.julianday("now") - func.julianday(fecha_ref_liberado)) * 24,
+                1,
+            )
+        else:
+            horas_liberado_expr = func.round(
+                cast(func.extract("epoch", func.now() - fecha_ref_liberado) / 3600, Numeric),
+                1,
+            )
         sev_liberado_expr = case(
             (horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_CRITICA, literal("CRITICA")),
             (horas_liberado_expr >= settings.SUPERVISION_UMBRAL_LIBERADO_HORAS_ALTA, literal("ALTA")),
@@ -211,70 +223,7 @@ class SupervisionRepository:
             )
         )
 
-        q1 = (
-            select(
-                literal("REPUESTO_FALTANTE").label("tipo"),
-                literal("ALTA").label("severidad"),
-                TallerSolicitud.id.label("solicitud_id"),
-                func.coalesce(TallerSolicitud.n_bus, "S/N").label("n_bus"),
-                TallerSolicitudDetalle.id.label("detalle_id"),
-                TallerSolicitudDetalle.comentario_repuesto.label("extra_info"),
-                cast(literal(None), Numeric).label("horas_acumuladas"),
-            )
-            .select_from(TallerSolicitudDetalle)
-            .join(TallerSolicitud, TallerSolicitudDetalle.solicitud_id == TallerSolicitud.id)
-            .where(
-                TallerSolicitudDetalle.falta_repuesto == True,
-                TallerSolicitud.estado != "FINALIZADO",
-            )
-        )
-
-        q2 = (
-            select(
-                literal("DEFECTO_PAUTA").label("tipo"),
-                literal("MEDIA").label("severidad"),
-                TallerSolicitud.id.label("solicitud_id"),
-                func.coalesce(TallerSolicitud.n_bus, "S/N").label("n_bus"),
-                TallerSolicitudPauta.item_id.label("detalle_id"),
-                PautaTallerItem.item.label("extra_info"),
-                cast(literal(None), Numeric).label("horas_acumuladas"),
-            )
-            .select_from(TallerSolicitudPauta)
-            .join(TallerSolicitud, TallerSolicitudPauta.solicitud_id == TallerSolicitud.id)
-            .outerjoin(PautaTallerItem, TallerSolicitudPauta.item_id == PautaTallerItem.id)
-            .where(
-                TallerSolicitudPauta.estado == "DEFECTO",
-                TallerSolicitud.estado != "FINALIZADO",
-            )
-        )
-
-        sub_mec_activo = select(1).where(
-            TallerSolicitudMecanico.solicitud_id == TallerSolicitud.id,
-            TallerSolicitudMecanico.is_activo == True,
-        )
-        sub_asig_activa = select(1).where(
-            TallerAsignacionFalla.solicitud_id == TallerSolicitud.id,
-            TallerAsignacionFalla.is_activo == True,
-        )
-        q3 = (
-            select(
-                literal("BUS_SIN_MECANICOS").label("tipo"),
-                literal("MEDIA").label("severidad"),
-                TallerSolicitud.id.label("solicitud_id"),
-                func.coalesce(TallerSolicitud.n_bus, "S/N").label("n_bus"),
-                cast(literal(None), Integer).label("detalle_id"),
-                cast(literal(None), String).label("extra_info"),
-                cast(literal(None), Numeric).label("horas_acumuladas"),
-            )
-            .select_from(TallerSolicitud)
-            .where(
-                TallerSolicitud.estado == "EN_REPARACION",
-                ~sub_mec_activo.exists(),
-                ~sub_asig_activa.exists(),
-            )
-        )
-
-        stmt_union = union_all(q_tiempo_taller, q_tiempo_liberado, q1, q2, q3)
+        stmt_union = union_all(q_tiempo_taller, q_tiempo_liberado)
         res = await db.execute(stmt_union)
         alertas: List[AlertaSupervisionDTO] = []
         for tipo, sev, sol_id, n_bus, det_id, extra, horas_acum in res.all():
@@ -306,45 +255,6 @@ class SupervisionRepository:
                         horas_acumuladas=horas_val,
                     )
                 )
-            elif tipo == TipoAlertaSupervision.REPUESTO_FALTANTE:
-                msg = formatear_mensaje_alerta_repuesto(det_id, bus_num, extra)
-                alertas.append(
-                    construir_alerta_supervision(
-                        tipo=tipo,
-                        severidad=sev,
-                        solicitud_id=sol_id,
-                        n_bus=bus_num,
-                        mensaje=msg,
-                        detalle_id=det_id,
-                        horas_acumuladas=None,
-                    )
-                )
-            elif tipo == TipoAlertaSupervision.DEFECTO_PAUTA:
-                msg = formatear_mensaje_alerta_pauta(bus_num, item_nombre=extra, item_id=det_id)
-                alertas.append(
-                    construir_alerta_supervision(
-                        tipo=tipo,
-                        severidad=sev,
-                        solicitud_id=sol_id,
-                        n_bus=bus_num,
-                        mensaje=msg,
-                        detalle_id=None,
-                        horas_acumuladas=None,
-                    )
-                )
-            else:
-                msg = formatear_mensaje_alerta_bus_sin_mecanicos(bus_num)
-                alertas.append(
-                    construir_alerta_supervision(
-                        tipo=tipo,
-                        severidad=sev,
-                        solicitud_id=sol_id,
-                        n_bus=bus_num,
-                        mensaje=msg,
-                        detalle_id=None,
-                        horas_acumuladas=None,
-                    )
-                )
         alertas.sort(key=lambda a: a.solicitud_id, reverse=True)
         return alertas
 
@@ -374,7 +284,8 @@ class SupervisionRepository:
                 fallas_agg AS (
                     SELECT 
                         COUNT(*)::int as total_fallas,
-                        COUNT(*) FILTER (WHERE resuelto = true)::int as total_resueltas
+                        COUNT(*) FILTER (WHERE resuelto = true)::int as total_resueltas,
+                        COUNT(*) FILTER (WHERE falta_repuesto = true AND resuelto = false)::int as fallas_bloqueadas
                     FROM taller_solicitud_detalles
                 ),
                 categorias_agg AS (
@@ -441,62 +352,9 @@ class SupervisionRepository:
                     FROM taller_solicitudes s
                     WHERE s.estado = 'LIBERADO'
                       AND EXTRACT(EPOCH FROM (now() - COALESCE(s.fecha_liberacion, s.fecha_creacion))) / 3600 >= :umbral_liberado_baja
-
-                    UNION ALL
-
-                    SELECT 
-                        'REPUESTO_FALTANTE' as tipo,
-                        'ALTA' as severidad,
-                        s.id as solicitud_id,
-                        COALESCE(s.n_bus, 'S/N') as n_bus,
-                        d.id as detalle_id,
-                        CASE 
-                            WHEN d.comentario_repuesto IS NOT NULL AND TRIM(d.comentario_repuesto) != '' 
-                            THEN 'Falla #' || d.id || ' en Bus ' || COALESCE(s.n_bus, 'S/N') || ' detenida por falta de repuestos: ' || d.comentario_repuesto
-                            ELSE 'Falla #' || d.id || ' en Bus ' || COALESCE(s.n_bus, 'S/N') || ' detenida por falta de repuestos'
-                        END as mensaje,
-                        NULL::numeric as horas_acumuladas
-                    FROM taller_solicitud_detalles d
-                    JOIN taller_solicitudes s ON s.id = d.solicitud_id
-                    WHERE d.falta_repuesto = true AND s.estado != 'FINALIZADO'
-
-                    UNION ALL
-
-                    SELECT 
-                        'DEFECTO_PAUTA' as tipo,
-                        'MEDIA' as severidad,
-                        s.id as solicitud_id,
-                        COALESCE(s.n_bus, 'S/N') as n_bus,
-                        NULL as detalle_id,
-                        'Ítem de pauta preventiva con defecto en Bus ' || COALESCE(s.n_bus, 'S/N') || ': ' || COALESCE(pi.item, 'Ítem #' || p.item_id) as mensaje,
-                        NULL::numeric as horas_acumuladas
-                    FROM taller_solicitud_pauta p
-                    JOIN taller_solicitudes s ON s.id = p.solicitud_id
-                    LEFT JOIN pauta_taller_items pi ON pi.id = p.item_id
-                    WHERE p.estado = 'DEFECTO' AND s.estado != 'FINALIZADO'
-
-                    UNION ALL
-
-                    SELECT 
-                        'BUS_SIN_MECANICOS' as tipo,
-                        'MEDIA' as severidad,
-                        s.id as solicitud_id,
-                        COALESCE(s.n_bus, 'S/N') as n_bus,
-                        NULL as detalle_id,
-                        'Bus ' || COALESCE(s.n_bus, 'S/N') || ' figura EN_REPARACION pero no tiene mecánicos activos asignados' as mensaje,
-                        NULL::numeric as horas_acumuladas
-                    FROM taller_solicitudes s
-                    WHERE s.estado = 'EN_REPARACION'
-                      AND NOT EXISTS (
-                          SELECT 1 FROM taller_solicitud_mecanicos m WHERE m.solicitud_id = s.id AND m.is_activo = true
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1 FROM taller_asignacion_fallas a WHERE a.solicitud_id = s.id AND a.is_activo = true
-                      )
                 ),
                 alertas_agg AS (
                     SELECT 
-                        COUNT(*) FILTER (WHERE tipo = 'REPUESTO_FALTANTE')::int as fallas_bloqueadas,
                         COALESCE(json_agg(
                             json_build_object(
                                 'tipo', tipo,
@@ -518,7 +376,7 @@ class SupervisionRepository:
                     e.liberadas,
                     e.finalizadas,
                     bt.buses_en_taller,
-                    al.fallas_bloqueadas,
+                    f.fallas_bloqueadas,
                     f.total_fallas,
                     f.total_resueltas,
                     c.fallas_por_categoria,
@@ -598,12 +456,11 @@ class SupervisionRepository:
         finalizadas = conteos_estado.get("FINALIZADO", 0)
 
         buses_en_taller_count = await self.get_total_buses_en_taller(db)
-        total_fallas, total_resueltas = await self.get_conteos_fallas(db)
+        total_fallas, total_resueltas, fallas_bloqueadas_por_repuesto = await self.get_conteos_fallas(db)
         fallas_cat_raw = await self.get_fallas_por_categoria(db)
 
         alertas = await self.get_alertas_activas(db)
         buses_activos = await self.get_buses_activos_taller(db)
-        fallas_bloqueadas_por_repuesto = sum(1 for a in alertas if a.tipo == "REPUESTO_FALTANTE")
 
         metricas_estado = MetricasEstadoDTO(
             total_solicitudes=total_solicitudes,

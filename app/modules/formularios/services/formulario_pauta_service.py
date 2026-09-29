@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class FormularioPautaService:
     """
     Servicio de capa de negocio responsable exclusivamente del checklist preventivo
-    de taller (pauta preventiva de 11 ítems estándar).
+    de taller (pauta preventiva de 10 ítems estándar).
     """
 
     def __init__(self, repository: Optional[PautaRepository] = None) -> None:

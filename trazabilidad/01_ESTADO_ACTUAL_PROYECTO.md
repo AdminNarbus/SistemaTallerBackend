@@ -214,4 +214,9 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Prefijo de API REST Estandarizado:** Actualización del prefijo de rutas FastAPI a `/api/v1/taller` y `/api/v1/formularios/taller/solicitudes`, erradicando el prefijo legacy `/mantencion`.
   - **Saneamiento Integral de Repositorios y Servicios:** Renombramiento a `TallerRepository`, `TallerService` y `TallerCatalogoService`, actualizando la totalidad de imports en auth, buses, formularios, supervision y suite de tests.
   - **100% de la Suite de Pruebas Aprobada:** 193 de 193 tests automatizados pasando exitosamente en 68.57s (100% de éxito).
+- **Reemplazo de Alerta de Tiempo en Taller por OT Activa Sin Ingreso a Maestranza (AV-0105):**
+  - **Sustitución Canónica:** Reemplazado el tipo de alerta `TIEMPO_EN_TALLER_EXCEDIDO` por `OT_SIN_INGRESO_TALLER` en `constants.py`, DTOs, utilidades y consultas SQL analíticas de supervisión.
+  - **Criterio de Negocio:** La alerta se dispara exclusivamente para órdenes de trabajo activas (`PENDIENTE` o `EN_REPARACION`) que llevan más de 48h desde su creación (`fecha_creacion`) sin haber ingresado a taller ni una sola vez (`fecha_primer_ingreso_taller IS NULL`), alertando a supervisión de buses con fallas reportadas que aún no se presentan en maestranza.
+  - **Consultas Duales Optimizadas:** Actualizada la consulta CTE en PostgreSQL nativo (`get_resumen_taller_consolidado`) y la consulta ORM con `union_all` (`get_alertas_activas`), manteniendo 1 solo RTT y compatibilidad total.
+  - **Suite de Pruebas Verificada:** 100% de tests unitarios y de integración de supervisión aprobados.
 

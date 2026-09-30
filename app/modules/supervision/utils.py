@@ -21,16 +21,19 @@ def calcular_porcentaje_resolucion(total_fallas: int, total_resueltas: int) -> f
 
 
 
-def formatear_mensaje_tiempo_taller_excedido(
+def formatear_mensaje_ot_sin_ingreso_taller(
     n_bus: str, horas: float, estado: Optional[str] = None
 ) -> str:
-    """Construye el mensaje para buses con permanencia excesiva en maestranza."""
+    """Construye el mensaje para buses con OT activa que no han ingresado a taller ni una vez."""
     bus_label = n_bus or BUS_SIN_NUMERO
     dias = round(horas / 24, 1)
-    estado_txt = f" ({estado})" if estado else ""
     if horas >= 48:
-        return f"Bus {bus_label} lleva {dias} días en taller{estado_txt} sin finalizar"
-    return f"Bus {bus_label} lleva {round(horas)} horas en taller{estado_txt} sin finalizar"
+        return f"Bus {bus_label} tiene OT activa hace {dias} días sin haber ingresado a taller"
+    return f"Bus {bus_label} tiene OT activa hace {round(horas)} horas sin haber ingresado a taller"
+
+
+# Alias retrocompatible
+formatear_mensaje_tiempo_taller_excedido = formatear_mensaje_ot_sin_ingreso_taller
 
 
 def formatear_mensaje_liberado_tiempo_excedido(n_bus: str, horas: float) -> str:

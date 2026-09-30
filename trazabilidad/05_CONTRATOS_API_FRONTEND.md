@@ -413,7 +413,7 @@ Content-Type: application/json
 | Método | Endpoint | Roles | Descripción |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/supervision/resumen-taller` | Supervisor, Admin | KPIs globales, desglose de fallas por categoría y centro de alertas en tiempo real. |
-| `GET` | `/api/v1/supervision/alertas` | Supervisor, Admin | Alertas operacionales activas de permanencia (`TIEMPO_EN_TALLER_EXCEDIDO`, `LIBERADO_TIEMPO_EXCEDIDO`). |
+| `GET` | `/api/v1/supervision/alertas` | Supervisor, Admin | Alertas operacionales activas (`OT_SIN_INGRESO_TALLER`, `LIBERADO_TIEMPO_EXCEDIDO`). |
 | `GET` | `/api/v1/supervision/auditoria/buses-taller` | Supervisor, Admin | Lista de órdenes de trabajo en taller con formato idéntico al mecánico (`SolicitudResumenDTO`). |
 
 ### `GET /api/v1/supervision/auditoria/buses-taller` (Lista de OTs en Taller - Formato Idéntico al Mecánico)
@@ -602,7 +602,7 @@ export interface PautaEstadoResumenDTO {
 }
 
 export interface AlertaSupervisionDTO {
-  tipo: 'TIEMPO_EN_TALLER_EXCEDIDO' | 'LIBERADO_TIEMPO_EXCEDIDO';
+  tipo: 'OT_SIN_INGRESO_TALLER' | 'LIBERADO_TIEMPO_EXCEDIDO';
   severidad: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
   solicitud_id: number;
   n_bus: string;

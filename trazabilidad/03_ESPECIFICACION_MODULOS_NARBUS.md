@@ -78,7 +78,7 @@
 
 ## 5. Módulo Supervisión y Telemetría (`/api/v1/supervision`)
 - `GET /resumen-taller`: Dashboard ejecutivo con KPIs, conteos por estado, desglose por categoría y alertas en 1 sola consulta CTE.
-- `GET /alertas`: Feed en tiempo real de alertas operacionales (`REPUESTO_FALTANTE`, `DEFECTO_PAUTA`, `BUS_SIN_MECANICOS`).
+- `GET /alertas`: Feed en tiempo real de alertas operacionales (`OT_SIN_INGRESO_TALLER`, `LIBERADO_TIEMPO_EXCEDIDO`).
 - `GET /buses/taller`: Paginación y auditoría detallada de buses en taller con filtros por estado (`estado`) y búsqueda (`q`).
 - `GET /auditoria/buses-taller`: Auditoría analítica consolidada de trazabilidad histórica.
 - `PATCH /solicitudes/{id}/estado`: Cambio manual de estado de OT con justificación y bitácora inmutable.

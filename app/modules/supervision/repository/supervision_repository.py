@@ -34,7 +34,7 @@ from app.modules.supervision.constants import (
 )
 from app.modules.supervision.utils import (
     calcular_porcentaje_resolucion,
-    formatear_mensaje_tiempo_taller_excedido,
+    formatear_mensaje_ot_sin_ingreso_taller,
     formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
 )
@@ -169,9 +169,9 @@ class SupervisionRepository:
             (horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_MEDIA, literal("MEDIA")),
             else_=literal("BAJA"),
         )
-        q_tiempo_taller = (
+        q_ot_sin_ingreso = (
             select(
-                literal("TIEMPO_EN_TALLER_EXCEDIDO").label("tipo"),
+                literal("OT_SIN_INGRESO_TALLER").label("tipo"),
                 sev_taller_expr.label("severidad"),
                 TallerSolicitud.id.label("solicitud_id"),
                 func.coalesce(TallerSolicitud.n_bus, "S/N").label("n_bus"),
@@ -180,10 +180,9 @@ class SupervisionRepository:
                 horas_taller_expr.label("horas_acumuladas"),
             )
             .select_from(TallerSolicitud)
-            .outerjoin(Bus, Bus.id == TallerSolicitud.bus_id)
             .where(
                 TallerSolicitud.estado.notin_(["FINALIZADO", "LIBERADO"]),
-                or_(Bus.en_taller == True, TallerSolicitud.estado.in_(["EN_REPARACION", "PENDIENTE"])),
+                TallerSolicitud.fecha_primer_ingreso_taller.is_(None),
                 horas_taller_expr >= settings.SUPERVISION_UMBRAL_TALLER_HORAS_BAJA,
             )
         )
@@ -223,14 +222,14 @@ class SupervisionRepository:
             )
         )
 
-        stmt_union = union_all(q_tiempo_taller, q_tiempo_liberado)
+        stmt_union = union_all(q_ot_sin_ingreso, q_tiempo_liberado)
         res = await db.execute(stmt_union)
         alertas: List[AlertaSupervisionDTO] = []
         for tipo, sev, sol_id, n_bus, det_id, extra, horas_acum in res.all():
             bus_num = n_bus or BUS_SIN_NUMERO
             horas_val = float(horas_acum) if horas_acum is not None else None
-            if tipo == TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO:
-                msg = formatear_mensaje_tiempo_taller_excedido(bus_num, horas_val or 0.0, estado=extra)
+            if tipo == TipoAlertaSupervision.OT_SIN_INGRESO_TALLER:
+                msg = formatear_mensaje_ot_sin_ingreso_taller(bus_num, horas_val or 0.0, estado=extra)
                 alertas.append(
                     construir_alerta_supervision(
                         tipo=tipo,
@@ -312,7 +311,7 @@ class SupervisionRepository:
                 ),
                 alertas_union AS (
                     SELECT 
-                        'TIEMPO_EN_TALLER_EXCEDIDO' as tipo,
+                        'OT_SIN_INGRESO_TALLER' as tipo,
                         CASE 
                             WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_critica THEN 'CRITICA'
                             WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_alta THEN 'ALTA'
@@ -322,14 +321,20 @@ class SupervisionRepository:
                         s.id as solicitud_id,
                         COALESCE(s.n_bus, 'S/N') as n_bus,
                         NULL::int as detalle_id,
-                        'Bus ' || COALESCE(s.n_bus, 'S/N') || ' lleva ' || 
-                        ROUND(EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600)::text || 
-                        ' horas en taller (' || s.estado || ') sin finalizar' as mensaje,
+                        CASE
+                            WHEN EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= 48 THEN
+                                'Bus ' || COALESCE(s.n_bus, 'S/N') || ' tiene OT activa hace ' ||
+                                ROUND((EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 86400)::numeric, 1)::text ||
+                                ' días sin haber ingresado a taller'
+                            ELSE
+                                'Bus ' || COALESCE(s.n_bus, 'S/N') || ' tiene OT activa hace ' ||
+                                ROUND(EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600)::text ||
+                                ' horas sin haber ingresado a taller'
+                        END as mensaje,
                         ROUND((EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600)::numeric, 1) as horas_acumuladas
                     FROM taller_solicitudes s
-                    LEFT JOIN buses b ON b.id = s.bus_id
                     WHERE s.estado NOT IN ('FINALIZADO', 'LIBERADO')
-                      AND (b.en_taller = true OR s.estado IN ('EN_REPARACION', 'PENDIENTE'))
+                      AND s.fecha_primer_ingreso_taller IS NULL
                       AND EXTRACT(EPOCH FROM (now() - s.fecha_creacion)) / 3600 >= :umbral_taller_baja
 
                     UNION ALL

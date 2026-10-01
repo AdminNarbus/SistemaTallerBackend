@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 107,
+  "id": "AV-0107",
+  "timestamp": "2026-10-01T13:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-7",
+    "name": "Filtros y Auditoría de Mantención",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación integral del filtro por fecha de última modificación (fecha_actualizacion) en listados de OT (Mecánico y Supervisión), migración Alembic 017 con índice optimizado, actualización automática en mutaciones y guía de integración para Frontend.",
+  "scope": {
+    "planned": [
+      "Determinar necesidad de cambios backend para filtro de última modificación",
+      "Crear migración Alembic para campo fecha_actualizacion e índice ix_taller_solicitudes_fecha_actualizacion",
+      "Actualizar modelo ORM TallerSolicitud con server_default y onupdate",
+      "Extender DTOs SolicitudDTO y SolicitudResumenDTO con fecha_actualizacion",
+      "Actualizar repositorios y CTEs SQL con proyección, ordenamiento y filtros por rango de fechas",
+      "Propagar actualización de fecha_actualizacion ante mutaciones operacionales (fallas, pauta, cuadrilla, comentarios, cierre)",
+      "Exponer query params fecha_modificacion_desde/hasta y aliases fecha_desde/hasta en routers",
+      "Elaborar guía completa de integración para el frontend"
+    ],
+    "completed": [
+      "Migración alembic 017_fecha_actualizacion_ot aplicada exitosamente en PostgreSQL local",
+      "Modelo TallerSolicitud actualizado con DateTime(timezone=True), default=func.now(), server_default=func.now(), onupdate=func.now()",
+      "DTOs SolicitudDTO y SolicitudResumenDTO actualizados con campo fecha_actualizacion: Optional[datetime]",
+      "Mappers en mappers.py y supervision_service.py actualizados",
+      "TallerRepository: list_pendientes, count_pendientes, list_mis_trabajos, count_mis_trabajos actualizados con filtros de fecha y ordenamiento por fecha_actualizacion DESC, id DESC",
+      "SupervisionRepository: get_auditoria y count_auditoria actualizados con filtros de fecha y ordenamiento por fecha_actualizacion DESC, id DESC",
+      "Métodos de servicio de mutaciones (averias_service, cuadrilla_service, cierre_service, pauta_repository) actualizados para refrescar fecha_actualizacion",
+      "Routers /pendientes, /mis-trabajos y /auditoria/buses-taller exponen fecha_modificacion_desde/hasta y aliases compatibles",
+      "Guía técnica Frontend creada en trazabilidad/GUIA_FRONTEND_FILTRO_FECHA_MODIFICACION.md",
+      "Suite completa de 195 pruebas unitarias e integración ejecutadas y aprobadas (100% pass)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Implementación de componentes en el repositorio de Frontend ProtoNeumaticos"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/017_fecha_actualizacion_ot.py",
+      "action": "created",
+      "summary": "Migración Alembic para agregar columna fecha_actualizacion a taller_solicitudes con índice"
+    },
+    {
+      "path": "app/modules/taller/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Mapeo de fecha_actualizacion con default, server_default y onupdate"
+    },
+    {
+      "path": "app/modules/taller/dtos/solicitud_dto.py",
+      "action": "modified",
+      "summary": "Adición de fecha_actualizacion en SolicitudDTO y SolicitudResumenDTO"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Mapeo de fecha_actualizacion desde dicts y modelos ORM"
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Filtros de fecha, ordenamiento por fecha_actualizacion DESC y método touch_fecha_actualizacion"
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Paso de parámetros de fecha a repositorio e inicialización de fecha_actualizacion en constructor"
+    },
+    {
+      "path": "app/modules/taller/services/cierre_service.py",
+      "action": "modified",
+      "summary": "Actualización de fecha_actualizacion en comentarios y cambio de estado"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Touch de fecha_actualizacion en agregado de fallas, checks y reporte de repuestos"
+    },
+    {
+      "path": "app/modules/taller/services/cuadrilla_service.py",
+      "action": "modified",
+      "summary": "Touch de fecha_actualizacion en asignación, desasignación, avances y entrega de turno"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Filtros fecha_desde/hasta en get_auditoria y count_auditoria con ordenamiento fecha_actualizacion DESC"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Propagación de filtros de fecha a repositorio de supervisión"
+    },
+    {
+      "path": "app/modules/taller/api/solicitud_router.py",
+      "action": "modified",
+      "summary": "Query params fecha_modificacion_desde/hasta en endpoints /pendientes y /mis-trabajos"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Query params fecha_modificacion_desde/hasta en endpoint /auditoria/buses-taller"
+    },
+    {
+      "path": "tests/integration/test_filtros_fecha_actualizacion.py",
+      "action": "created",
+      "summary": "Pruebas de integración de serialización y filtrado por fecha_actualizacion"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_FILTRO_FECHA_MODIFICACION.md",
+      "action": "created",
+      "summary": "Guía de contratos, formatos y ejemplos React para integración frontend"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0107-1",
+      "title": "Adición de columna física con índice dedicado en base de datos",
+      "rationale": "Calcular la última modificación al vuelo mediante subconsultas a bitácora, cuadrilla y pauta en tablas de miles de registros degrada severamente el rendimiento en PostgreSQL. Una columna física indexada con trigger/onupdate mantiene la latencia en 1 sola consulta SQL consolidada.",
+      "consequences": "Consultas ordenadas por última modificación con costo O(log N) y cero impacto en tiempos de respuesta de los dashboards."
+    },
+    {
+      "id": "DEC-0107-2",
+      "title": "Aliases compatibles en Query Parameters (fecha_modificacion_desde vs fecha_desde)",
+      "rationale": "Permite que el frontend use nombres semánticamente explícitos (fecha_modificacion_desde) o más concisos (fecha_desde) sin requerir re-trabajo ni romper contratos previos.",
+      "consequences": "Alta flexibilidad de consumo y compatibilidad retroactiva."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head",
+      "result": "passed",
+      "evidence": "Migración 017_fecha_actualizacion_ot aplicada correctamente"
+    },
+    {
+      "command": "pytest tests/integration/test_filtros_fecha_actualizacion.py",
+      "result": "passed",
+      "evidence": "1 passed in 0.79s"
+    },
+    {
+      "command": "pytest tests/",
+      "result": "passed",
+      "evidence": "195 passed in 67.41s (0:01:07)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "El frontend puede implementar los controles de fecha en DashboardMecanico.tsx y AuditoriaTab.tsx utilizando la guía provista.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/filtro-fecha-ultima-modificacion",
+    "dirty": false
+  },
+  "notes": [
+    "Servidor Uvicorn local listo y recargado automáticamente sin errores."
+  ]
+}

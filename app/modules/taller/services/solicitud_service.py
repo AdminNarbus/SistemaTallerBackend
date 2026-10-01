@@ -70,14 +70,20 @@ class SolicitudService:
         db: AsyncSession,
         limit: Optional[int] = DEFAULT_PAGE_LIMIT,
         skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> List[SolicitudResumenDTO]:
         """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE)."""
         logger.debug(
-            "[MANTENCION] Listando solicitudes pendientes | limit=%s | skip=%s",
+            "[MANTENCION] Listando solicitudes pendientes | limit=%s | skip=%s | fecha_desde=%s | fecha_hasta=%s",
             limit,
             skip,
+            fecha_desde,
+            fecha_hasta,
         )
-        solicitudes = await self.repo.list_pendientes(db, limit=limit, skip=skip)
+        solicitudes = await self.repo.list_pendientes(
+            db, limit=limit, skip=skip, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta
+        )
         results = []
         for s in solicitudes:
             if isinstance(s, dict):
@@ -88,9 +94,16 @@ class SolicitudService:
                 )
         return results
 
-    async def count_pendientes(self, db: AsyncSession) -> int:
+    async def count_pendientes(
+        self,
+        db: AsyncSession,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+    ) -> int:
         """Retorna el conteo total de solicitudes pendientes en taller."""
-        return await self.repo.count_pendientes(db)
+        return await self.repo.count_pendientes(
+            db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta
+        )
 
     async def list_mis_trabajos(
         self,
@@ -98,16 +111,25 @@ class SolicitudService:
         mecanico_id: int,
         limit: Optional[int] = DEFAULT_PAGE_LIMIT,
         skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> List[SolicitudResumenDTO]:
         """Pestaña 2 Mecánico: Buses asignados activamente al mecánico."""
         logger.debug(
-            "[MANTENCION] Listando trabajos activos | mecanico_id=%s, limit=%s, skip=%s",
+            "[MANTENCION] Listando trabajos activos | mecanico_id=%s, limit=%s, skip=%s | fecha_desde=%s | fecha_hasta=%s",
             mecanico_id,
             limit,
             skip,
+            fecha_desde,
+            fecha_hasta,
         )
         solicitudes = await self.repo.list_mis_trabajos(
-            db, mecanico_id, limit=limit, skip=skip
+            db,
+            mecanico_id,
+            limit=limit,
+            skip=skip,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         )
         results = []
         for s in solicitudes:
@@ -125,9 +147,20 @@ class SolicitudService:
                 )
         return results
 
-    async def count_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> int:
+    async def count_mis_trabajos(
+        self,
+        db: AsyncSession,
+        mecanico_id: int,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+    ) -> int:
         """Retorna el conteo total de trabajos activos del mecánico."""
-        return await self.repo.count_mis_trabajos(db, mecanico_id=mecanico_id)
+        return await self.repo.count_mis_trabajos(
+            db,
+            mecanico_id=mecanico_id,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+        )
 
     async def list_auditoria(self, db: AsyncSession) -> List[SolicitudDTO]:
         """Retorna el historial completo de solicitudes para auditoría."""
@@ -233,6 +266,7 @@ class SolicitudService:
             descripcion_general=dto.descripcion_general,
             foto_url=dto.foto_url,
             fecha_creacion=now,
+            fecha_actualizacion=now,
             horas_taller_acumuladas=0.0,
         )
 
@@ -460,6 +494,7 @@ class SolicitudService:
             motivo_incompleto_checklist=None,
             motivo_cierre_parcial=None,
             fecha_creacion=solicitud.fecha_creacion,
+            fecha_actualizacion=solicitud.fecha_actualizacion or now,
             fecha_cierre=None,
             fecha_liberacion=None,
             fecha_primer_ingreso_taller=solicitud.fecha_primer_ingreso_taller,

@@ -142,6 +142,7 @@ def dict_to_solicitud_dto(
         motivo_incompleto_checklist=r.get("motivo_incompleto_checklist"),
         motivo_cierre_parcial=r.get("motivo_cierre_parcial"),
         fecha_creacion=r["fecha_creacion"],
+        fecha_actualizacion=r.get("fecha_actualizacion"),
         fecha_cierre=r.get("fecha_cierre"),
         fecha_liberacion=r.get("fecha_liberacion"),
         fecha_primer_ingreso_taller=r.get("fecha_primer_ingreso_taller"),
@@ -215,11 +216,14 @@ def dict_to_solicitud_resumen_dto(
         # En "pendientes": contar todas las fallas que quedan disponibles (no resueltas)
         conteo_fallas = sum(1 for d in detalles_raw if not d.get("resuelto"))
 
+    fecha_actualizacion = r.get("fecha_actualizacion") or r.get("fecha_creacion")
+
     return SolicitudResumenDTO(
         id=r["id"],
         estado=r["estado"],
         n_bus=r["n_bus"],
         fecha_ingreso=fecha_ingreso,
+        fecha_actualizacion=fecha_actualizacion,
         chofer=r.get("usuario_creador_nombre"),
         tiempo_taller=horas_en_taller_val,
         numero_fallas=conteo_fallas,
@@ -275,6 +279,7 @@ def orm_to_solicitud_resumen_dto(
     )
 
     fecha_ingreso = getattr(sol, "fecha_primer_ingreso_taller", None) or sol.fecha_creacion
+    fecha_actualizacion = getattr(sol, "fecha_actualizacion", None) or getattr(sol, "fecha_creacion", None)
 
     detalles_orm = _get_rel(sol, "detalles") or []
     if mecanico_id is not None:
@@ -291,6 +296,7 @@ def orm_to_solicitud_resumen_dto(
         estado=sol.estado,
         n_bus=sol.n_bus,
         fecha_ingreso=fecha_ingreso,
+        fecha_actualizacion=fecha_actualizacion,
         chofer=creador_nombre,
         tiempo_taller=horas_en_taller_val,
         numero_fallas=conteo_fallas,
@@ -608,6 +614,7 @@ def orm_to_solicitud_dto(
         motivo_incompleto_checklist=getattr(sol, "motivo_incompleto_checklist", None),
         motivo_cierre_parcial=getattr(sol, "motivo_cierre_parcial", None),
         fecha_creacion=sol.fecha_creacion,
+        fecha_actualizacion=getattr(sol, "fecha_actualizacion", None),
         fecha_cierre=sol.fecha_cierre,
         fecha_liberacion=getattr(sol, "fecha_liberacion", None),
         fecha_primer_ingreso_taller=getattr(sol, "fecha_primer_ingreso_taller", None),

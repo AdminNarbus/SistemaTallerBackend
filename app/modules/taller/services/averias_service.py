@@ -286,6 +286,7 @@ class AveriasService:
             comentario_entry.usuario = u
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, mec_nombre)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -379,6 +380,7 @@ class AveriasService:
         if u_mec:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(
@@ -458,6 +460,7 @@ class AveriasService:
         if u_mec:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(
@@ -577,6 +580,7 @@ class AveriasService:
             fecha_registro=now,
         )
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(

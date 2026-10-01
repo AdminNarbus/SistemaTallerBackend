@@ -82,6 +82,7 @@ class CierreService:
         if u_usr:
             comentario_entry.usuario = u_usr
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return ComentarioAddedDTO(
@@ -397,6 +398,7 @@ class CierreService:
             )
 
         solicitud.estado = nuevo_estado
+        solicitud.fecha_actualizacion = now
 
         base_texto = f"Supervisora {sup_nom} cambió el estado de {estado_anterior} a {nuevo_estado}"
         if dto.comentario and dto.comentario.strip():

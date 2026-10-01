@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 106,
+  "id": "AV-0106",
+  "timestamp": "2026-10-01T12:20:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-PURGA-OTS",
+    "name": "Purga de Órdenes de Trabajo en Neon y Saneamiento de Estado en Flota",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación completa de todas las Órdenes de Trabajo (taller_solicitudes) y tablas dependientes en la base de datos Neon PostgreSQL remota, restableciendo a su vez el flag en_taller a false en todos los buses afectados para reiniciar el ciclo de pruebas limpio.",
+  "scope": {
+    "planned": [
+      "Confirmación explícita con el usuario para prevención de pérdida accidental de datos.",
+      "Ejecución de script transaccional para eliminar taller_solicitudes y registros en cascada.",
+      "Restablecimiento del estado en_taller = false en la flota de buses.",
+      "Verificación de integridad posterior con 0 OTs y 0 buses en taller."
+    ],
+    "completed": [
+      "Confirmación obtenida para eliminación y reseteo de en_taller.",
+      "Eliminación de 16 OTs y sus registros hijos (80 asignaciones, 92 comentarios, 39 mecánicos, 83 detalles de averías, 15 respuestas de pautas, 3 evidencias y 16 estadías).",
+      "Actualización de 7 buses restablecidos a en_taller = false.",
+      "Reinicio de correlativos de secuencias para nuevas OTs.",
+      "Verificación final confirmando 0 OTs restantes y 0 buses en taller."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de estructura DDL o migraciones de Alembic."
+    ]
+  },
+  "changes": [
+    {
+      "path": "scripts/eliminar_todas_las_ots.py",
+      "action": "created",
+      "summary": "Script automatizado para purga transaccional de OTs en Neon y reseteo de flota."
+    },
+    {
+      "path": "trazabilidad/avances/0106_20261001T122000Z_purga_ots_neon_y_reinicio_flota.json",
+      "action": "created",
+      "summary": "Registro de trazabilidad del avance de backend."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-106",
+      "title": "Limpieza transaccional explícita con reseteo de buses en taller",
+      "rationale": "Para evitar dejar buses en estado inconsistente ('en_taller = true') sin tener ninguna OT asociada, se ejecutó una transacción atómica que sincroniza el estado de la flota y elimina todas las dependencias relacionales en Neon.",
+      "consequences": "La base de datos queda completamente limpia y lista para nuevas pruebas operativas sin falsos positivos de buses retenidos en taller."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python scripts/eliminar_todas_las_ots.py",
+      "result": "passed",
+      "evidence": "Total OTs eliminadas: 16 | Buses actualizados a en_taller=false: 7 | OTs restantes en taller_solicitudes: 0 | Buses con en_taller=true restantes: 0"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con el desarrollo y pruebas operativas en el backend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "Operación solicitada explícitamente y confirmada por el usuario para ambiente de pruebas en Neon."
+  ]
+}

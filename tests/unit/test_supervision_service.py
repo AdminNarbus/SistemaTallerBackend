@@ -319,6 +319,8 @@ async def test_supervision_service_get_auditoria_aislado():
         n_bus="500",
         estado="EN_REPARACION",
         mecanico_nombre="Juan",
+        fecha_desde=None,
+        fecha_hasta=None,
         skip=0,
         limit=10,
     )

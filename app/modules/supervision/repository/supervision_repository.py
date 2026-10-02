@@ -677,12 +677,17 @@ class SupervisionRepository:
                     COALESCE((
                         SELECT COUNT(*)::int
                         FROM taller_solicitud_detalles d
-                        WHERE d.solicitud_id = bf.id AND d.resuelto = true
+                        WHERE d.solicitud_id = bf.id AND (d.estado = 'RESUELTA' OR d.resuelto = true)
                     ), 0) as fallas_resueltas,
                     COALESCE((
                         SELECT COUNT(*)::int
                         FROM taller_solicitud_detalles d
-                        WHERE d.solicitud_id = bf.id AND d.resuelto = false
+                        WHERE d.solicitud_id = bf.id AND d.estado = 'INCOMPLETA'
+                    ), 0) as fallas_incompletas,
+                    COALESCE((
+                        SELECT COUNT(*)::int
+                        FROM taller_solicitud_detalles d
+                        WHERE d.solicitud_id = bf.id AND (d.estado = 'PENDIENTE' OR (d.estado IS NULL AND d.resuelto = false))
                     ), 0) as fallas_pendientes,
                     COALESCE((
                         SELECT COUNT(*)::int

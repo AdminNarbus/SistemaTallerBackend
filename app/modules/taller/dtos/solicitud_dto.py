@@ -89,6 +89,7 @@ class SolicitudDTO(BaseModel):
     pauta_completada: bool = False
     total_fallas: int = 0
     fallas_resueltas: int = 0
+    fallas_incompletas: int = 0
     fallas_con_falta_repuesto: int = 0
     fallas_pendientes: int = 0
 

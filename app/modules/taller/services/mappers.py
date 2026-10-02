@@ -8,6 +8,7 @@ from app.modules.taller.dtos import (
     EstadiaTallerDTO,
     FallaTallerDTO,
     MecanicoAsignadoDTO,
+    MecanicoResumenDTO,
     PautaRespuestaDTO,
     SolicitudComentarioDTO,
     SolicitudDetalleDTO,
@@ -87,7 +88,14 @@ def dict_to_solicitud_dto(
     resueltos = (
         r["fallas_resueltas"]
         if "fallas_resueltas" in r and r["fallas_resueltas"] is not None
-        else sum(1 for d in detalles_raw if d.get("resuelto"))
+        else sum(
+            1 for d in detalles_raw if d.get("estado") == "RESUELTA" or (d.get("estado") is None and d.get("resuelto"))
+        )
+    )
+    incompletas = (
+        r["fallas_incompletas"]
+        if "fallas_incompletas" in r and r["fallas_incompletas"] is not None
+        else sum(1 for d in detalles_raw if d.get("estado") == "INCOMPLETA")
     )
     faltas = (
         r["fallas_con_falta_repuesto"]
@@ -97,7 +105,7 @@ def dict_to_solicitud_dto(
     pendientes = (
         r["fallas_pendientes"]
         if "fallas_pendientes" in r and r["fallas_pendientes"] is not None
-        else (tot - resueltos)
+        else (tot - resueltos - incompletas)
     )
     pauta_completada = len(pauta_respuestas_raw) >= TOTAL_ITEMS_PAUTA_PREVENTIVA
 
@@ -158,6 +166,7 @@ def dict_to_solicitud_dto(
         pauta_completada=pauta_completada,
         total_fallas=tot,
         fallas_resueltas=resueltos,
+        fallas_incompletas=incompletas,
         fallas_con_falta_repuesto=faltas,
         fallas_pendientes=pendientes,
         detalles=detalles_raw,
@@ -361,6 +370,8 @@ def orm_to_solicitud_dto(
 
         mecanicos_asignados = []
         historial_asignaciones = []
+        mecanicos_resolvieron = []
+        vistos_resolutores = set()
         mecs_asig_vistos = set()
         asignaciones_list = _get_rel(det, "asignaciones") or []
         for asig in asignaciones_list:
@@ -399,6 +410,29 @@ def orm_to_solicitud_dto(
                     )
                 )
 
+            if det.resuelto and asig.resuelto_en_esta_asignacion and asig.mecanico_id not in vistos_resolutores:
+                vistos_resolutores.add(asig.mecanico_id)
+                mecanicos_resolvieron.append(
+                    MecanicoResumenDTO(
+                        id=asig.mecanico_id,
+                        nombre=mec_nom or f"Mecánico #{asig.mecanico_id}",
+                    )
+                )
+
+        if det.resuelto:
+            if not mecanicos_resolvieron and det.mecanico_resolvio_id:
+                u_res = _get_rel(det, "mecanico_resolvio")
+                nom_res = u_res.nombre_completo if u_res else (mec_resolvio_nombre or f"Mecánico #{det.mecanico_resolvio_id}")
+                mecanicos_resolvieron.append(
+                    MecanicoResumenDTO(id=det.mecanico_resolvio_id, nombre=nom_res)
+                )
+
+            if mecanicos_resolvieron:
+                mec_resolvio_nombre = ", ".join(m.nombre for m in mecanicos_resolvieron)
+        else:
+            mec_resolvio_nombre = None
+            mecanicos_resolvieron = []
+
         detalles_dtos.append(
             SolicitudDetalleDTO(
                 id=det.id,
@@ -408,9 +442,12 @@ def orm_to_solicitud_dto(
                 falla_id=det.falla_id,
                 falla=falla_dto,
                 descripcion_personalizada=det.descripcion_personalizada,
+                estado=getattr(det, "estado", None) or ("RESUELTA" if det.resuelto else "PENDIENTE"),
+                motivo_incompleto=getattr(det, "motivo_incompleto", None),
                 resuelto=det.resuelto,
                 mecanico_resolvio_id=det.mecanico_resolvio_id,
                 mecanico_resolvio_nombre=mec_resolvio_nombre,
+                mecanicos_resolvieron=mecanicos_resolvieron,
                 falta_repuesto=getattr(det, "falta_repuesto", False) or False,
                 comentario_repuesto=getattr(det, "comentario_repuesto", None),
                 fecha_creacion=det.fecha_creacion,
@@ -545,9 +582,10 @@ def orm_to_solicitud_dto(
     bus_patente = bus_obj.patente if bus_obj else None
 
     total_fallas = len(detalles_dtos)
-    fallas_resueltas = len([d for d in detalles_dtos if d.resuelto])
+    fallas_resueltas = len([d for d in detalles_dtos if d.estado == "RESUELTA" or d.resuelto])
+    fallas_incompletas = len([d for d in detalles_dtos if d.estado == "INCOMPLETA"])
     fallas_con_falta_repuesto = len([d for d in detalles_dtos if d.falta_repuesto])
-    fallas_pendientes = total_fallas - fallas_resueltas
+    fallas_pendientes = total_fallas - fallas_resueltas - fallas_incompletas
 
     evidencias_dtos = []
     evidencias_val = _get_rel(sol, "evidencias") or []
@@ -630,6 +668,7 @@ def orm_to_solicitud_dto(
         pauta_completada=len(pauta_dtos) >= TOTAL_ITEMS_PAUTA_PREVENTIVA,
         total_fallas=total_fallas,
         fallas_resueltas=fallas_resueltas,
+        fallas_incompletas=fallas_incompletas,
         fallas_con_falta_repuesto=fallas_con_falta_repuesto,
         fallas_pendientes=fallas_pendientes,
         detalles=detalles_dtos,

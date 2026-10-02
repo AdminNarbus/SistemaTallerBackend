@@ -16,6 +16,7 @@ from app.modules.taller.dtos import (
     ReportarRepuestoDTO,
     SolicitudDTO,
 )
+from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.services.averias_service import averias_service
 
 logger = logging.getLogger(__name__)
@@ -27,11 +28,17 @@ def _resolver_check_params(
     dto: Optional[CheckFallaDTO],
     resuelto_query: Optional[bool],
     mecanico_query: Optional[int],
-) -> tuple[bool, Optional[int]]:
+) -> tuple[Optional[EstadoFalla], Optional[str], Optional[bool], Optional[int]]:
     """Extrae y consolida los parámetros de resolución priorizando el DTO JSON."""
-    resuelto = dto.resuelto if (dto and dto.resuelto is not None) else (resuelto_query if resuelto_query is not None else True)
+    estado = dto.estado if dto else None
+    motivo_incompleto = dto.motivo_incompleto if dto else None
+    resuelto = (
+        dto.resuelto
+        if (dto and dto.resuelto is not None)
+        else (resuelto_query if resuelto_query is not None else None)
+    )
     mecanico_id = (dto.effective_mecanico_id if dto else None) or mecanico_query
-    return resuelto, mecanico_id
+    return estado, motivo_incompleto, resuelto, mecanico_id
 
 
 @router.post("/{id}/detalles", response_model=SolicitudDTO, status_code=status.HTTP_201_CREATED)
@@ -57,19 +64,20 @@ async def agregar_falla(
 async def check_detalle(
     id: int,
     detalle_id: int,
-    dto: Optional[CheckFallaDTO] = Body(None, description="Payload JSON de resolución de avería"),
+    dto: Optional[CheckFallaDTO] = Body(None, description="Payload JSON de resolución o estado de avería"),
     resuelto: Optional[bool] = Query(None, description="Parámetro alternativo de resolución"),
     mecanico_id: Optional[int] = Query(None, description="ID del mecánico resolutor alternativo"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Marca o desmarca una falla resuelta guardando el timestamp y el ID del mecánico."""
-    resuelto_final, resolutor_id = _resolver_check_params(dto, resuelto, mecanico_id)
+    """Marca una falla como PENDIENTE, INCOMPLETA o RESUELTA guardando el timestamp y el ID del mecánico."""
+    estado_final, motivo_final, resuelto_final, resolutor_id = _resolver_check_params(dto, resuelto, mecanico_id)
 
     logger.info(
-        "[MANTENCION] Check falla en sol_id=%s | det_id=%s | resuelto=%s | actor_id=%s | resolutor_id=%s",
+        "[MANTENCION] Check falla en sol_id=%s | det_id=%s | estado=%s | resuelto=%s | actor_id=%s | resolutor_id=%s",
         id,
         detalle_id,
+        estado_final,
         resuelto_final,
         current_user.id,
         resolutor_id,
@@ -82,6 +90,8 @@ async def check_detalle(
         resuelto=resuelto_final,
         mecanico_nombre=current_user.nombre_completo,
         mecanico_resolvio_id=resolutor_id,
+        estado=estado_final,
+        motivo_incompleto=motivo_final,
     )
 
 

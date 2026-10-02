@@ -6,7 +6,7 @@ Implementa el patrón Coordinador vs. Especialistas bajo principios SOLID (SRP/S
 """
 import logging
 from typing import Dict, Final, List, Tuple
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
@@ -275,7 +275,14 @@ async def _seed_pauta_preventiva(db: AsyncSession) -> None:
 async def seed_initial_data() -> None:
     """Coordinador de siembra de datos iniciales para el entorno de desarrollo."""
     async with AsyncSessionLocal() as db:
+        lock_acquired = False
         try:
+            # El startup puede ejecutarse simultáneamente en varios workers.
+            # El advisory lock de PostgreSQL serializa la siembra sin bloquear
+            # otras operaciones normales de la aplicación.
+            if db.bind and db.bind.dialect.name == "postgresql":
+                await db.execute(text("SELECT pg_advisory_lock(:key)"), {"key": 872341})
+                lock_acquired = True
             await _seed_usuarios(db)
             await _seed_conductores(db)
             await _seed_categorias_y_fallas(db)
@@ -287,6 +294,9 @@ async def seed_initial_data() -> None:
         except Exception as e:
             await db.rollback()
             logger.warning("[SEED] Error durante la siembra de datos de prueba: %s", e, exc_info=True)
+        finally:
+            if lock_acquired:
+                await db.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": 872341})
 
 
 __all__ = [

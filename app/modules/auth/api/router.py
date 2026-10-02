@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,7 @@ from app.api.deps import (
 )
 from app.modules.auth.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from app.modules.auth.dtos import (
+    RefreshTokenRequestDTO,
     TokenDTO,
     UsuarioCreateDTO,
     UsuarioLoginDTO,
@@ -19,6 +20,7 @@ from app.modules.auth.dtos import (
 from app.modules.auth.services.auth_service import auth_service
 from app.modules.auth.services.user_service import user_service
 from app.modules.auth.services.mechanic_service import mechanic_service
+from app.modules.auth.rate_limit import auth_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +35,18 @@ router = APIRouter()
 )
 async def login(
     login_data: UsuarioLoginDTO,
+    request: Request,
     db: AsyncSession = SessionDep,
 ) -> TokenDTO:
     """
     Endpoint para autenticación de usuario vía JSON payload.
     Retorna el Token JWT Bearer y los datos del perfil de usuario.
     """
+    await auth_rate_limiter.check(
+        f"login:{request.client.host if request.client else 'unknown'}",
+        limit=20,
+        window_seconds=60,
+    )
     return await auth_service.login(db, login_data=login_data)
 
 
@@ -49,6 +57,7 @@ async def login(
     status_code=status.HTTP_200_OK,
 )
 async def login_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = SessionDep,
 ) -> TokenDTO:
@@ -56,7 +65,24 @@ async def login_access_token(
     Endpoint compatible con OAuth2 Password Flow (Form Data).
     """
     login_dto = UsuarioLoginDTO(username=form_data.username, password=form_data.password)
+    await auth_rate_limiter.check(
+        f"login:{request.client.host if request.client else 'unknown'}",
+        limit=20,
+        window_seconds=60,
+    )
     return await auth_service.login(db, login_data=login_dto)
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenDTO,
+    summary="Renovar access token usando refresh token",
+)
+async def refresh_access_token(
+    payload: RefreshTokenRequestDTO,
+    db: AsyncSession = SessionDep,
+) -> TokenDTO:
+    return await auth_service.refresh(db, refresh_token=payload.refresh_token)
 
 
 @router.post(
@@ -67,11 +93,17 @@ async def login_access_token(
 )
 async def register(
     usuario_in: UsuarioCreateDTO,
+    request: Request,
     db: AsyncSession = SessionDep,
 ) -> TokenDTO:
     """
     Registra un nuevo usuario en la base de datos y retorna su token de acceso.
     """
+    await auth_rate_limiter.check(
+        f"register:{request.client.host if request.client else 'unknown'}",
+        limit=10,
+        window_seconds=300,
+    )
     return await user_service.register(db, usuario_in=usuario_in)
 
 
@@ -163,7 +195,11 @@ async def crear_usuario_supervisor(
     """
     Permite a un Supervisor o Admin registrar un usuario (Conductor, Mecánico, Supervisor, etc.).
     """
-    return await user_service.crear_usuario(db, usuario_in=usuario_in)
+    return await user_service.crear_usuario(
+        db,
+        usuario_in=usuario_in,
+        actor_rol=current_user.rol,
+    )
 
 
 @router.delete(

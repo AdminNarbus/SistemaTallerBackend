@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 110,
+  "id": "AV-0110",
+  "timestamp": "2026-10-01T16:30:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-8",
+    "name": "Gestión de Estados de Fallas y Averías",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación del tercer estado en fallas/averías individuales de orden de trabajo (PENDIENTE, INCOMPLETA, RESUELTA). Migración Alembic 018_estado_falla_detalles con backfill exclusivo de PENDIENTE y RESUELTA para datos históricos existentes en PostgreSQL local, extensión de DTOs, modelo ORM, validaciones de cierre y trazabilidad.",
+  "scope": {
+    "planned": [
+      "Definir Enum EstadoFalla con los 3 estados: PENDIENTE, INCOMPLETA, RESUELTA",
+      "Crear migración Alembic 018 para agregar columnas estado e motivo_incompleto a taller_solicitud_detalles",
+      "Garantizar backfill en base de datos local usando únicamente PENDIENTE (resuelto=false) y RESUELTA (resuelto=true) sin generar incompletas históricas",
+      "Actualizar modelo ORM TallerSolicitudDetalle manteniendo sincronizado el booleano resuelto para retrocompatibilidad total",
+      "Extender DTOs CheckFallaDTO, DetalleUpdateDTO, SolicitudDetalleDTO y SolicitudDTO con métricas de fallas incompletas",
+      "Adaptar AveriasService para transiciones de estado, registro de motivo de inconclusión y auditoría",
+      "Actualizar reglas de negocio de cierre en CierreService para impedir finalización de OT si existen fallas incompletas o pendientes",
+      "Actualizar repositorios y agregaciones SQL para contar fallas_incompletas",
+      "Escribir pruebas unitarias AAA y verificar suite de pytest completa"
+    ],
+    "completed": [
+      "Enum EstadoFalla creado en app/modules/taller/constants.py",
+      "Migración alembic 018_estado_falla_detalles creada y ejecutada con éxito en PostgreSQL local (127.0.0.1:5432)",
+      "Backfill ejecutado con éxito: PENDIENTE para registros no resueltos y RESUELTA para resueltos (0 incompletas históricas)",
+      "Modelo TallerSolicitudDetalle actualizado con estado (String 30 con índice) y motivo_incompleto (Text)",
+      "DTOs en averias_dto.py y solicitud_dto.py actualizados con estado, motivo_incompleto y fallas_incompletas",
+      "AveriasService actualizado con soporte para CheckFallaDTO (estado o resuelto) y registro inmutable en bitácora",
+      "CierreService actualizado con validación estricta de estado != RESUELTA",
+      "TallerRepository y SupervisionRepository actualizados en conteos de fallas incompletas",
+      "Alembic env.py configurado con commit explícito para transacciones asíncronas",
+      "Tests unitarios agregados y suite de pruebas ejecutada con éxito"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Módulo de gestión de repuestos (no implementado en esta etapa)",
+      "Cambios en Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/018_estado_falla_detalles.py",
+      "action": "created",
+      "summary": "Migración Alembic para agregar columnas estado y motivo_incompleto con índice y backfill en taller_solicitud_detalles"
+    },
+    {
+      "path": "alembic/env.py",
+      "action": "modified",
+      "summary": "Adición de connection.commit() explícito en contexto asíncrono para persistencia confiable de migraciones"
+    },
+    {
+      "path": "app/modules/taller/constants.py",
+      "action": "modified",
+      "summary": "Definición del enum EstadoFalla con PENDIENTE, INCOMPLETA y RESUELTA"
+    },
+    {
+      "path": "app/modules/taller/models/taller_solicitud_detalle.py",
+      "action": "modified",
+      "summary": "Mapeo de columnas estado e motivo_incompleto con sincronización bidireccional con resuelto"
+    },
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Ampliación de CheckFallaDTO, DetalleUpdateDTO y SolicitudDetalleDTO con campos de estado y motivo"
+    },
+    {
+      "path": "app/modules/taller/dtos/solicitud_dto.py",
+      "action": "modified",
+      "summary": "Adición de fallas_incompletas en SolicitudDTO y SolicitudResumenDTO"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Lógica de negocio para transiciones de los 3 estados, auditoría en bitácora y retrocompatibilidad"
+    },
+    {
+      "path": "app/modules/taller/services/cierre_service.py",
+      "action": "modified",
+      "summary": "Regla de validación de cierre bloqueando OTs con fallas PENDIENTES o INCOMPLETAS"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Mapeo de campos estado, motivo_incompleto y métrica de fallas_incompletas"
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Consultas CTE SQL actualizadas para incluir fallas_incompletas y estado"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Consultas de supervisión adaptadas para métricas de fallas incompletas"
+    },
+    {
+      "path": "tests/unit/test_taller_service.py",
+      "action": "modified",
+      "summary": "Pruebas unitarias para ciclo de vida de los 3 estados y métricas en SolicitudDTO"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Soporte de 3 estados de falla con backfill histórico binario",
+      "rationale": "El usuario requirió explícitamente habilitar las 3 opciones de estado en la base de datos (PENDIENTE, INCOMPLETA, RESUELTA), pero especificó que los registros históricos existentes solo debían poblarse con PENDIENTE o RESUELTA, dado que en el pasado no existía el concepto de fallas incompletas.",
+      "consequences": "Base de datos y modelo 100% preparados para el nuevo estado sin alterar la fidelidad de los datos históricos ni generar estados incompletos ficticios."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Preservación del campo resuelto para retrocompatibilidad total",
+      "rationale": "El frontend actual y clientes existentes consumen y envían el booleano 'resuelto'. Al sincronizar internamente 'resuelto = (estado == EstadoFalla.RESUELTA)', ningún cliente existente sufre roturas mientras se adopta el nuevo estándar.",
+      "consequences": "Cero disrupciones en producción y adopción transparente para el frontend."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Desacople de repuestos en el estado INCOMPLETA",
+      "rationale": "Se solicitó no asociar la falla incompleta a un flujo de repuestos, puesto que el sistema de inventario/repuestos aún no está implementado.",
+      "consequences": "La falla incompleta se gestiona mediante un motivo textual ('motivo_incompleto') libre y descriptivo."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head",
+      "result": "passed",
+      "evidence": "Migración 018_estado_falla_detalles aplicada exitosamente en PostgreSQL local"
+    },
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest",
+      "result": "passed",
+      "evidence": "197 tests pasando sin fallos"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Coordinar con Frontend la incorporación del selector de 3 estados en la interfaz de mecánicos y supervisores.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/tres-estados-fallas-detalles",
+    "commit": "HEAD",
+    "dirty": true
+  },
+  "notes": [
+    "Operación realizada exclusivamente sobre la base de datos local dev_local."
+  ]
+}

@@ -311,9 +311,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -658,9 +682,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -872,9 +920,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -1492,7 +1564,7 @@ class TallerRepository:
                     COUNT(*) AS fallas_no_resueltas
                 FROM taller_solicitud_detalles det
                 WHERE det.solicitud_id = s.id 
-                  AND (det.resuelto = false OR det.falta_repuesto = true)
+                  AND (det.estado != 'RESUELTA' OR (det.estado IS NULL AND det.resuelto = false) OR det.falta_repuesto = true)
             ) d ON true
             LEFT JOIN usuarios u ON u.id = :mecanico_cierre_id
             WHERE s.id = :solicitud_id

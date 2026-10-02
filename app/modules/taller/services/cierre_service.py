@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.taller.constants import (
     EstadoSolicitud,
+    EstadoFalla,
     TipoComentarioBitacora,
 )
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
@@ -150,7 +151,9 @@ class CierreService:
             fallas_no_resueltas_count = len([
                 d
                 for d in (solicitud_fallback.detalles or [])
-                if not d.resuelto or getattr(d, "falta_repuesto", False)
+                if getattr(d, "estado", None) != EstadoFalla.RESUELTA.value
+                or not d.resuelto
+                or getattr(d, "falta_repuesto", False)
             ])
 
         motivo_incompleto_val = validar_pauta_preventiva_cierre(

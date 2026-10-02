@@ -11,6 +11,14 @@ class EstadoSolicitud(str, Enum):
     FINALIZADO = "FINALIZADO"
 
 
+class EstadoFalla(str, Enum):
+    """Estados canónicos para cada falla/avería individual de una solicitud de taller."""
+    PENDIENTE = "PENDIENTE"
+    INCOMPLETA = "INCOMPLETA"
+    RESUELTA = "RESUELTA"
+
+
+
 class OrigenAsignacion(str, Enum):
     """Origen de asignación de mecánicos a averías."""
     SUPERVISOR = "SUPERVISOR"

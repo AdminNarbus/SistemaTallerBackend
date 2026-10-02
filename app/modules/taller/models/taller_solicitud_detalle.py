@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
+from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.models.falla_taller import FallaTaller
 
 if TYPE_CHECKING:
@@ -29,6 +30,11 @@ class TallerSolicitudDetalle(Base):
         Integer, ForeignKey("fallas_taller.id", ondelete="SET NULL"), nullable=True, index=True
     )
     descripcion_personalizada: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    estado: Mapped[str] = mapped_column(
+        String(30), default=EstadoFalla.PENDIENTE.value, nullable=False, index=True
+    )
+    motivo_incompleto: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     resuelto: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     mecanico_resolvio_id: Mapped[Optional[int]] = mapped_column(

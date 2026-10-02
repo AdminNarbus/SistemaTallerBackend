@@ -1,0 +1,52 @@
+﻿{
+  "schemaVersion": "1.0",
+  "sequence": 112,
+  "id": "AV-0112",
+  "timestamp": "2026-10-02T15:16:00Z",
+  "phase": "backend_taller",
+  "milestone": { "id": "SUP-12", "name": "Multi-mecánico en resolución supervisora", "statusBefore": "pending", "statusAfter": "completed" },
+  "type": "completed",
+  "summary": "Extensión del endpoint de resolución supervisora para permitir indicar una lista de mecánicos (mecanicos_ids) en lugar de solo uno. CheckFallaDTO recibe el nuevo campo y effective_mecanicos_ids unifica la lista con el campo singular legacy. resolver_falla_supervisora valida cada mecánico, crea asignaciones nuevas en taller_asignacion_fallas si no existían, y marca todas como resuelto_en_esta_asignacion=True. Cero breaking changes: mecanico_id singular sigue funcionando. 200/200 tests pasando.",
+  "scope": {
+    "planned": ["Agregar mecanicos_ids a CheckFallaDTO", "Modificar resolver_falla_supervisora", "Test unitario AAA", "Guía frontend"],
+    "completed": ["Agregar mecanicos_ids y effective_mecanicos_ids a CheckFallaDTO", "resolver_falla_supervisora itera lista, valida, crea asignaciones nuevas y marca resueltas", "Retrocompatibilidad efectiva_mecanico_id singular", "test_resolver_falla_supervisora_con_lista_mecanicos (3/3 unit)", "Actualización test integración (mensaje error)", "Guía frontend en trazabilidad/"],
+    "pending": [],
+    "outOfScope": ["Migración de BD (no requerida)", "Cambio de router (no requerido)"]
+  },
+  "changes": [
+    { "path": "app/modules/taller/dtos/averias_dto.py", "action": "modified", "summary": "Agrega mecanicos_ids: Optional[List[int]] y effective_mecanicos_ids property a CheckFallaDTO" },
+    { "path": "app/modules/taller/services/averias_service.py", "action": "modified", "summary": "resolver_falla_supervisora: itera effective_mecanicos_ids, crea TallerAsignacionFalla por mecánico nuevo, marca todas como resueltas" },
+    { "path": "tests/unit/test_resolucion_grupal_fallas.py", "action": "modified", "summary": "Agrega test_resolver_falla_supervisora_con_lista_mecanicos con sub-test de retrocompatibilidad singular" },
+    { "path": "tests/integration/test_supervision_api.py", "action": "modified", "summary": "Actualiza aserción de mensaje de error en test_supervision_resolver_falla_indicando_mecanico_flujo" },
+    { "path": "trazabilidad/GUIA_FRONTEND_RESOLVER_FALLA_SUPERVISION_MULTI_MECANICO.md", "action": "created", "summary": "Guía técnica completa para el frontend: tipos TS, payloads de ejemplo, lógica de modal, renderizado de resultado y tabla de errores" }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Campo mecanicos_ids opcional con fallback a mecanico_id singular",
+      "rationale": "Mantener retrocompatibilidad 100%: cualquier cliente que envíe mecanico_id (forma anterior) sigue funcionando sin cambios. effective_mecanicos_ids envuelve el singular en lista.",
+      "consequences": "Cero breaking changes en el frontend existente. El router no requiere cambios."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Crear TallerAsignacionFalla nueva si el mecánico no tiene asignación activa",
+      "rationale": "La supervisora puede indicar mecánicos que trabajaron en la falla sin haber sido asignados formalmente por el sistema (ej: apoyo puntual). El historial de asignaciones queda completo en taller_asignacion_fallas.",
+      "consequences": "Trazabilidad completa: todos los participantes quedan registrados con origen SUPERVISION y resuelto_en_esta_asignacion=True."
+    },
+    {
+      "id": "DEC-003",
+      "title": "mecanico_resolvio_id apunta al primer mecánico de la lista",
+      "rationale": "El campo singular FK en solicitud_detalle debe mantener un único responsable principal para retrocompatibilidad con reportes y vistas que solo leen mecanico_resolvio_id.",
+      "consequences": "Frontend puede mostrar el equipo completo usando mecanicos_resolvieron[], o el nombre concatenado via mecanico_resolvio_nombre."
+    }
+  ],
+  "verification": [
+    { "command": "pytest tests/unit/test_resolucion_grupal_fallas.py -v", "result": "passed", "evidence": "3/3 tests passed (1.71s)" },
+    { "command": "pytest tests/integration/test_supervision_api.py::test_supervision_resolver_falla_indicando_mecanico_flujo -v", "result": "passed", "evidence": "1/1 passed (0.83s)" },
+    { "command": "pytest -q --tb=no", "result": "passed", "evidence": "200/200 passed (70s)" }
+  ],
+  "blockers": [],
+  "nextStep": "Frontend implementa modal multi-selección de mecánicos usando checkboxes siguiendo guía en trazabilidad/GUIA_FRONTEND_RESOLVER_FALLA_SUPERVISION_MULTI_MECANICO.md.",
+  "git": { "repository": "BackendTallerNarbus", "branch": "feature/filtro-fecha-ultima-modificacion", "commit": "a3db523", "dirty": false },
+  "notes": ["Sin migración de BD requerida. El campo mecanicos_ids es parte del DTO únicamente, no del modelo ORM."]
+}

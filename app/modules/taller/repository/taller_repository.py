@@ -631,6 +631,7 @@ class TallerRepository:
         skip: int = DEFAULT_PAGE_SKIP,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
     ) -> List[dict] | List[TallerSolicitud]:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad consolidada con CTEs y agregación JSON
@@ -641,7 +642,8 @@ class TallerRepository:
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
-                    WHERE s.estado IN ('PENDIENTE', 'REPORTADO')
+                    WHERE ((CAST(:estado AS VARCHAR) IS NOT NULL AND s.estado = CAST(:estado AS VARCHAR))
+                           OR (CAST(:estado AS VARCHAR) IS NULL AND s.estado IN ('PENDIENTE', 'EN_REPARACION')))
                       AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                       AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
                     ORDER BY s.fecha_actualizacion DESC, s.id DESC
@@ -812,6 +814,7 @@ class TallerRepository:
                     "skip": skip or 0,
                     "fecha_desde": fecha_desde,
                     "fecha_hasta": fecha_hasta,
+                    "estado": estado,
                 },
             )
             return [dict(r) for r in res.mappings().all()]
@@ -819,7 +822,6 @@ class TallerRepository:
         # Fallback ORM para entornos SQLite (testing)
         stmt = (
             select(TallerSolicitud)
-            .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"]))
             .order_by(TallerSolicitud.fecha_actualizacion.desc(), TallerSolicitud.id.desc())
             .options(
                 joinedload(TallerSolicitud.bus),
@@ -833,6 +835,10 @@ class TallerRepository:
                 noload(TallerSolicitud.pauta_respuestas),
             )
         )
+        if estado:
+            stmt = stmt.where(TallerSolicitud.estado == estado)
+        else:
+            stmt = stmt.where(TallerSolicitud.estado.in_(["PENDIENTE", "EN_REPARACION"]))
         if fecha_desde:
             stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
         if fecha_hasta:
@@ -849,22 +855,34 @@ class TallerRepository:
         db: AsyncSession,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
     ) -> int:
-        """Retorna el conteo total de solicitudes en estado REPORTADO o PENDIENTE con filtros opcionales de fecha."""
+        """Retorna el conteo total de solicitudes en estado PENDIENTE o EN_REPARACION con filtros opcionales de fecha y estado."""
         if db.bind and db.bind.dialect.name == "postgresql":
             sql = text("""
                 SELECT COUNT(*)::int
                 FROM taller_solicitudes s
-                WHERE s.estado IN ('REPORTADO', 'PENDIENTE')
+                WHERE ((CAST(:estado AS VARCHAR) IS NOT NULL AND s.estado = CAST(:estado AS VARCHAR))
+                       OR (CAST(:estado AS VARCHAR) IS NULL AND s.estado IN ('PENDIENTE', 'EN_REPARACION')))
                   AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                   AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ));
             """)
-            res = await db.execute(sql, {"fecha_desde": fecha_desde, "fecha_hasta": fecha_hasta})
+            res = await db.execute(
+                sql,
+                {
+                    "fecha_desde": fecha_desde,
+                    "fecha_hasta": fecha_hasta,
+                    "estado": estado,
+                },
+            )
             return res.scalar() or 0
 
-        stmt = select(func.count(TallerSolicitud.id)).where(
-            TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"])
-        )
+        if estado:
+            stmt = select(func.count(TallerSolicitud.id)).where(TallerSolicitud.estado == estado)
+        else:
+            stmt = select(func.count(TallerSolicitud.id)).where(
+                TallerSolicitud.estado.in_(["PENDIENTE", "EN_REPARACION"])
+            )
         if fecha_desde:
             stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
         if fecha_hasta:

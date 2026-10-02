@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 112,
+  "id": "AV-0112",
+  "timestamp": "2026-10-02T18:56:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-10",
+    "name": "Visualización de Órdenes en Reparación y Pendientes en Bandeja Mecánico",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Actualización del endpoint GET /api/v1/taller/pendientes, servicio y repositorio para incluir solicitudes en estado EN_REPARACION además de PENDIENTE, eliminando el estado obsoleto REPORTADO. Ahora los mecánicos pueden visualizar todas las OTs activas del taller en la bandeja de pendientes sin importar si ya están en reparación, manteniendo 'Mis Trabajos' para aquellas donde están directamente asignados.",
+  "scope": {
+    "planned": [
+      "Modificar filtro de estado en TallerRepository (list_pendientes y count_pendientes) para consultar ('PENDIENTE', 'EN_REPARACION')",
+      "Eliminar el estado obsoleto 'REPORTADO' de las consultas de solicitudes activas de taller",
+      "Permitir parámetro opcional 'estado' en el endpoint GET /api/v1/taller/pendientes para filtrado fino",
+      "Actualizar SolicitudService y TallerService propagando los filtros de estado y fechas",
+      "Actualizar seed.py para sembrar solicitudes de prueba en estado PENDIENTE",
+      "Crear tests unitarios y de integración en test_pendientes_en_reparacion.py validando visibilidad de PENDIENTE y EN_REPARACION y exclusión de REPORTADO"
+    ],
+    "completed": [
+      "TallerRepository actualizado en consulta CTE PostgreSQL y fallback SQLite para filtrar ('PENDIENTE', 'EN_REPARACION')",
+      "Soporte para parámetro opcional 'estado' en list_pendientes y count_pendientes",
+      "SolicitudService y TallerService actualizados con propagación de parámetros y docstrings claros",
+      "Endpoint GET /api/v1/taller/pendientes actualizado con parámetro Query opcional 'estado'",
+      "app/core/seed.py actualizado para sembrar solicitudes en 'PENDIENTE' en vez de 'REPORTADO'",
+      "Tests creados en test_pendientes_en_reparacion.py (3 pruebas unitarias y de integración con httpx client aprobadas al 100%)",
+      "Suite completa de 203 pruebas ejecutada y aprobada (100% verde)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en el frontend (DashboardMecanico.tsx ya consume GET /api/v1/taller/pendientes y se beneficia automáticamente del cambio)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Actualizadas consultas CTE nativa PostgreSQL y fallback SQLite en list_pendientes y count_pendientes para filtrar ('PENDIENTE', 'EN_REPARACION') por defecto y soportar filtro opcional por estado."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Actualizados list_pendientes y count_pendientes para aceptar y propagar estado opcional."
+    },
+    {
+      "path": "app/modules/taller/services/taller_service.py",
+      "action": "modified",
+      "summary": "Actualizado servicio coordinador para aceptar fecha_desde, fecha_hasta y estado en list_pendientes y count_pendientes."
+    },
+    {
+      "path": "app/modules/taller/api/solicitud_router.py",
+      "action": "modified",
+      "summary": "Actualizado endpoint GET /pendientes para recibir parámetro query opcional 'estado' y documentar inclusión de PENDIENTE y EN_REPARACION."
+    },
+    {
+      "path": "app/core/seed.py",
+      "action": "modified",
+      "summary": "Reemplazado estado 'REPORTADO' por 'PENDIENTE' en solicitudes iniciales de seed."
+    },
+    {
+      "path": "tests/unit/test_pendientes_en_reparacion.py",
+      "action": "created",
+      "summary": "Pruebas unitarias de visibilidad de estados, filtrado opcional y prueba de integración de endpoint REST."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0112-01",
+      "title": "Inclusión de EN_REPARACION en el filtro predeterminado de la bandeja de pendientes",
+      "rationale": "Anteriormente la bandeja de pendientes ('GET /pendientes') filtraba estrictamente por ('PENDIENTE', 'REPORTADO'). Cuando una orden pasaba a EN_REPARACION (por toma de trabajo o asignación), desaparecía de la bandeja general de pendientes. Como 'Mis Trabajos' únicamente lista las OTs asignadas al mecánico conectado, las OTs en reparación quedaban invisibles para otros mecánicos que requerían colaborar o informarse de su estado. Ampliar el conjunto activo a ('PENDIENTE', 'EN_REPARACION') y suprimir 'REPORTADO' (estado que fue migrado y unificado a PENDIENTE en la revisión 014 de Alembic) permite que toda orden viva en taller permanezca visible en la bandeja general hasta su liberación o cierre.",
+      "consequences": "Visibilidad total del trabajo en taller para los mecánicos. Cero fricción en el frontend, que mantiene el consumo del endpoint existente sin breaking changes."
+    },
+    {
+      "id": "DEC-0112-02",
+      "title": "Parámetro opcional 'estado' en el endpoint GET /pendientes",
+      "rationale": "Para maximizar la flexibilidad del endpoint sin alterar el comportamiento por defecto, se añadió el parámetro opcional 'estado' en query string. Si no se suministra, el backend devuelve el conjunto estándar ('PENDIENTE', 'EN_REPARACION'). Si el cliente requiere listar estrictamente órdenes pendientes o en reparación por separado, puede enviar ?estado=PENDIENTE o ?estado=EN_REPARACION.",
+      "consequences": "Retrocompatibilidad garantizada y extensibilidad inmediata para futuros tabs o filtros secundarios en la UI."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_pendientes_en_reparacion.py -vv",
+      "result": "passed",
+      "evidence": "3 passed in 1.34s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -q",
+      "result": "passed",
+      "evidence": "203 passed, 1 warning in 74.05s (100% test suite aprobado)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Notificar al usuario y actualizar documentos de trazabilidad del proyecto.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/visualizacion-ots-en-reparacion-pendientes",
+    "commit": "c182d73",
+    "dirty": false
+  },
+  "notes": [
+    "En la base de datos de desarrollo actual existen 4 solicitudes en estado PENDIENTE y 2 en estado EN_REPARACION (0 en REPORTADO). Todas las 6 solicitudes activas se visualizan ahora en el endpoint /pendientes."
+  ]
+}

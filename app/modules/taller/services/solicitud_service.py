@@ -72,17 +72,19 @@ class SolicitudService:
         skip: int = DEFAULT_PAGE_SKIP,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
     ) -> List[SolicitudResumenDTO]:
-        """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE)."""
+        """Pestaña 1 Mecánico: Buses esperando o en atención en taller (PENDIENTE / EN_REPARACION)."""
         logger.debug(
-            "[MANTENCION] Listando solicitudes pendientes | limit=%s | skip=%s | fecha_desde=%s | fecha_hasta=%s",
+            "[MANTENCION] Listando solicitudes pendientes/en reparación | limit=%s | skip=%s | fecha_desde=%s | fecha_hasta=%s | estado=%s",
             limit,
             skip,
             fecha_desde,
             fecha_hasta,
+            estado,
         )
         solicitudes = await self.repo.list_pendientes(
-            db, limit=limit, skip=skip, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta
+            db, limit=limit, skip=skip, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
         )
         results = []
         for s in solicitudes:
@@ -99,10 +101,11 @@ class SolicitudService:
         db: AsyncSession,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
     ) -> int:
-        """Retorna el conteo total de solicitudes pendientes en taller."""
+        """Retorna el conteo total de solicitudes pendientes o en reparación en taller."""
         return await self.repo.count_pendientes(
-            db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta
+            db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
         )
 
     async def list_mis_trabajos(

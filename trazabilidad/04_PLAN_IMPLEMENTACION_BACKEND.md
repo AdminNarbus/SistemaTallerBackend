@@ -54,13 +54,13 @@
 - [x] Redacción de guía detallada de integración para el frontend (`trazabilidad/GUIA_FRONTEND_ESTADOS_Y_CRONOMETRO_TALLER.md`).
 - [x] 100% de la suite de pruebas unitarias, de integración y E2E aprobada (182/182 tests verdes).
 
-## Fase 9: Desacoplamiento de Categorías en Fallas y Adopción de Averías Específicas Directas
-- [x] Base de datos local PostgreSQL estricta (`127.0.0.1:5432/narbus_taller_db`) configurada en `.env` y migrada a versión `014` (`alembic upgrade head`).
-- [x] Eliminación de raíz de la dependencia obligatoria de categorías y catálogos en el flujo de averías de taller.
-- [x] Unificación del concepto de falla a un único texto directo (`nombre` / `falla_nombre`), erradicando la ambigüedad entre "nombre" y "descripción".
-- [x] Ingesta directa en `create_solicitud` y `agregar_falla_a_solicitud` sin forzar la creación de categorías ni averías artificiales.
-- [x] Proyección con `COALESCE(d.descripcion_personalizada, f.nombre, 'Avería')` en las consultas CTE SQL nativas de `list_pendientes`, `list_liberadas`, `list_finalizadas` y `list_auditoria_buses`.
-- [x] Documento técnico para el frontend `GUIA_FRONTEND_ELIMINACION_CATEGORIAS.md` detallando payloads simplificados.
-- [x] Registro de trazabilidad `0087_20260923T172800Z_eliminacion_categorias_fallas_directas.json`.
-- [x] Verificación 100% aprobada en base de datos local: 130 tests unitarios y 45 tests de integración verdes sin regresiones.
+## Fase 10: Visibilidad de Órdenes en Reparación y Pendientes en Bandeja del Mecánico (MANT-10)
+- [x] Actualización de la consulta CTE de alto rendimiento y fallback SQLite en `list_pendientes` y `count_pendientes` (`TallerRepository`) para incluir órdenes en estado `PENDIENTE` y `EN_REPARACION`.
+- [x] Erradicación de la consulta sobre el estado obsoleto `REPORTADO` (unificado a `PENDIENTE` desde migración 014).
+- [x] Soporte de parámetro opcional de consulta `estado` en `GET /api/v1/taller/pendientes` permitiendo filtrado específico a futuro si se requiere (`?estado=PENDIENTE` o `?estado=EN_REPARACION`).
+- [x] Propagación del parámetro `estado` y rangos de fechas a través de `SolicitudService` y `TallerService`.
+- [x] Actualización de `seed.py` para sembrar órdenes de prueba directamente en estado `PENDIENTE`.
+- [x] Cobertura de pruebas completa en `tests/unit/test_pendientes_en_reparacion.py` (3 tests unitarios y de integración de endpoint REST).
+- [x] Suite completa de pruebas automatizadas ejecutada y aprobada (203/203 tests verdes).
+
 

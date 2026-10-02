@@ -203,11 +203,24 @@ class TallerService:
         db: AsyncSession,
         limit: Optional[int] = DEFAULT_PAGE_LIMIT,
         skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
     ) -> List[SolicitudResumenDTO]:
-        return await self.solicitud_srv.list_pendientes(db, limit=limit, skip=skip)
+        return await self.solicitud_srv.list_pendientes(
+            db, limit=limit, skip=skip, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
+        )
 
-    async def count_pendientes(self, db: AsyncSession) -> int:
-        return await self.solicitud_srv.count_pendientes(db)
+    async def count_pendientes(
+        self,
+        db: AsyncSession,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
+    ) -> int:
+        return await self.solicitud_srv.count_pendientes(
+            db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
+        )
 
     async def list_mis_trabajos(
         self,

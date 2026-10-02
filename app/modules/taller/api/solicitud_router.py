@@ -128,17 +128,20 @@ async def list_pendientes(
     fecha_modificacion_hasta: Optional[datetime] = Query(None, description="Fecha/hora máxima de última modificación (ISO 8601)"),
     fecha_desde: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_desde"),
     fecha_hasta: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_hasta"),
+    estado: Optional[str] = Query(None, description="Filtro opcional por estado ('PENDIENTE', 'EN_REPARACION')"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE, default: 20 por página)."""
+    """Pestaña 1 Mecánico: Buses esperando o en atención en taller (PENDIENTE / EN_REPARACION, default: 20 por página)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
     f_desde = fecha_modificacion_desde or fecha_desde
     f_hasta = fecha_modificacion_hasta or fecha_hasta
-    total = await solicitud_service.count_pendientes(db, fecha_desde=f_desde, fecha_hasta=f_hasta)
+    total = await solicitud_service.count_pendientes(
+        db, fecha_desde=f_desde, fecha_hasta=f_hasta, estado=estado
+    )
     response.headers["X-Total-Count"] = str(total)
     return await solicitud_service.list_pendientes(
-        db, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta
+        db, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta, estado=estado
     )
 
 

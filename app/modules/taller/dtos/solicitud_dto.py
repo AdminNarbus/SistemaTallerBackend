@@ -76,6 +76,7 @@ class SolicitudDTO(BaseModel):
     motivo_incompleto_checklist: Optional[str] = None
     motivo_cierre_parcial: Optional[str] = None
     fecha_creacion: datetime
+    fecha_actualizacion: Optional[datetime] = None
     fecha_cierre: Optional[datetime] = None
     fecha_liberacion: Optional[datetime] = None
     fecha_primer_ingreso_taller: Optional[datetime] = None
@@ -88,6 +89,7 @@ class SolicitudDTO(BaseModel):
     pauta_completada: bool = False
     total_fallas: int = 0
     fallas_resueltas: int = 0
+    fallas_incompletas: int = 0
     fallas_con_falta_repuesto: int = 0
     fallas_pendientes: int = 0
 
@@ -102,7 +104,8 @@ class SolicitudDTO(BaseModel):
 
 class SolicitudResumenDTO(BaseModel):
     """
-    DTO ultraligero para listados de alta velocidad del mecánico (Bandeja de Pendientes y Mis Trabajos).
+    DTO ultraligero para listados de alta velocidad del mecánico (Bandeja de Pendientes y Mis Trabajos)
+    y vista de auditoría para la supervisora.
     Optimizado para devolver exclusivamente los campos esenciales de la tarjeta/fila.
     """
     model_config = ConfigDict(from_attributes=True)
@@ -112,6 +115,9 @@ class SolicitudResumenDTO(BaseModel):
     n_bus: str = Field(..., description="Número de bus")
     fecha_ingreso: Optional[datetime] = Field(
         None, description="Fecha de ingreso al taller (fecha_primer_ingreso_taller o fecha_creacion)"
+    )
+    fecha_actualizacion: Optional[datetime] = Field(
+        None, description="Fecha de última modificación de la orden de trabajo (fecha_actualizacion)"
     )
     chofer: Optional[str] = Field(
         None, description="Nombre del conductor/usuario que generó la OT (usuario_creador_nombre)"

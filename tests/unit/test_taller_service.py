@@ -789,4 +789,133 @@ async def test_asegurar_ingreso_taller_idempotente_no_duplica_estadias(db_sessio
     assert sol_auto2.estadias[0].fecha_salida is None
 
 
+@pytest.mark.asyncio
+async def test_ciclo_de_vida_tres_estados_falla(db_session, seed_test_data):
+    """Valida el ciclo de vida completo de una falla con los 3 estados: PENDIENTE, INCOMPLETA, RESUELTA."""
+    from app.modules.taller.constants import EstadoFalla
+    from app.modules.taller.dtos import CheckFallaDTO
+
+    mecanico = seed_test_data["mecanico1"]
+    conductor = seed_test_data["conductor"]
+    falla1 = seed_test_data["falla1"]
+
+    sol = await taller_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-ESTADOS-FALLA",
+            descripcion_general="Prueba de 3 estados de falla",
+            detalles=[SolicitudDetalleCreateDTO(falla_id=falla1.id)],
+        ),
+        conductor.id,
+    )
+    det_id = sol.detalles[0].id
+
+    # 1. Estado inicial: debe nacer PENDIENTE
+    assert sol.detalles[0].estado == EstadoFalla.PENDIENTE.value
+    assert sol.detalles[0].resuelto is False
+    assert sol.detalles[0].motivo_incompleto is None
+
+    # 2. Mecánico marca la falla como INCOMPLETA con motivo
+    upd_incompleto = await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det_id,
+        mecanico_id=mecanico.id,
+        estado=EstadoFalla.INCOMPLETA,
+        motivo_incompleto="Falta calibración final del sistema",
+    )
+    assert upd_incompleto.estado == EstadoFalla.INCOMPLETA.value
+    assert upd_incompleto.resuelto is False
+    assert upd_incompleto.motivo_incompleto == "Falta calibración final del sistema"
+    assert upd_incompleto.fecha_resolucion is None
+
+    # 3. Mecánico completa la reparación -> RESUELTA
+    upd_resuelta = await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det_id,
+        mecanico_id=mecanico.id,
+        estado=EstadoFalla.RESUELTA,
+    )
+    assert upd_resuelta.estado == EstadoFalla.RESUELTA.value
+    assert upd_resuelta.resuelto is True
+    assert upd_resuelta.motivo_incompleto is None
+    assert upd_resuelta.fecha_resolucion is not None
+
+    # 4. Mecánico reabre la falla -> PENDIENTE
+    upd_pendiente = await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det_id,
+        mecanico_id=mecanico.id,
+        estado=EstadoFalla.PENDIENTE,
+    )
+    assert upd_pendiente.estado == EstadoFalla.PENDIENTE.value
+    assert upd_pendiente.resuelto is False
+    assert upd_pendiente.motivo_incompleto is None
+    assert upd_pendiente.fecha_resolucion is None
+
+    # 5. Retrocompatibilidad: marcar con resuelto=True asigna RESUELTA
+    upd_compat = await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det_id,
+        mecanico_id=mecanico.id,
+        resuelto=True,
+    )
+    assert upd_compat.estado == EstadoFalla.RESUELTA.value
+    assert upd_compat.resuelto is True
+
+
+@pytest.mark.asyncio
+async def test_metricas_fallas_incompletas_en_solicitud(db_session, seed_test_data):
+    """Valida el cálculo de métricas en SolicitudDTO con fallas resueltas, incompletas y pendientes."""
+    from app.modules.taller.constants import EstadoFalla
+
+    mecanico = seed_test_data["mecanico1"]
+    conductor = seed_test_data["conductor"]
+    falla1 = seed_test_data["falla1"]
+    falla2 = seed_test_data["falla2"]
+
+    sol = await taller_service.create_solicitud(
+        db_session,
+        SolicitudCreateDTO(
+            n_bus="BUS-METRICAS-3ESTADOS",
+            descripcion_general="Prueba métricas 3 estados",
+            detalles=[
+                SolicitudDetalleCreateDTO(falla_id=falla1.id),
+                SolicitudDetalleCreateDTO(falla_id=falla2.id),
+                SolicitudDetalleCreateDTO(descripcion_personalizada="Avería tercera"),
+            ],
+        ),
+        conductor.id,
+    )
+    det1_id = sol.detalles[0].id
+    det2_id = sol.detalles[1].id
+    # detalle 3 queda PENDIENTE
+
+    # Detalle 1 -> RESUELTA
+    await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det1_id,
+        mecanico_id=mecanico.id,
+        estado=EstadoFalla.RESUELTA,
+    )
+
+    # Detalle 2 -> INCOMPLETA
+    await taller_service.averias_srv.check_detalle(
+        db=db_session,
+        solicitud_id=sol.id,
+        detalle_id=det2_id,
+        mecanico_id=mecanico.id,
+        estado=EstadoFalla.INCOMPLETA,
+        motivo_incompleto="En espera de turno siguiente",
+    )
+
+    sol_actualizada = await taller_service.get_solicitud(db_session, sol.id)
+    assert sol_actualizada.total_fallas == 3
+    assert sol_actualizada.fallas_resueltas == 1
+    assert sol_actualizada.fallas_incompletas == 1
+    assert sol_actualizada.fallas_pendientes == 1
 

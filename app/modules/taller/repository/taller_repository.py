@@ -311,9 +311,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -588,8 +612,25 @@ class TallerRepository:
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def touch_fecha_actualizacion(
+        self, db: AsyncSession, solicitud_id: int, now: Optional[datetime] = None
+    ) -> None:
+        """Actualiza la marca de tiempo de última modificación de la orden de trabajo."""
+        t_now = now or datetime.now()
+        stmt = (
+            update(TallerSolicitud)
+            .where(TallerSolicitud.id == solicitud_id)
+            .values(fecha_actualizacion=t_now)
+        )
+        await db.execute(stmt)
+
     async def list_pendientes(
-        self, db: AsyncSession, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
+        self,
+        db: AsyncSession,
+        limit: Optional[int] = DEFAULT_PAGE_LIMIT,
+        skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> List[dict] | List[TallerSolicitud]:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad consolidada con CTEs y agregación JSON
@@ -597,11 +638,13 @@ class TallerRepository:
                 WITH filtered_solicitudes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.estado IN ('PENDIENTE', 'REPORTADO')
-                    ORDER BY s.id DESC, s.fecha_creacion DESC
+                      AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                      AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
+                    ORDER BY s.fecha_actualizacion DESC, s.id DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 asigs_por_detalle AS (
@@ -639,9 +682,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -720,6 +787,7 @@ class TallerRepository:
                     fs.motivo_incompleto_checklist,
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
+                    fs.fecha_actualizacion,
                     fs.fecha_cierre,
                     fs.fecha_liberacion,
                     fs.fecha_primer_ingreso_taller,
@@ -735,16 +803,24 @@ class TallerRepository:
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
                 LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
-                ORDER BY fs.id DESC, fs.fecha_creacion DESC
+                ORDER BY fs.fecha_actualizacion DESC, fs.id DESC
             """)
-            res = await db.execute(sql, {"limit": limit if limit is not None else DEFAULT_PAGE_LIMIT, "skip": skip or 0})
+            res = await db.execute(
+                sql,
+                {
+                    "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT,
+                    "skip": skip or 0,
+                    "fecha_desde": fecha_desde,
+                    "fecha_hasta": fecha_hasta,
+                },
+            )
             return [dict(r) for r in res.mappings().all()]
 
         # Fallback ORM para entornos SQLite (testing)
         stmt = (
             select(TallerSolicitud)
             .where(TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"]))
-            .order_by(TallerSolicitud.id.desc(), TallerSolicitud.fecha_creacion.desc())
+            .order_by(TallerSolicitud.fecha_actualizacion.desc(), TallerSolicitud.id.desc())
             .options(
                 joinedload(TallerSolicitud.bus),
                 joinedload(TallerSolicitud.creador),
@@ -757,6 +833,10 @@ class TallerRepository:
                 noload(TallerSolicitud.pauta_respuestas),
             )
         )
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         if skip:
             stmt = stmt.offset(skip)
         if limit:
@@ -764,16 +844,42 @@ class TallerRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
-    async def count_pendientes(self, db: AsyncSession) -> int:
-        """Retorna el conteo total de solicitudes en estado REPORTADO o PENDIENTE."""
+    async def count_pendientes(
+        self,
+        db: AsyncSession,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+    ) -> int:
+        """Retorna el conteo total de solicitudes en estado REPORTADO o PENDIENTE con filtros opcionales de fecha."""
+        if db.bind and db.bind.dialect.name == "postgresql":
+            sql = text("""
+                SELECT COUNT(*)::int
+                FROM taller_solicitudes s
+                WHERE s.estado IN ('REPORTADO', 'PENDIENTE')
+                  AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                  AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ));
+            """)
+            res = await db.execute(sql, {"fecha_desde": fecha_desde, "fecha_hasta": fecha_hasta})
+            return res.scalar() or 0
+
         stmt = select(func.count(TallerSolicitud.id)).where(
             TallerSolicitud.estado.in_(["REPORTADO", "PENDIENTE"])
         )
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         res = await db.execute(stmt)
         return res.scalar() or 0
 
     async def list_mis_trabajos(
-        self, db: AsyncSession, mecanico_id: int, limit: Optional[int] = DEFAULT_PAGE_LIMIT, skip: int = DEFAULT_PAGE_SKIP
+        self,
+        db: AsyncSession,
+        mecanico_id: int,
+        limit: Optional[int] = DEFAULT_PAGE_LIMIT,
+        skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> List[dict] | List[TallerSolicitud]:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad para Mis Trabajos
@@ -781,7 +887,7 @@ class TallerRepository:
                 WITH filtered_solicitudes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.estado = 'EN_REPARACION'
@@ -790,7 +896,9 @@ class TallerRepository:
                           OR
                           EXISTS (SELECT 1 FROM taller_asignacion_fallas af WHERE af.solicitud_id = s.id AND af.mecanico_id = :mecanico_id AND af.is_activo = true)
                       )
-                    ORDER BY s.fecha_creacion DESC
+                      AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                      AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
+                    ORDER BY s.fecha_actualizacion DESC, s.id DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 detalles_agg AS (
@@ -812,9 +920,33 @@ class TallerRepository:
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
+                                'estado', d.estado,
+                                'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
-                                'mecanico_resolvio_nombre', CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END,
+                                'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN CONCAT(ur.nombre, ' ', ur.apellido) ELSE NULL END)
+                                    ELSE NULL
+                                END,
+                                'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true THEN COALESCE((
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', um.id,
+                                                'nombre', TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, '')))
+                                            )
+                                        )
+                                        FROM taller_asignacion_fallas a
+                                        JOIN usuarios um ON um.id = a.mecanico_id
+                                        WHERE a.detalle_id = d.id AND a.resuelto_en_esta_asignacion = true
+                                    ), CASE WHEN ur.id IS NOT NULL THEN json_build_array(json_build_object('id', ur.id, 'nombre', TRIM(CONCAT(ur.nombre, ' ', COALESCE(ur.apellido, ''))))) ELSE '[]'::json END)
+                                    ELSE '[]'::json
+                                END,
                                 'falta_repuesto', d.falta_repuesto,
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
@@ -904,6 +1036,7 @@ class TallerRepository:
                     fs.motivo_incompleto_checklist,
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
+                    fs.fecha_actualizacion,
                     fs.fecha_cierre,
                     fs.fecha_liberacion,
                     fs.fecha_primer_ingreso_taller,
@@ -919,9 +1052,18 @@ class TallerRepository:
                 LEFT JOIN detalles_agg da ON da.solicitud_id = fs.id
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = fs.id
                 LEFT JOIN evidencias_agg ea ON ea.solicitud_id = fs.id
-                ORDER BY fs.fecha_creacion DESC
+                ORDER BY fs.fecha_actualizacion DESC, fs.id DESC
             """)
-            res = await db.execute(sql, {"mecanico_id": mecanico_id, "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT, "skip": skip or 0})
+            res = await db.execute(
+                sql,
+                {
+                    "mecanico_id": mecanico_id,
+                    "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT,
+                    "skip": skip or 0,
+                    "fecha_desde": fecha_desde,
+                    "fecha_hasta": fecha_hasta,
+                },
+            )
             return [dict(r) for r in res.mappings().all()]
 
         # Fallback ORM para entornos SQLite (testing)
@@ -950,7 +1092,7 @@ class TallerRepository:
                     TallerSolicitud.estado == "EN_REPARACION",
                 )
             )
-            .order_by(TallerSolicitud.fecha_creacion.desc())
+            .order_by(TallerSolicitud.fecha_actualizacion.desc(), TallerSolicitud.id.desc())
             .options(
                 joinedload(TallerSolicitud.bus),
                 joinedload(TallerSolicitud.creador),
@@ -963,6 +1105,10 @@ class TallerRepository:
                 noload(TallerSolicitud.pauta_respuestas),
             )
         )
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         if skip:
             stmt = stmt.offset(skip)
         if limit:
@@ -970,8 +1116,14 @@ class TallerRepository:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
-    async def count_mis_trabajos(self, db: AsyncSession, mecanico_id: int) -> int:
-        """Retorna el conteo total de solicitudes en estado EN_REPARACION asignadas al mecánico."""
+    async def count_mis_trabajos(
+        self,
+        db: AsyncSession,
+        mecanico_id: int,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+    ) -> int:
+        """Retorna el conteo total de solicitudes en estado EN_REPARACION asignadas al mecánico con filtros opcionales de fecha."""
         if db.bind and db.bind.dialect.name == "postgresql":
             sql = text("""
                 SELECT COUNT(*)::int
@@ -981,9 +1133,11 @@ class TallerRepository:
                       EXISTS (SELECT 1 FROM taller_solicitud_mecanicos sm WHERE sm.solicitud_id = s.id AND sm.mecanico_id = :mecanico_id AND sm.is_activo = true)
                       OR
                       EXISTS (SELECT 1 FROM taller_asignacion_fallas af WHERE af.solicitud_id = s.id AND af.mecanico_id = :mecanico_id AND af.is_activo = true)
-                  );
+                  )
+                  AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                  AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ));
             """)
-            res = await db.execute(sql, {"mecanico_id": mecanico_id})
+            res = await db.execute(sql, {"mecanico_id": mecanico_id, "fecha_desde": fecha_desde, "fecha_hasta": fecha_hasta})
             return res.scalar() or 0
 
         # Fallback ORM SQLite
@@ -1001,6 +1155,10 @@ class TallerRepository:
             TallerSolicitud.estado == "EN_REPARACION",
             or_(sub_mec.exists(), sub_falla.exists()),
         )
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         res = await db.execute(stmt)
         return res.scalar() or 0
 
@@ -1049,7 +1207,9 @@ class TallerRepository:
         self, db: AsyncSession, solicitud_id: int, respuestas: List[dict], mecanico_id: int, now: datetime
     ) -> None:
         from app.modules.formularios.repository.pauta_repository import pauta_repository
-        return await pauta_repository.upsert_pauta_respuestas(db, solicitud_id, respuestas, mecanico_id, now)
+        result = await pauta_repository.upsert_pauta_respuestas(db, solicitud_id, respuestas, mecanico_id, now)
+        await self.touch_fecha_actualizacion(db, solicitud_id, now)
+        return result
 
     async def get_conteo_pauta_y_mecanico(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int
@@ -1404,7 +1564,7 @@ class TallerRepository:
                     COUNT(*) AS fallas_no_resueltas
                 FROM taller_solicitud_detalles det
                 WHERE det.solicitud_id = s.id 
-                  AND (det.resuelto = false OR det.falta_repuesto = true)
+                  AND (det.estado != 'RESUELTA' OR (det.estado IS NULL AND det.resuelto = false) OR det.falta_repuesto = true)
             ) d ON true
             LEFT JOIN usuarios u ON u.id = :mecanico_cierre_id
             WHERE s.id = :solicitud_id
@@ -1473,6 +1633,7 @@ class TallerRepository:
             .where(TallerSolicitud.id == solicitud_id)
             .values(
                 estado=nuevo_estado,
+                fecha_actualizacion=now,
                 fecha_cierre=fecha_cierre_val,
                 fecha_liberacion=fecha_liberacion_val,
                 mecanico_cierre_id=mecanico_cierre_id,

@@ -49,6 +49,14 @@ class TallerSolicitud(Base):
     fecha_creacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    fecha_actualizacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=func.now(),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        index=True,
+    )
     fecha_cierre: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

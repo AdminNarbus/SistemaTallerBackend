@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 105,
+  "id": "AV-0105",
+  "timestamp": "2026-09-30T13:24:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUPERVISION-ALERTAS-1",
+    "name": "Reemplazo de Alerta Tiempo en Taller por OT Activa Sin Ingreso",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Reemplazo canónico del tipo de alerta operacional TIEMPO_EN_TALLER_EXCEDIDO por OT_SIN_INGRESO_TALLER en el módulo de supervisión. La nueva alerta identifica de manera precisa las solicitudes u órdenes de trabajo abiertas (PENDIENTE / EN_REPARACION) cuya antigüedad supera las 48 horas sin que el bus haya registrado ningún ingreso físico a maestranza (fecha_primer_ingreso_taller IS NULL). Se actualizaron constantes, DTOs, formateadores de mensajes, la consulta CTE consolidada en PostgreSQL nativo, la consulta ORM con union_all, los contratos de frontend y la suite completa de pruebas unitarias y de integración.",
+  "scope": {
+    "planned": [
+      "Reemplazar TIEMPO_EN_TALLER_EXCEDIDO por OT_SIN_INGRESO_TALLER en TipoAlertaSupervision de constants.py",
+      "Actualizar AlertaSupervisionDTO en dtos/supervision_dto.py",
+      "Actualizar helper formatear_mensaje_ot_sin_ingreso_taller en utils.py preservando alias retrocompatible",
+      "Actualizar consulta SQL CTE get_resumen_taller_consolidado y get_alertas_activas en supervision_repository.py",
+      "Actualizar documentación de contratos API en trazabilidad/05_CONTRATOS_API_FRONTEND.md y 03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "Actualizar tests unitarios e integrales en tests/unit/test_supervision_service.py y tests/integration/test_fase5_supervision_y_alertas.py"
+    ],
+    "completed": [
+      "TipoAlertaSupervision.OT_SIN_INGRESO_TALLER establecido en constants.py",
+      "AlertaSupervisionDTO actualizado con descripción de nuevo tipo",
+      "formatear_mensaje_ot_sin_ingreso_taller implementado en utils.py",
+      "Filtro fecha_primer_ingreso_taller IS NULL aplicado en SQL nativo y ORM en supervision_repository.py",
+      "Contratos de API para Frontend y especificaciones actualizados en trazabilidad/",
+      "Suite de pruebas de supervisión aprobada al 100% (22/22 tests unitarios e integración pasando)"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en la base de datos o migraciones de Alembic (el campo fecha_primer_ingreso_taller ya existía desde la migración 014)",
+      "Modificaciones de interfaz Frontend (se consumirá desde ProtoNeumaticos)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/supervision/constants.py",
+      "action": "modified",
+      "summary": "Reemplazo de TIEMPO_EN_TALLER_EXCEDIDO por OT_SIN_INGRESO_TALLER en enum TipoAlertaSupervision"
+    },
+    {
+      "path": "app/modules/supervision/dtos/supervision_dto.py",
+      "action": "modified",
+      "summary": "Actualización de descripción de tipos válidos en AlertaSupervisionDTO"
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "modified",
+      "summary": "Nuevo formateador formatear_mensaje_ot_sin_ingreso_taller y alias de compatibilidad"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Actualización de queries CTE y ORM para filtrar fecha_primer_ingreso_taller IS NULL y tipo OT_SIN_INGRESO_TALLER"
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Actualización de interface TypeScript y tabla de alertas con OT_SIN_INGRESO_TALLER"
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Actualización de descripción de feed de alertas en módulo de supervisión"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Registro de hito AV-0105 en documento de estado vivo del proyecto"
+    },
+    {
+      "path": "tests/unit/test_supervision_service.py",
+      "action": "modified",
+      "summary": "Ajuste de tests unitarios para verificar OT_SIN_INGRESO_TALLER"
+    },
+    {
+      "path": "tests/integration/test_fase5_supervision_y_alertas.py",
+      "action": "modified",
+      "summary": "Ajuste de prueba de integración de alertas para OT_SIN_INGRESO_TALLER"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Alerta focalizada en OTs activas sin primer ingreso físico a taller",
+      "rationale": "El usuario solicitó quitar la alerta de tiempo en taller genérica y reemplazarla por la de tiempo de bus con OT activa sin haber ido a taller ni una vez. Se aprovecha la columna indexada fecha_primer_ingreso_taller (existente desde la migración 014): cuando es NULL y la OT lleva más de 48h desde fecha_creacion, significa que se reportó la avería pero el bus nunca ha ingresado físicamente a maestranza.",
+      "consequences": "Permite a supervisión identificar demoras operacionales previas al taller (buses en ruta retenidos por tráfico o choferes sin acudir a mantenimiento) de forma automática y en 1 sola consulta SQL."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/unit/test_supervision_service.py tests/integration/test_fase5_supervision_y_alertas.py",
+      "result": "passed",
+      "evidence": "22 passed in 3.10s"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest tests/integration/test_supervision_api.py",
+      "result": "passed",
+      "evidence": "10 passed in 4.19s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir el nuevo tipo de alerta OT_SIN_INGRESO_TALLER en el frontend ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/alerta-bus-ot-activa-sin-taller",
+    "commit": "head",
+    "dirty": true
+  },
+  "notes": [
+    "Los umbrales de horas (48h, 120h, 216h, 312h) se mantienen configurables dinámicamente vía Settings."
+  ]
+}

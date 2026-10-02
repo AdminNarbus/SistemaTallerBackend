@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 111,
+  "id": "AV-0111",
+  "timestamp": "2026-10-02T10:15:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-9",
+    "name": "Co-responsabilidad y Resolución Grupal de Fallas en Cuadrilla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de la Opción A para resolución grupal de fallas: cuando un mecánico asignado en cuadrilla marca una falla como realizada, todos los mecánicos asignados activamente figuran como resolutores (mecanicos_resolvieron y concatenación mecanico_resolvio_nombre para retrocompatibilidad 100%). Sincronización de desasignación/incompleta y bitácora grupal inmutable.",
+  "scope": {
+    "planned": [
+      "Extender DTOs DetalleUpdateDTO y SolicitudDetalleDTO con mecanicos_resolvieron (List[MecanicoResumenDTO]) y mecanico_resolvio_nombre concatenado",
+      "Actualizar AveriasService.check_detalle para marcar resuelto_en_esta_asignacion a todos los mecánicos activos en la falla",
+      "Sincronizar estados INCOMPLETA y PENDIENTE para desmarcar resuelto_en_esta_asignacion en la cuadrilla",
+      "Actualizar AveriasService.resolver_falla_supervisora con lógica grupal idéntica",
+      "Adaptar mappers.orm_to_solicitud_dto para poblar mecanicos_resolvieron y mecanico_resolvio_nombre desde asignaciones",
+      "Actualizar consultas SQL nativas CTE en TallerRepository con json_agg y string_agg de resolutores",
+      "Escribir tests unitarios AAA en test_resolucion_grupal_fallas.py",
+      "Generar guía detallada para el equipo de frontend en GUIA_FRONTEND_RESOLUCION_GRUPAL_FALLAS.md"
+    ],
+    "completed": [
+      "DTO MecanicoResumenDTO creado en averias_dto.py y exportado en __init__.py",
+      "DetalleUpdateDTO y SolicitudDetalleDTO actualizados con mecanicos_resolvieron: List[MecanicoResumenDTO]",
+      "AveriasService.check_detalle marca resuelto_en_esta_asignacion=True a todos los mecánicos asignados activos al resolver, y False al pasar a INCOMPLETA o PENDIENTE",
+      "Bitácora inmutable registra explícitamente al equipo: 'El equipo [Juan, Pedro] completó la reparación de la falla...'",
+      "AveriasService.resolver_falla_supervisora actualizado para cuadrillas",
+      "mappers.orm_to_solicitud_dto mapea a todos los asignados con resuelto_en_esta_asignacion=True tanto en la lista como en el string concatenado",
+      "TallerRepository actualizado en sus 3 consultas CTE de alto rendimiento con json_agg y string_agg sobre taller_asignacion_fallas",
+      "Pruebas unitarias test_resolucion_grupal_fallas.py creadas y aprobadas al 100%",
+      "Suite completa de 199 tests ejecutada y aprobada (100% verde)",
+      "Guía técnica para frontend creada en trazabilidad/GUIA_FRONTEND_RESOLUCION_GRUPAL_FALLAS.md"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Modificaciones de código en el frontend (se documentan vía guía técnica externa)",
+      "Creación de tablas efímeras adicionales de grupos (descartado en favor del diseño relacional N:M existente)"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Definición de MecanicoResumenDTO y adición de campo mecanicos_resolvieron en DetalleUpdateDTO y SolicitudDetalleDTO"
+    },
+    {
+      "path": "app/modules/taller/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de MecanicoResumenDTO en el módulo de DTOs de taller"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Lógica de resolución y transición de estados grupal en check_detalle y resolver_falla_supervisora con bitácora colegiada"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Extracción y mapeo de mecanicos_resolvieron y mecanico_resolvio_nombre concatenado en orm_to_solicitud_dto"
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Inclusión de subqueries json_agg y string_agg en CTEs de get_solicitud, get_solicitudes_pendientes y get_solicitudes_activas_por_bus"
+    },
+    {
+      "path": "tests/unit/test_resolucion_grupal_fallas.py",
+      "action": "created",
+      "summary": "Tests unitarios AAA verificando resolución grupal, marcación incompleta y reapertura colegiada"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_RESOLUCION_GRUPAL_FALLAS.md",
+      "action": "created",
+      "summary": "Guía técnica para la integración frontend con interfaces TypeScript, ejemplos React y explicación de retrocompatibilidad"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0111-01",
+      "title": "Adopción de Opción A: Co-responsabilidad multi-mecánico sobre tabla relacional existente TallerAsignacionFalla",
+      "rationale": "Crear una tabla 'grupos' efímera generaría millones de tuplas ad-hoc y sobrecargaría el esquema relacional con indirecciones innecesarias. La tabla puente taller_asignacion_fallas ya vincula solicitud_detalle_id con usuario_id y posee el flag booleano resuelto_en_esta_asignacion. Activar este flag para todos los mecánicos asignados activamente a la falla al momento de completarla representa el patrón relacional puro de junction table N:M con atributos de relación en Tercera Forma Normal (3NF).",
+      "consequences": "No requiere migraciones de base de datos destructivas ni altera la integridad referencial. Escalabilidad óptima, consultas limpias vía CTEs y retrocompatibilidad total."
+    },
+    {
+      "id": "DEC-0111-02",
+      "title": "Doble formato de salida: mecanicos_resolvieron (lista estructurada) y mecanico_resolvio_nombre (string concatenado)",
+      "rationale": "Garantiza retrocompatibilidad del 100% con tablas y tarjetas existentes en el frontend que renderizan directamente mecanico_resolvio_nombre (ahora mostrando 'Juan Pérez, Carlos Gómez'), mientras permite a componentes avanzados usar mecanicos_resolvieron para avatares, chips o métricas individuales.",
+      "consequences": "Cero breaking changes para el frontend existente, permitiendo adopción gradual de la nueva funcionalidad."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe tests/unit/test_resolucion_grupal_fallas.py -vv",
+      "result": "passed",
+      "evidence": "2 passed in 1.13s (test_check_detalle_resolucion_grupal y test_check_detalle_incompleta_y_reapertura_grupal)"
+    },
+    {
+      "command": ".\\venv\\Scripts\\pytest.exe -q",
+      "result": "passed",
+      "evidence": "199 passed, 1 warning in 69.59s (100% test suite aprobado sin regresiones)"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Entregar la guía de frontend al usuario y verificar si se requiere algún ajuste adicional en el flujo operativo.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/filtro-fecha-ultima-modificacion",
+    "commit": "ba91fcd",
+    "dirty": true
+  },
+  "notes": [
+    "La bitácora inmutable ahora identifica claramente las acciones realizadas por equipos frente a acciones de mecánicos individuales."
+  ]
+}

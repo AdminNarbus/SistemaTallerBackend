@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.taller.constants import (
     EstadoSolicitud,
+    EstadoFalla,
     TipoComentarioBitacora,
 )
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
@@ -82,6 +83,7 @@ class CierreService:
         if u_usr:
             comentario_entry.usuario = u_usr
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return ComentarioAddedDTO(
@@ -149,7 +151,9 @@ class CierreService:
             fallas_no_resueltas_count = len([
                 d
                 for d in (solicitud_fallback.detalles or [])
-                if not d.resuelto or getattr(d, "falta_repuesto", False)
+                if getattr(d, "estado", None) != EstadoFalla.RESUELTA.value
+                or not d.resuelto
+                or getattr(d, "falta_repuesto", False)
             ])
 
         motivo_incompleto_val = validar_pauta_preventiva_cierre(
@@ -397,6 +401,7 @@ class CierreService:
             )
 
         solicitud.estado = nuevo_estado
+        solicitud.fecha_actualizacion = now
 
         base_texto = f"Supervisora {sup_nom} cambió el estado de {estado_anterior} a {nuevo_estado}"
         if dto.comentario and dto.comentario.strip():

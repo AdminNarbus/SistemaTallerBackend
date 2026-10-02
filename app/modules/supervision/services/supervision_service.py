@@ -67,6 +67,7 @@ class SupervisionService:
                 estado=item.estado,
                 n_bus=item.n_bus or "S/N",
                 fecha_ingreso=getattr(item, "fecha_primer_ingreso_taller", None) or item.fecha_creacion,
+                fecha_actualizacion=getattr(item, "fecha_actualizacion", None) or item.fecha_creacion,
                 chofer=item.creador.nombre_completo if getattr(item, "creador", None) else None,
                 tiempo_taller=calcular_horas_en_taller(item.fecha_creacion, item.fecha_cierre),
                 numero_fallas=sum(1 for d in getattr(item, "detalles", []) if not getattr(d, "resuelto", False)),
@@ -75,6 +76,7 @@ class SupervisionService:
 
     def _mapear_dict_a_solicitud_resumen_dto(self, data: dict) -> SolicitudResumenDTO:
         fecha_ingreso = data.get("fecha_primer_ingreso_taller") or data.get("fecha_creacion")
+        fecha_actualizacion = data.get("fecha_actualizacion") or data.get("fecha_creacion")
         conteo_fallas = data.get("fallas_pendientes")
         if conteo_fallas is None:
             detalles_raw = data.get("detalles") or data.get("detalles_json") or []
@@ -112,6 +114,7 @@ class SupervisionService:
             estado=data["estado"],
             n_bus=data.get("n_bus") or "S/N",
             fecha_ingreso=fecha_ingreso,
+            fecha_actualizacion=fecha_actualizacion,
             chofer=data.get("usuario_creador_nombre"),
             tiempo_taller=tiempo_taller_val,
             numero_fallas=conteo_fallas,
@@ -274,15 +277,19 @@ class SupervisionService:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[SolicitudResumenDTO]:
         """Obtiene la lista resumen de solicitudes de taller para supervisión (idéntico al formato del mecánico)."""
         logger.info(
-            "[SUPERVISION_SERVICE] Obteniendo lista de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
+            "[SUPERVISION_SERVICE] Obteniendo lista de solicitudes | n_bus=%s | estado=%s | mecanico_nombre=%s | fecha_desde=%s | fecha_hasta=%s | skip=%s | limit=%s",
             n_bus,
             estado,
             mecanico_nombre,
+            fecha_desde,
+            fecha_hasta,
             skip,
             limit,
         )
@@ -291,6 +298,8 @@ class SupervisionService:
             n_bus=n_bus,
             estado=estado,
             mecanico_nombre=mecanico_nombre,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
             skip=skip,
             limit=limit,
         )
@@ -302,10 +311,17 @@ class SupervisionService:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> int:
         """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
         return await self.repo.count_auditoria(
-            db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre
+            db,
+            n_bus=n_bus,
+            estado=estado,
+            mecanico_nombre=mecanico_nombre,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         )
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:

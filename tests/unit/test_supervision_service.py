@@ -27,6 +27,7 @@ from app.modules.supervision.dtos import (
 )
 from app.modules.supervision.utils import (
     calcular_porcentaje_resolucion,
+    formatear_mensaje_ot_sin_ingreso_taller,
     formatear_mensaje_tiempo_taller_excedido,
     formatear_mensaje_liberado_tiempo_excedido,
     construir_alerta_supervision,
@@ -92,25 +93,26 @@ async def test_supervision_resumen_taller_kpis(db_session, seed_test_data):
 
 @pytest.mark.asyncio
 async def test_supervision_alertas_operacionales(db_session, seed_test_data):
-    """Prueba la generación de alertas operacionales de taller (TIEMPO_EN_TALLER_EXCEDIDO y LIBERADO_TIEMPO_EXCEDIDO)."""
+    """Prueba la generación de alertas operacionales de taller (OT_SIN_INGRESO_TALLER y LIBERADO_TIEMPO_EXCEDIDO)."""
     from datetime import datetime, timedelta, timezone
     conductor = seed_test_data["conductor"]
 
-    # 1. Sembrar bus en taller
-    bus = Bus(id=770, n_bus="888", patente="SUP888", marca="Scania", modelo="K400", is_active=True, en_taller=True)
+    # 1. Sembrar bus en flota
+    bus = Bus(id=770, n_bus="888", patente="SUP888", marca="Scania", modelo="K400", is_active=True, en_taller=False)
     db_session.add(bus)
     await db_session.flush()
 
-    # 2. Sembrar orden con fecha_creacion antigua (excediendo umbral de permanencia en taller: 72 horas)
+    # 2. Sembrar orden con fecha_creacion antigua sin haber ingresado a taller (fecha_primer_ingreso_taller IS NULL: 72 horas)
     fecha_antigua = datetime.now(timezone.utc) - timedelta(hours=72)
     sol1 = TallerSolicitud(
         id=702,
         n_bus="888",
         bus_id=770,
         usuario_creador_id=conductor.id,
-        estado="EN_REPARACION",
-        descripcion_general="Prueba de alertas permanencia taller",
+        estado="PENDIENTE",
+        descripcion_general="Prueba de alertas OT sin ingreso a taller",
         fecha_creacion=fecha_antigua,
+        fecha_primer_ingreso_taller=None,
     )
     # Sembrar orden en estado LIBERADO con fecha_liberacion antigua (excediendo umbral: 96 horas)
     fecha_lib_antigua = datetime.now(timezone.utc) - timedelta(hours=96)
@@ -130,13 +132,14 @@ async def test_supervision_alertas_operacionales(db_session, seed_test_data):
     alertas = await supervision_service.get_alertas_taller(db_session)
     tipos = [a.tipo for a in alertas]
 
-    assert TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO in tipos
+    assert TipoAlertaSupervision.OT_SIN_INGRESO_TALLER in tipos
     assert TipoAlertaSupervision.LIBERADO_TIEMPO_EXCEDIDO in tipos
 
-    alerta_taller = next(a for a in alertas if a.tipo == TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO and a.solicitud_id == 702)
-    assert "888" in alerta_taller.mensaje
-    assert alerta_taller.horas_acumuladas is not None
-    assert alerta_taller.horas_acumuladas >= 71.0
+    alerta_sin_ingreso = next(a for a in alertas if a.tipo == TipoAlertaSupervision.OT_SIN_INGRESO_TALLER and a.solicitud_id == 702)
+    assert "888" in alerta_sin_ingreso.mensaje
+    assert "sin haber ingresado a taller" in alerta_sin_ingreso.mensaje
+    assert alerta_sin_ingreso.horas_acumuladas is not None
+    assert alerta_sin_ingreso.horas_acumuladas >= 71.0
 
     alerta_lib = next(a for a in alertas if a.tipo == TipoAlertaSupervision.LIBERADO_TIEMPO_EXCEDIDO and a.solicitud_id == 703)
     assert "889" in alerta_lib.mensaje
@@ -205,18 +208,18 @@ def test_calcular_porcentaje_resolucion_completa():
 
 
 def test_formatear_mensajes_alertas():
-    """Valida la construcción semántica de los mensajes de alertas operacionales de permanencia."""
-    # 1. Tiempo en taller con horas < 48
-    msg1 = formatear_mensaje_tiempo_taller_excedido("101", 36.0, "EN_REPARACION")
-    assert msg1 == "Bus 101 lleva 36 horas en taller (EN_REPARACION) sin finalizar"
+    """Valida la construcción semántica de los mensajes de alertas operacionales."""
+    # 1. OT sin ingreso a taller con horas < 48
+    msg1 = formatear_mensaje_ot_sin_ingreso_taller("101", 36.0, "PENDIENTE")
+    assert msg1 == "Bus 101 tiene OT activa hace 36 horas sin haber ingresado a taller"
 
-    # 2. Tiempo en taller con días >= 48
-    msg2 = formatear_mensaje_tiempo_taller_excedido("102", 72.0, "PENDIENTE")
-    assert msg2 == "Bus 102 lleva 3.0 días en taller (PENDIENTE) sin finalizar"
+    # 2. OT sin ingreso a taller con días >= 48
+    msg2 = formatear_mensaje_ot_sin_ingreso_taller("102", 72.0, "PENDIENTE")
+    assert msg2 == "Bus 102 tiene OT activa hace 3.0 días sin haber ingresado a taller"
 
-    # 3. Tiempo en taller sin n_bus (usa fallback)
-    msg3 = formatear_mensaje_tiempo_taller_excedido("", 50.0)
-    assert msg3 == f"Bus {BUS_SIN_NUMERO} lleva 2.1 días en taller sin finalizar"
+    # 3. OT sin ingreso a taller sin n_bus (usa fallback)
+    msg3 = formatear_mensaje_ot_sin_ingreso_taller("", 50.0)
+    assert msg3 == f"Bus {BUS_SIN_NUMERO} tiene OT activa hace 2.1 días sin haber ingresado a taller"
 
     # 4. Liberado tiempo excedido
     msg4 = formatear_mensaje_liberado_tiempo_excedido("103", 96.0)
@@ -231,7 +234,7 @@ def test_construir_alerta_supervision():
     """Valida la instanciación de AlertaSupervisionDTO mediante el helper puro."""
     # Arrange & Act
     alerta = construir_alerta_supervision(
-        tipo=TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO,
+        tipo=TipoAlertaSupervision.OT_SIN_INGRESO_TALLER,
         severidad=SeveridadAlerta.ALTA,
         solicitud_id=501,
         n_bus="404",
@@ -241,7 +244,7 @@ def test_construir_alerta_supervision():
 
     # Assert
     assert isinstance(alerta, AlertaSupervisionDTO)
-    assert alerta.tipo == TipoAlertaSupervision.TIEMPO_EN_TALLER_EXCEDIDO
+    assert alerta.tipo == TipoAlertaSupervision.OT_SIN_INGRESO_TALLER
     assert alerta.severidad == SeveridadAlerta.ALTA
     assert alerta.solicitud_id == 501
     assert alerta.n_bus == "404"
@@ -316,6 +319,8 @@ async def test_supervision_service_get_auditoria_aislado():
         n_bus="500",
         estado="EN_REPARACION",
         mecanico_nombre="Juan",
+        fecha_desde=None,
+        fecha_hasta=None,
         skip=0,
         limit=10,
     )
@@ -514,12 +519,12 @@ async def test_get_mecanicos_con_carga_unit(db_session, seed_test_data):
 
 @pytest.mark.asyncio
 async def test_alertas_formateo_tiempo_mensajes():
-    """Verifica los formateadores de mensajes para alertas operacionales de permanencia."""
-    msg_taller_horas = formatear_mensaje_tiempo_taller_excedido("101", 36.0, "EN_REPARACION")
-    assert "36 horas en taller (EN_REPARACION)" in msg_taller_horas
+    """Verifica los formateadores de mensajes para alertas operacionales."""
+    msg_taller_horas = formatear_mensaje_ot_sin_ingreso_taller("101", 36.0, "PENDIENTE")
+    assert "tiene OT activa hace 36 horas sin haber ingresado a taller" in msg_taller_horas
 
-    msg_taller_dias = formatear_mensaje_tiempo_taller_excedido("102", 72.0, "PENDIENTE")
-    assert "3.0 días en taller (PENDIENTE)" in msg_taller_dias
+    msg_taller_dias = formatear_mensaje_ot_sin_ingreso_taller("102", 72.0, "PENDIENTE")
+    assert "tiene OT activa hace 3.0 días sin haber ingresado a taller" in msg_taller_dias
 
     msg_liberado_dias = formatear_mensaje_liberado_tiempo_excedido("103", 96.0)
     assert "4.0 días circulando en estado LIBERADO con fallas pendientes" in msg_liberado_dias

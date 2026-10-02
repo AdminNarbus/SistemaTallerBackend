@@ -1,13 +1,15 @@
 import logging
 from typing import List, Optional
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     BusinessRuleException,
     ConflictException,
     NotFoundException,
+    PermissionException,
 )
-from app.core.security import create_access_token, get_password_hash
+from app.core.security import create_access_token, create_refresh_token, get_password_hash
 from app.modules.auth.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -24,7 +26,6 @@ from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.repository.user_repository import user_repository
 from app.modules.auth.user_cache import (
     clear_user_cache,
-    get_cached_user,
     set_cached_user,
 )
 
@@ -77,26 +78,50 @@ class UserService:
         )
         nuevo_usuario.rol_rel = rol_obj
         await user_repository.create(db, nuevo_usuario)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ConflictException("El nombre de usuario ya está registrado en el sistema.") from exc
         return nuevo_usuario
 
     async def register(
         self, db: AsyncSession, usuario_in: UsuarioCreateDTO
     ) -> TokenDTO:
         """Caso de Uso: Auto-registro de un nuevo usuario en la plataforma."""
+        # El registro público nunca puede crear cuentas privilegiadas. El rol
+        # recibido del cliente se ignora deliberadamente.
+        usuario_in = usuario_in.model_copy(
+            update={"rol": RolUsuario.CONDUCTOR, "is_active": True}
+        )
         logger.info("[USER-SERVICE] Solicitud de registro | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
         nuevo_usuario = await self._crear_usuario_entidad(db, usuario_in)
         access_token = create_access_token(subject=nuevo_usuario.id)
+        refresh_token = create_refresh_token(subject=nuevo_usuario.id)
         user_dto = UsuarioResponseDTO.model_validate(nuevo_usuario)
         set_cached_user(nuevo_usuario.id, user_dto)
         logger.info("[USER-SERVICE] Registro exitoso | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
 
-        return TokenDTO(access_token=access_token, token_type="bearer", user=user_dto)
+        return TokenDTO(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            user=user_dto,
+        )
 
     async def crear_usuario(
-        self, db: AsyncSession, usuario_in: UsuarioCreateDTO
+        self,
+        db: AsyncSession,
+        usuario_in: UsuarioCreateDTO,
+        actor_rol: Optional[str] = None,
     ) -> UsuarioResponseDTO:
         """Caso de Uso: Creación administrativa de usuario (desde panel de supervisor o admin)."""
+        actor_rol_clean = (actor_rol or "").upper().strip()
+        requested_role = getattr(usuario_in.rol, "value", usuario_in.rol)
+        if requested_role == RolUsuario.ADMIN.value and actor_rol_clean != RolUsuario.ADMIN.value:
+            raise PermissionException(
+                "Solo un ADMIN puede crear otro usuario con rol ADMIN."
+            )
         logger.info("[USER-SERVICE] Creación administrativa de usuario | username='%s' | rol='%s'", usuario_in.username, usuario_in.rol)
         nuevo_usuario = await self._crear_usuario_entidad(db, usuario_in)
         logger.info("[USER-SERVICE] Usuario administrativo creado | id=%s | username='%s'", nuevo_usuario.id, nuevo_usuario.username)
@@ -124,11 +149,7 @@ class UserService:
     async def get_current_user_profile(
         self, db: AsyncSession, user_id: int
     ) -> Optional[UsuarioResponseDTO]:
-        """Obtiene el perfil de usuario autenticado por su ID, aplicando caché en memoria."""
-        cached_user = get_cached_user(user_id)
-        if cached_user:
-            return cached_user
-
+        """Obtiene el perfil actual desde BD para validar inmediatamente is_active y rol."""
         user = await user_repository.get_by_id(db, user_id=user_id)
         if not user or not user.is_active:
             clear_user_cache(user_id)

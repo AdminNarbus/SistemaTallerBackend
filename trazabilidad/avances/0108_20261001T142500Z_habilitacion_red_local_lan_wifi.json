@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 108,
+  "id": "AV-0108",
+  "timestamp": "2026-10-01T14:25:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "LAN-01",
+    "name": "Configuracion Backend en Red Local WiFi",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Configuración del backend para escuchar en todas las interfaces de red local (0.0.0.0) sobre la WiFi (IP 192.168.1.92), habilitando perfil dev_lan, orígenes CORS de LAN y arranque directo mediante python main.py o uvicorn con --host 0.0.0.0.",
+  "scope": {
+    "planned": [
+      "Detectar interfaz y dirección IP activa de la red WiFi",
+      "Actualizar archivo .env con ENVIRONMENT=dev_lan y HOST=0.0.0.0",
+      "Habilitar orígenes e IPs de red local en BACKEND_CORS_ORIGINS",
+      "Soportar arranque ASGI directo con python main.py respetando settings.server_host"
+    ],
+    "completed": [
+      "Dirección IPv4 de WiFi verificada: 192.168.1.92",
+      "Archivo .env configurado con ENVIRONMENT=dev_lan, HOST=0.0.0.0 y lista CORS corregida",
+      "Archivo main.py actualizado con bloque ejecutable python main.py para bind automático a 0.0.0.0:8000",
+      "146 pruebas unitarias y e2e ejecutadas exitosamente"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Establecimiento de ENVIRONMENT=dev_lan, HOST=0.0.0.0 y corrección de array CORS incluyendo IP 192.168.1.92"
+    },
+    {
+      "path": "main.py",
+      "action": "modified",
+      "summary": "Incorporación de launcher uvicorn.run bajo if __name__ == '__main__' para heredar host=settings.server_host"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-LAN-001",
+      "title": "Configuración de HOST=0.0.0.0 y Perfil dev_lan",
+      "rationale": "Por defecto Uvicorn CLI se enlaza a 127.0.0.1 impidiendo el acceso desde otros dispositivos de la red Wi-Fi (celulares, tablets u otras computadoras). Al enlazar a 0.0.0.0 y activar dev_lan, se permite la comunicación remota en la LAN con políticas CORS permisivas para desarrollo.",
+      "consequences": "Cualquier dispositivo en la red WiFi que apunte a http://192.168.1.92:8000 puede consumir la API y el Swagger (/docs)."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Get-NetIPAddress -AddressFamily IPv4",
+      "result": "passed",
+      "evidence": "Interfaz Wi-Fi con IP 192.168.1.92"
+    },
+    {
+      "command": "python -c 'from app.core.config import settings; print(settings.server_host, settings.ENVIRONMENT)'",
+      "result": "passed",
+      "evidence": "HOST: 0.0.0.0 ENV: AppEnvironment.DEV_LAN"
+    },
+    {
+      "command": "pytest -k 'not integration'",
+      "result": "passed",
+      "evidence": "146 passed, 49 deselected, 1 warning"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Iniciar el servidor backend con 'python main.py' o 'uvicorn main:app --reload --host 0.0.0.0 --port 8000'.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Asegurarse de que el Firewall de Windows permita conexiones entrantes en el puerto 8000 si se presentan problemas de conexión desde otros dispositivos."
+  ]
+}

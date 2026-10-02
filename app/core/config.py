@@ -6,7 +6,8 @@ from typing import Final, List, Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24 * 365 * 100  # 100 años (~52.560.000 minutos, sin límite de expiración práctica)
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 30
+DEFAULT_REFRESH_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24 * 30
 DEFAULT_MAX_UPLOAD_SIZE_BYTES: Final[int] = 10 * 1024 * 1024  # 10 MB
 DEFAULT_SIGNED_URL_EXPIRATION_MINUTES: Final[int] = 60
 
@@ -34,10 +35,11 @@ class Settings(BaseSettings):
     HOST: Optional[str] = None
     PORT: int = 8000
 
-    # JWT Security Settings (100 años por defecto para login sin límite)
+    # JWT Security Settings
     SECRET_KEY: str = "narbus_secret_key_taller_2026_super_secure_jwt_token_change_in_prod"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = DEFAULT_REFRESH_TOKEN_EXPIRE_MINUTES
 
     # PostgreSQL Database Settings
     POSTGRES_SERVER: str = "localhost"
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
 
     CORS_ORIGIN_REGEX: Optional[str] = None
 
-    # Restricción perimetral: Solo móviles y origen web autorizado
+    # Restricción perimetral: cualquier dispositivo; el control aplica al origen web.
     ENFORCE_MOBILE_ONLY: bool = False
     ENFORCE_ORIGIN_CHECK: bool = False
     APP_CLIENT_SECRET: Optional[str] = None  # Header opcional X-App-Client-Key para bypass o clientes de confianza
@@ -143,6 +145,8 @@ class Settings(BaseSettings):
     def effective_cors_origin_regex(self) -> Optional[str]:
         if self.CORS_ORIGIN_REGEX:
             return self.CORS_ORIGIN_REGEX
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip():
+            return None
         if self.ENVIRONMENT in (AppEnvironment.DEV_LAN, AppEnvironment.DEV_LOCAL):
             return r"^(https?://.*|http://.*|capacitor://.*)$"
         # En producción permite por defecto cualquier frontend alojado en Cloud Run o Firebase
@@ -211,6 +215,7 @@ __all__ = [
     "Settings",
     "settings",
     "DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES",
+    "DEFAULT_REFRESH_TOKEN_EXPIRE_MINUTES",
     "DEFAULT_MAX_UPLOAD_SIZE_BYTES",
     "DEFAULT_SIGNED_URL_EXPIRATION_MINUTES",
 ]

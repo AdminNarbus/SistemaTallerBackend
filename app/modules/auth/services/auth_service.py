@@ -6,7 +6,12 @@ from app.core.exceptions import (
     AuthenticationException,
     BusinessRuleException,
 )
-from app.core.security import create_access_token, verify_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    verify_password,
+)
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
@@ -40,11 +45,37 @@ class AuthService:
             raise BusinessRuleException("El usuario se encuentra inactivo.")
 
         access_token = create_access_token(subject=user.id)
+        refresh_token = create_refresh_token(subject=user.id)
         user_dto = UsuarioResponseDTO.model_validate(user)
         set_cached_user(user.id, user_dto)
         logger.info("[AUTH] Token JWT emitido exitosamente | id=%s | username='%s'", user.id, user.username)
 
-        return TokenDTO(access_token=access_token, token_type="bearer", user=user_dto)
+        return TokenDTO(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            user=user_dto,
+        )
+
+    async def refresh(self, db: AsyncSession, refresh_token: str) -> TokenDTO:
+        """Rota un refresh token válido por un nuevo par de tokens."""
+        try:
+            user_id = decode_refresh_token(refresh_token)
+        except ValueError as exc:
+            raise AuthenticationException("Refresh token inválido o expirado.") from exc
+
+        user = await user_repository.get_by_id(db, user_id=user_id)
+        if not user or not user.is_active:
+            raise AuthenticationException("La sesión no es válida para este usuario.")
+
+        user_dto = UsuarioResponseDTO.model_validate(user)
+        set_cached_user(user.id, user_dto)
+        return TokenDTO(
+            access_token=create_access_token(subject=user.id),
+            refresh_token=create_refresh_token(subject=user.id),
+            token_type="bearer",
+            user=user_dto,
+        )
 
     async def login_access_token(
         self, db: AsyncSession, form_data: Any

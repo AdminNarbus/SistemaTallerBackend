@@ -38,7 +38,10 @@ os.makedirs(os.path.join(UPLOAD_DIR, "neumaticos"), exist_ok=True)
 logger.info("[STARTUP] Directorio de almacenamiento de imágenes listo: '%s'", UPLOAD_DIR)
 
 
-async def _neon_keepalive_loop():
+KEEPALIVE_INTERVAL_SECONDS = 120
+
+
+async def _neon_keepalive_loop(stop_event: asyncio.Event):
     """
     Tarea en background que realiza un ping liviano cada 2 minutos a la BD en la nube.
     Evita que el cómputo serverless de Neon se suspenda por inactividad (timeout de 5 min)
@@ -47,7 +50,13 @@ async def _neon_keepalive_loop():
     from app.core.database import AsyncSessionLocal
     while True:
         try:
-            await asyncio.sleep(120)
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(), timeout=KEEPALIVE_INTERVAL_SECONDS
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
             t0 = time.perf_counter()
             async with AsyncSessionLocal() as session:
                 await session.execute(text("SELECT 1"))
@@ -69,6 +78,7 @@ async def lifespan(app: FastAPI):
     La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
     """
     keepalive_task = None
+    keepalive_stop = asyncio.Event()
     try:
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
         if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
@@ -89,7 +99,12 @@ async def lifespan(app: FastAPI):
             async with AsyncSessionLocal() as session:
                 await session.execute(text("SELECT 1"))
             logger.info("[STARTUP] Pool de base de datos pre-calentado e iniciado.")
-            keepalive_task = asyncio.create_task(_neon_keepalive_loop())
+            # Una sola tarea por proceso y ciclo de vida. El lock distribuido de
+            # Alembic/seed evita que las inicializaciones de BD compitan entre sí.
+            keepalive_task = asyncio.create_task(
+                _neon_keepalive_loop(keepalive_stop),
+                name="narbus-neon-keepalive",
+            )
     except Exception as e:
         logger.critical(
             "[STARTUP] Error crítico durante el inicio de la aplicación: %s",
@@ -99,7 +114,7 @@ async def lifespan(app: FastAPI):
     
     yield
     if keepalive_task:
-        keepalive_task.cancel()
+        keepalive_stop.set()
         try:
             await keepalive_task
         except asyncio.CancelledError:

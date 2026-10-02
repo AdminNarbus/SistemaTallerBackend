@@ -151,6 +151,7 @@ class CuadrillaService:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, mec_nom)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -228,6 +229,7 @@ class CuadrillaService:
             colab_entry.mecanico = u_colab
         self.repo.add_mecanico(db, colab_entry)
         attach_mecanico_safe(solicitud, colab_entry)
+        solicitud.fecha_actualizacion = datetime.now()
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -321,6 +323,7 @@ class CuadrillaService:
                 "[MANTENCION] Sin mecánicos activos → PENDIENTE | solicitud_id=%s",
                 solicitud_id,
             )
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -391,6 +394,7 @@ class CuadrillaService:
             comentario_entry.usuario = u_usr
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, usr_nom)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -577,6 +581,7 @@ class CuadrillaService:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, mec_nom)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -713,6 +718,7 @@ class CuadrillaService:
             comentario_entry.usuario = u_sup
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, sup_nom)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -921,6 +927,7 @@ class CuadrillaService:
             comentario_entry.usuario = u_ejecutor
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, ejecutor_nombre)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)

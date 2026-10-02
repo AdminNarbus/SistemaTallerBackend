@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.dtos.catalogo_dto import FallaTallerDTO
 
 
@@ -80,16 +81,39 @@ class AgregarFallaDTO(BaseModel):
 
 
 class CheckFallaDTO(BaseModel):
-    """Payload para marcar o desmarcar la resolución de una avería desde taller o supervisión."""
-    resuelto: bool = True
-    mecanico_id: Optional[int] = Field(None, description="ID del mecánico resolutor")
+    """Payload para marcar la resolución o estado de una avería desde taller o supervisión."""
+    estado: Optional[EstadoFalla] = None
+    resuelto: Optional[bool] = None
+    motivo_incompleto: Optional[str] = None
+    mecanico_id: Optional[int] = Field(None, description="ID del mecánico resolutor (singular, retrocompatible)")
+    mecanicos_ids: Optional[List[int]] = Field(None, description="Lista de IDs de mecánicos que resolvieron la avería (multi-selección)")
     mecanico_resolvio_id: Optional[int] = Field(None, description="Alias para compatibilidad")
     usuario_id: Optional[int] = None
     comentario: Optional[str] = None
 
     @property
     def effective_mecanico_id(self) -> Optional[int]:
+        """Retorna el primer mecánico resolutor (retrocompatibilidad)."""
+        if self.mecanicos_ids:
+            return self.mecanicos_ids[0]
         return self.mecanico_id or self.mecanico_resolvio_id or self.usuario_id
+
+    @property
+    def effective_mecanicos_ids(self) -> List[int]:
+        """Retorna la lista completa de mecánicos resolutores.
+        Prioriza mecanicos_ids (lista); fallback a mecanico_id singular."""
+        if self.mecanicos_ids:
+            return self.mecanicos_ids
+        singular = self.mecanico_id or self.mecanico_resolvio_id or self.usuario_id
+        return [singular] if singular else []
+
+    @property
+    def effective_estado(self) -> EstadoFalla:
+        if self.estado is not None:
+            return self.estado
+        if self.resuelto is not None:
+            return EstadoFalla.RESUELTA if self.resuelto else EstadoFalla.PENDIENTE
+        return EstadoFalla.RESUELTA
 
 
 ResolverFallaSupervisoraDTO = CheckFallaDTO
@@ -101,14 +125,24 @@ class ReportarRepuestoDTO(BaseModel):
     comentario: Optional[str] = None
 
 
+class MecanicoResumenDTO(BaseModel):
+    """Representación resumida de un mecánico resolutor."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nombre: str
+
+
 class DetalleUpdateDTO(BaseModel):
-    """Respuesta ultraligera tras check o reporte de repuesto (0 RTTs adicionales)."""
+    """Respuesta ultraligera tras check o actualización de estado de avería (0 RTTs adicionales)."""
     detalle_id: int
     solicitud_id: int
+    estado: str = EstadoFalla.PENDIENTE.value
+    motivo_incompleto: Optional[str] = None
     resuelto: bool
-    falta_repuesto: bool
+    falta_repuesto: bool = False
     mecanico_resolvio_id: Optional[int] = None
     mecanico_resolvio_nombre: Optional[str] = None
+    mecanicos_resolvieron: List[MecanicoResumenDTO] = []
     comentario_repuesto: Optional[str] = None
     fecha_resolucion: Optional[datetime] = None
 
@@ -126,9 +160,12 @@ class SolicitudDetalleDTO(BaseModel):
     falla_id: Optional[int] = None
     falla: Optional[FallaTallerDTO] = None
     descripcion_personalizada: Optional[str] = None
+    estado: str = EstadoFalla.PENDIENTE.value
+    motivo_incompleto: Optional[str] = None
     resuelto: bool
     mecanico_resolvio_id: Optional[int] = None
     mecanico_resolvio_nombre: Optional[str] = None
+    mecanicos_resolvieron: List[MecanicoResumenDTO] = []
     falta_repuesto: bool = False
     comentario_repuesto: Optional[str] = None
     fecha_creacion: datetime

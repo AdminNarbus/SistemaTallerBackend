@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.auth.constants import RolUsuario
-from app.modules.taller.constants import EstadoSolicitud
+from app.modules.taller.constants import EstadoSolicitud, EstadoFalla
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
@@ -13,6 +13,7 @@ from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudM
 from app.modules.taller.dtos import (
     AgregarFallaDTO,
     DetalleUpdateDTO,
+    MecanicoResumenDTO,
     ReportarRepuestoDTO,
     ResolverFallaSupervisoraDTO,
     SolicitudDTO,
@@ -99,6 +100,8 @@ class AveriasService:
             solicitud_id=solicitud.id,
             falla_id=falla_id,
             descripcion_personalizada=texto,
+            estado=EstadoFalla.PENDIENTE.value,
+            motivo_incompleto=None,
             resuelto=False,
             falta_repuesto=False,
             fecha_creacion=now,
@@ -131,6 +134,7 @@ class AveriasService:
                 raise BusinessRuleException(
                     "El mecánico resolutor indicado no existe o se encuentra inactivo"
                 )
+            nuevo_detalle.estado = EstadoFalla.RESUELTA.value
             nuevo_detalle.resuelto = True
             nuevo_detalle.mecanico_resolvio_id = resolutor_id
             nuevo_detalle.mecanico_resolvio = u_resolutor
@@ -286,6 +290,7 @@ class AveriasService:
             comentario_entry.usuario = u
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, mec_nombre)
+        solicitud.fecha_actualizacion = now
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -296,17 +301,27 @@ class AveriasService:
         solicitud_id: int,
         detalle_id: int,
         mecanico_id: int,
-        resuelto: bool,
+        resuelto: Optional[bool] = None,
         mecanico_nombre: Optional[str] = None,
         mecanico_resolvio_id: Optional[int] = None,
+        estado: Optional[EstadoFalla] = None,
+        motivo_incompleto: Optional[str] = None,
     ) -> DetalleUpdateDTO:
-        """Marca o desmarca un check de falla resuelta retornando un DTO atómico."""
+        """Actualiza el estado de una falla (PENDIENTE, INCOMPLETA, RESUELTA) retornando un DTO atómico."""
+        target_estado: EstadoFalla
+        if estado is not None:
+            target_estado = estado
+        elif resuelto is not None:
+            target_estado = EstadoFalla.RESUELTA if resuelto else EstadoFalla.PENDIENTE
+        else:
+            target_estado = EstadoFalla.RESUELTA
+
         logger.info(
-            "[MANTENCION] Check detalle atómico | solicitud_id=%s | detalle_id=%s | usuario_id=%s | resuelto=%s | mecanico_resolvio_id=%s",
+            "[MANTENCION] Check detalle atómico | solicitud_id=%s | detalle_id=%s | usuario_id=%s | target_estado=%s | resolutor_id=%s",
             solicitud_id,
             detalle_id,
             mecanico_id,
-            resuelto,
+            target_estado.value,
             mecanico_resolvio_id,
         )
         detalle_target = await self.repo.get_detalle_operacional(
@@ -318,13 +333,9 @@ class AveriasService:
             raise NotFoundException("Detalle de falla no encontrado")
 
         now = datetime.now()
-        detalle_target.resuelto = resuelto
-
-        resolutor_id = (
-            mecanico_resolvio_id
-            if (mecanico_resolvio_id and resuelto)
-            else (mecanico_id if resuelto else None)
-        )
+        is_resuelta = target_estado == EstadoFalla.RESUELTA
+        detalle_target.estado = target_estado.value
+        detalle_target.resuelto = is_resuelta
 
         actor_nom = mecanico_nombre or "Mecánico"
         u_mec = None
@@ -333,41 +344,116 @@ class AveriasService:
             if u_mec:
                 actor_nom = u_mec.nombre_completo
 
-        u_resolutor = None
-        resolutor_nom = actor_nom
-        if resolutor_id and resolutor_id != mecanico_id:
-            u_resolutor = await self.repo.get_usuario_by_id(db, resolutor_id)
-            if not u_resolutor or not u_resolutor.is_active:
-                raise BusinessRuleException(
-                    "El mecánico resolutor indicado no existe o se encuentra inactivo"
-                )
-            resolutor_nom = u_resolutor.nombre_completo
-        elif u_mec:
-            u_resolutor = u_mec
+        falla_nom = describir_detalle_averia(detalle_target)
+        resolutor_nom = None
 
-        if resuelto:
+        asigs_activas = await self.repo.get_asignaciones_activas(
+            db, solicitud_id=solicitud_id, detalles_ids=[detalle_id]
+        )
+
+        mecanicos_resolvieron_dtos: List[MecanicoResumenDTO] = []
+        nombres_equipo: List[str] = []
+        vistos_ids = set()
+
+        for asig in asigs_activas:
+            mec = asig.mecanico
+            if mec and mec.id not in vistos_ids:
+                vistos_ids.add(mec.id)
+                nombres_equipo.append(mec.nombre_completo)
+                mecanicos_resolvieron_dtos.append(
+                    MecanicoResumenDTO(id=mec.id, nombre=mec.nombre_completo)
+                )
+
+        if target_estado == EstadoFalla.RESUELTA:
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = True
+
+            resolutor_id = (
+                mecanico_resolvio_id if mecanico_resolvio_id else mecanico_id
+            )
+            u_resolutor = None
+            resolutor_nom = actor_nom
+            if resolutor_id and resolutor_id != mecanico_id:
+                u_resolutor = await self.repo.get_usuario_by_id(db, resolutor_id)
+                if not u_resolutor or not u_resolutor.is_active:
+                    raise BusinessRuleException(
+                        "El mecánico resolutor indicado no existe o se encuentra inactivo"
+                    )
+                resolutor_nom = u_resolutor.nombre_completo
+            elif u_mec:
+                u_resolutor = u_mec
+
+            if resolutor_id and resolutor_id not in vistos_ids and not asigs_activas:
+                vistos_ids.add(resolutor_id)
+                nombres_equipo.append(resolutor_nom)
+                mecanicos_resolvieron_dtos.append(
+                    MecanicoResumenDTO(id=resolutor_id, nombre=resolutor_nom)
+                )
+
             detalle_target.mecanico_resolvio_id = resolutor_id
             detalle_target.fecha_resolucion = now
+            detalle_target.motivo_incompleto = None
             if u_resolutor:
                 detalle_target.mecanico_resolvio = u_resolutor
-        else:
+
+            if len(nombres_equipo) > 1:
+                resolutor_str = ", ".join(nombres_equipo)
+                texto_check = f"El equipo [{resolutor_str}] completó la reparación de la falla: '{falla_nom}' (marcado por {actor_nom})"
+                resolutor_nom = resolutor_str
+            elif len(nombres_equipo) == 1:
+                resolutor_nom = nombres_equipo[0]
+                if resolutor_id != mecanico_id:
+                    texto_check = f"{actor_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {resolutor_nom}"
+                else:
+                    texto_check = f"{resolutor_nom} completó la reparación de la falla: '{falla_nom}'"
+            else:
+                texto_check = f"{actor_nom} completó la reparación de la falla: '{falla_nom}'"
+                mecanicos_resolvieron_dtos.append(
+                    MecanicoResumenDTO(id=mecanico_id, nombre=actor_nom)
+                )
+            tipo_check = "RESOLUCION"
+
+        elif target_estado == EstadoFalla.INCOMPLETA:
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = False
+
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
             detalle_target.fecha_resolucion = None
+            motivo_limpio = (motivo_incompleto or "").strip() or None
+            detalle_target.motivo_incompleto = motivo_limpio
+
+            if len(nombres_equipo) > 1:
+                texto_check = f"El equipo [{', '.join(nombres_equipo)}] marcó la falla '{falla_nom}' como INCOMPLETA"
+                if motivo_limpio:
+                    texto_check += f" - Motivo: {motivo_limpio}"
+                texto_check += f" (registrado por {actor_nom})"
+            else:
+                texto_check = f"{actor_nom} marcó la falla '{falla_nom}' como INCOMPLETA"
+                if motivo_limpio:
+                    texto_check += f" - Motivo: {motivo_limpio}"
+            tipo_check = "AVANCE"
+            resolutor_nom = None
+            mecanicos_resolvieron_dtos = []
+
+        else:  # EstadoFalla.PENDIENTE
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = False
+
+            detalle_target.mecanico_resolvio_id = None
+            detalle_target.mecanico_resolvio = None
+            detalle_target.fecha_resolucion = None
+            detalle_target.motivo_incompleto = None
+
+            if len(nombres_equipo) > 1:
+                texto_check = f"El equipo [{', '.join(nombres_equipo)}] reabrió la falla: '{falla_nom}' (registrado por {actor_nom})"
+            else:
+                texto_check = f"{actor_nom} reabrió la falla: '{falla_nom}'"
+            tipo_check = "REAPERTURA"
+            resolutor_nom = None
+            mecanicos_resolvieron_dtos = []
 
         db.add(detalle_target)
-
-        falla_nom = describir_detalle_averia(detalle_target)
-
-        if resuelto:
-            if resolutor_id != mecanico_id:
-                texto_check = f"{actor_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {resolutor_nom}"
-            else:
-                texto_check = f"{resolutor_nom} completó la reparación de la falla: '{falla_nom}'"
-            tipo_check = "RESOLUCION"
-        else:
-            texto_check = f"{actor_nom} reabrió la falla: '{falla_nom}'"
-            tipo_check = "REAPERTURA"
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
@@ -379,15 +465,19 @@ class AveriasService:
         if u_mec:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(
             detalle_id=detalle_target.id,
             solicitud_id=solicitud_id,
+            estado=detalle_target.estado,
+            motivo_incompleto=detalle_target.motivo_incompleto,
             resuelto=detalle_target.resuelto,
             falta_repuesto=getattr(detalle_target, "falta_repuesto", False),
             mecanico_resolvio_id=detalle_target.mecanico_resolvio_id,
-            mecanico_resolvio_nombre=resolutor_nom if resuelto else None,
+            mecanico_resolvio_nombre=resolutor_nom if is_resuelta else None,
+            mecanicos_resolvieron=mecanicos_resolvieron_dtos if is_resuelta else [],
             comentario_repuesto=getattr(detalle_target, "comentario_repuesto", None),
             fecha_resolucion=detalle_target.fecha_resolucion,
         )
@@ -458,6 +548,7 @@ class AveriasService:
         if u_mec:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(
@@ -523,51 +614,139 @@ class AveriasService:
             u_sup = await self.repo.get_usuario_by_id(db, supervisor_id)
             sup_nom = u_sup.nombre_completo if u_sup else "Supervisora"
 
+        target_estado = dto.effective_estado
+        is_resuelta = target_estado == EstadoFalla.RESUELTA
+        detalle_target.estado = target_estado.value
+        detalle_target.resuelto = is_resuelta
+
         mec_nom = None
-        mec_id = dto.effective_mecanico_id
 
-        if dto.resuelto:
-            if not mec_id:
-                raise BusinessRuleException(
-                    "Debe indicar el ID del mecánico que realizó la reparación de la avería"
+        asigs_activas = await self.repo.get_asignaciones_activas(
+            db, solicitud_id=solicitud_id, detalles_ids=[detalle_id]
+        )
+
+        mecanicos_resolvieron_dtos: List[MecanicoResumenDTO] = []
+        nombres_equipo: List[str] = []
+        vistos_ids = set()
+
+        for asig in asigs_activas:
+            mec = asig.mecanico
+            if mec and mec.id not in vistos_ids:
+                vistos_ids.add(mec.id)
+                nombres_equipo.append(mec.nombre_completo)
+                mecanicos_resolvieron_dtos.append(
+                    MecanicoResumenDTO(id=mec.id, nombre=mec.nombre_completo)
                 )
 
-            u_mec = await self.repo.get_usuario_by_id(db, mec_id)
-            if not u_mec or not u_mec.is_active:
+        if target_estado == EstadoFalla.RESUELTA:
+            mecs_ids_dto = dto.effective_mecanicos_ids
+            if not mecs_ids_dto and not asigs_activas:
                 raise BusinessRuleException(
-                    "El mecánico indicado no existe o no se encuentra activo en el sistema"
+                    "Debe indicar al menos un mecánico que realizó la reparación de la avería"
                 )
 
-            mec_nom = u_mec.nombre_completo
-            detalle_target.resuelto = True
-            detalle_target.mecanico_resolvio_id = mec_id
-            detalle_target.mecanico_resolvio = u_mec
+            # Validar y registrar cada mecánico seleccionado por el supervisor
+            primer_mec_obj = None
+            ids_asig_activa = {asig.mecanico_id for asig in asigs_activas}
+
+            for mec_id_item in mecs_ids_dto:
+                u_mec_item = await self.repo.get_usuario_by_id(db, mec_id_item)
+                if not u_mec_item or not u_mec_item.is_active:
+                    raise BusinessRuleException(
+                        f"El mecánico con ID {mec_id_item} no existe o no se encuentra activo en el sistema"
+                    )
+                if mec_id_item not in vistos_ids:
+                    vistos_ids.add(mec_id_item)
+                    nombres_equipo.append(u_mec_item.nombre_completo)
+                    mecanicos_resolvieron_dtos.append(
+                        MecanicoResumenDTO(id=mec_id_item, nombre=u_mec_item.nombre_completo)
+                    )
+                if primer_mec_obj is None:
+                    primer_mec_obj = u_mec_item
+
+                # Crear asignación si el mecánico seleccionado no tenía una activa
+                if mec_id_item not in ids_asig_activa:
+                    nueva_asig = TallerAsignacionFalla(
+                        solicitud_id=solicitud_id,
+                        detalle_id=detalle_id,
+                        mecanico_id=mec_id_item,
+                        asignado_por_id=supervisor_id,
+                        origen="SUPERVISION",
+                        is_activo=True,
+                        fecha_asignacion=now,
+                        resuelto_en_esta_asignacion=True,
+                    )
+                    nueva_asig.mecanico = u_mec_item
+                    self.repo.add_asignacion_falla(db, nueva_asig)
+                    ids_asig_activa.add(mec_id_item)
+
+            # Marcar TODAS las asignaciones activas previas como resueltas
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = True
+
+            # El campo singular apunta al primer mecánico del DTO (o al primero de la cuadrilla)
+            resolutor_id_principal = (
+                mecs_ids_dto[0] if mecs_ids_dto
+                else (asigs_activas[0].mecanico_id if asigs_activas else None)
+            )
+            detalle_target.mecanico_resolvio_id = resolutor_id_principal
             detalle_target.fecha_resolucion = now
+            detalle_target.motivo_incompleto = None
+            if primer_mec_obj and resolutor_id_principal == primer_mec_obj.id:
+                detalle_target.mecanico_resolvio = primer_mec_obj
             db.add(detalle_target)
 
-            if (
-                hasattr(detalle_target, "asignaciones")
-                and detalle_target.asignaciones
-            ):
-                for asig in detalle_target.asignaciones:
-                    if asig.mecanico_id == mec_id and asig.is_activo:
-                        asig.resuelto_en_esta_asignacion = True
+            if len(nombres_equipo) > 1:
+                mec_nom = ", ".join(nombres_equipo)
+                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el equipo [{mec_nom}]"
+            elif len(nombres_equipo) == 1:
+                mec_nom = nombres_equipo[0]
+                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {mec_nom}"
+            else:
+                mec_nom = "Mecánico"
+                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}'"
 
-            texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {mec_nom}"
             if dto.comentario and dto.comentario.strip():
                 texto_check += f" - Observación: {dto.comentario.strip()}"
             tipo_check = "RESOLUCION"
-        else:
-            detalle_target.resuelto = False
+
+        elif target_estado == EstadoFalla.INCOMPLETA:
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = False
+
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
             detalle_target.fecha_resolucion = None
+            motivo_limpio = (dto.motivo_incompleto or dto.comentario or "").strip() or None
+            detalle_target.motivo_incompleto = motivo_limpio
             db.add(detalle_target)
 
-            texto_check = f"Supervisora {sup_nom} reabrió la falla '{falla_nom}'"
+            if len(nombres_equipo) > 1:
+                texto_check = f"Supervisora {sup_nom} marcó la falla '{falla_nom}' del equipo [{', '.join(nombres_equipo)}] como INCOMPLETA"
+            else:
+                texto_check = f"Supervisora {sup_nom} marcó la falla '{falla_nom}' como INCOMPLETA"
+            if motivo_limpio:
+                texto_check += f" - Motivo: {motivo_limpio}"
+            tipo_check = "AVANCE"
+            mec_nom = None
+            mecanicos_resolvieron_dtos = []
+
+        else:  # EstadoFalla.PENDIENTE
+            for asig in asigs_activas:
+                asig.resuelto_en_esta_asignacion = False
+
+            detalle_target.mecanico_resolvio_id = None
+            detalle_target.mecanico_resolvio = None
+            detalle_target.fecha_resolucion = None
+            detalle_target.motivo_incompleto = None
+            db.add(detalle_target)
+
+            texto_check = f"Supervisora {sup_nom} reabrió la falla '{falla_nom}' (estado PENDIENTE)"
             if dto.comentario and dto.comentario.strip():
                 texto_check += f" - Observación: {dto.comentario.strip()}"
             tipo_check = "REAPERTURA"
+            mec_nom = None
+            mecanicos_resolvieron_dtos = []
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
@@ -577,15 +756,19 @@ class AveriasService:
             fecha_registro=now,
         )
         self.repo.add_comentario(db, comentario_entry)
+        await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
 
         await db.commit()
         return DetalleUpdateDTO(
             detalle_id=detalle_target.id,
             solicitud_id=solicitud_id,
+            estado=detalle_target.estado,
+            motivo_incompleto=detalle_target.motivo_incompleto,
             resuelto=detalle_target.resuelto,
             falta_repuesto=getattr(detalle_target, "falta_repuesto", False),
             mecanico_resolvio_id=detalle_target.mecanico_resolvio_id,
-            mecanico_resolvio_nombre=mec_nom if dto.resuelto else None,
+            mecanico_resolvio_nombre=mec_nom if is_resuelta else None,
+            mecanicos_resolvieron=mecanicos_resolvieron_dtos if is_resuelta else [],
             comentario_repuesto=getattr(detalle_target, "comentario_repuesto", None),
             fecha_resolucion=detalle_target.fecha_resolucion,
         )

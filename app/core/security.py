@@ -35,16 +35,38 @@ def create_access_token(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
-    to_encode = {"exp": expire, "sub": str(subject)}
+    to_encode = {"exp": expire, "sub": str(subject), "typ": "access"}
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     return encoded_jwt
 
 
+def create_refresh_token(subject: Union[str, int]) -> str:
+    """Crea un refresh token de larga duración, separado del token de acceso."""
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES
+    )
+    to_encode = {"exp": expire, "sub": str(subject), "typ": "refresh"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_refresh_token(token: str) -> int:
+    """Valida un refresh token y retorna el ID de usuario contenido en él."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("typ") != "refresh" or payload.get("sub") is None:
+            raise ValueError("Token type inválido")
+        return int(payload["sub"])
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, TypeError, ValueError) as exc:
+        raise ValueError("Refresh token inválido o expirado") from exc
+
+
 __all__ = [
     "verify_password",
     "get_password_hash",
     "create_access_token",
+    "create_refresh_token",
+    "decode_refresh_token",
 ]
 

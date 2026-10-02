@@ -1,5 +1,5 @@
-import re
 import logging
+import re
 from typing import Set
 from urllib.parse import urlparse
 from fastapi import Request, status
@@ -10,12 +10,6 @@ from starlette.responses import Response
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-# Expresión regular compilada de alta performance para detectar clientes móviles
-MOBILE_USER_AGENT_PATTERN = re.compile(
-    r"(android|iphone|ipod|ipad|iemobile|blackberry|opera mini|mobile|windows phone|silk/|kindle|webos)",
-    re.IGNORECASE,
-)
 
 # Rutas públicas del sistema exentas de validación de dispositivo u origen
 EXCLUDED_PATHS: Set[str] = {
@@ -42,9 +36,9 @@ def _extraer_origen_base(url_o_dominio: str) -> str:
 class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
     """
     Middleware de control de acceso perimetral:
-    1. Limita el tráfico a peticiones originadas desde el dominio web autorizado (CORS / Origin / Referer).
-    2. Restringe el acceso a dispositivos móviles mediante inspección de User-Agent.
-    3. Permite bypass mediante clave secreta compartida de aplicación (X-App-Client-Key).
+    1. Limita el tráfico web al origen autorizado.
+    2. Permite cualquier tipo de dispositivo.
+    3. Mantiene bypass para clientes confiables configurados explícitamente.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -57,7 +51,8 @@ class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 2. Si no están activas las restricciones, continuar sin latencia añadida
-        if not settings.ENFORCE_MOBILE_ONLY and not settings.ENFORCE_ORIGIN_CHECK:
+        origin_check_enabled = settings.ENFORCE_ORIGIN_CHECK
+        if not origin_check_enabled:
             return await call_next(request)
 
         # 3. Bypass si se provee la clave secreta de cliente autorizada (X-App-Client-Key)
@@ -66,42 +61,26 @@ class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 4. Verificación de Origen Web (si ENFORCE_ORIGIN_CHECK está habilitado)
-        if settings.ENFORCE_ORIGIN_CHECK:
+        if origin_check_enabled:
             origin_header = request.headers.get("origin") or request.headers.get("referer") or ""
-            if origin_header:
-                origin_base = _extraer_origen_base(origin_header)
-                allowed_origins = {
-                    _extraer_origen_base(orig)
-                    for orig in settings.effective_cors_origins
-                }
-                match_regex = False
-                if settings.effective_cors_origin_regex:
-                    match_regex = bool(re.match(settings.effective_cors_origin_regex, origin_base))
+            origin_base = _extraer_origen_base(origin_header)
+            allowed_origins = {
+                _extraer_origen_base(orig) for orig in settings.effective_cors_origins
+            }
+            match_regex = bool(
+                settings.effective_cors_origin_regex
+                and re.match(settings.effective_cors_origin_regex, origin_base)
+            )
 
-                if origin_base not in allowed_origins and not match_regex:
-                    logger.warning(
-                        "[SECURITY] Origen web denegado: '%s' no está en orígenes autorizados %s",
-                        origin_base,
-                        allowed_origins,
-                    )
-                    return JSONResponse(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        content={"detail": "Origen web no autorizado para consumir esta API."},
-                    )
-
-        # 5. Verificación de Dispositivo Móvil (si ENFORCE_MOBILE_ONLY está habilitado)
-        if settings.ENFORCE_MOBILE_ONLY:
-            user_agent = request.headers.get("user-agent", "")
-            es_movil = bool(MOBILE_USER_AGENT_PATTERN.search(user_agent))
-            if not es_movil:
+            if not origin_base or (origin_base not in allowed_origins and not match_regex):
                 logger.warning(
-                    "[SECURITY] Dispositivo denegado: User-Agent '%s' no es móvil en ruta %s",
-                    user_agent,
-                    path,
+                    "[SECURITY] Origen web denegado: '%s' no está en orígenes autorizados %s",
+                    origin_base or "<ausente>",
+                    allowed_origins,
                 )
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    content={"detail": "Acceso restringido exclusivamente a dispositivos móviles autorizados."},
+                    content={"detail": "Origen web no autorizado para consumir esta API."},
                 )
 
         return await call_next(request)

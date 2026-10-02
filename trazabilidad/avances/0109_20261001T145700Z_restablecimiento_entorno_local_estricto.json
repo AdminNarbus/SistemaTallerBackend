@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 109,
+  "id": "AV-0109",
+  "timestamp": "2026-10-01T14:57:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "LOC-01",
+    "name": "Restablecimiento de Entorno Local Estricto",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Restablecimiento del backend a entorno de desarrollo local estricto (127.0.0.1 / dev_local), restringiendo la escucha a la máquina local y depurando orígenes CORS de red externa.",
+  "scope": {
+    "planned": [
+      "Revertir ENVIRONMENT a dev_local",
+      "Configurar HOST a 127.0.0.1 en .env",
+      "Limpiar orígenes CORS retirando direcciones IP de red Wi-Fi",
+      "Asegurar compatibilidad directa con comando uvicorn main:app --reload --port 8000"
+    ],
+    "completed": [
+      "Archivo .env configurado con ENVIRONMENT=dev_local y HOST=127.0.0.1",
+      "Orígenes CORS restringidos a localhost y 127.0.0.1",
+      "Settings verificados: HOST=127.0.0.1, dev_local activo"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Restablecimiento de ENVIRONMENT=dev_local, HOST=127.0.0.1 y CORS exclusivamente locales"
+    },
+    {
+      "path": "main.py",
+      "action": "modified",
+      "summary": "Actualización de docstring de launcher local indicando comando estándar uvicorn"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-LOC-001",
+      "title": "Aislamiento Local Exclusivo (127.0.0.1)",
+      "rationale": "Para garantizar seguridad y desarrollo exclusivo en la máquina de trabajo sin exponer puertos en la red Wi-Fi/LAN, se fija el host en 127.0.0.1 bajo el perfil dev_local.",
+      "consequences": "El servidor solo acepta conexiones provenientes de la propia máquina (localhost / 127.0.0.1)."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -c 'from app.core.config import settings; print(settings.server_host, settings.ENVIRONMENT)'",
+      "result": "passed",
+      "evidence": "HOST: 127.0.0.1 ENV: AppEnvironment.DEV_LOCAL"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Ejecutar uvicorn main:app --reload --port 8000 para desarrollo local.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "pending",
+    "dirty": true
+  },
+  "notes": [
+    "Configuración local lista para interactuar con frontend en localhost:5173 o localhost:3000."
+  ]
+}

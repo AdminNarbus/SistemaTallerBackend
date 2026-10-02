@@ -1,7 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -39,10 +39,29 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    migration_lock_acquired = False
+    try:
+        # Cloud Run puede iniciar varios contenedores al mismo tiempo. El lock
+        # de sesión evita que dos procesos ejecuten Alembic concurrentemente.
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": 872342})
+            migration_lock_acquired = True
 
-    with context.begin_transaction():
-        context.run_migrations()
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+    except Exception:
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        if migration_lock_acquired:
+            try:
+                connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": 872342})
+            except Exception:
+                pass
 
 
 async def run_async_migrations() -> None:
@@ -57,6 +76,7 @@ async def run_async_migrations() -> None:
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        await connection.commit()
 
     await connectable.dispose()
 

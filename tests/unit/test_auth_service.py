@@ -142,7 +142,7 @@ async def test_auth_service_register_rol_invalido():
 
         # Act & Assert
         with pytest.raises(BusinessRuleException) as exc_info:
-            await auth_service.register(mock_db, dto)
+            await auth_service.crear_usuario(mock_db, dto)
         assert "no es válido" in exc_info.value.message
 
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Body, Depends, Path, Query, Response, status
@@ -110,6 +111,10 @@ async def get_auditoria_buses_taller(
         description=f"Filtrar por estado ({', '.join(ESTADOS_VALIDOS_AUDITORIA)})",
     ),
     mecanico_nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido o username de mecánico asignado o resolutor"),
+    fecha_modificacion_desde: Optional[datetime] = Query(None, description="Fecha/hora mínima de última modificación (ISO 8601)"),
+    fecha_modificacion_hasta: Optional[datetime] = Query(None, description="Fecha/hora máxima de última modificación (ISO 8601)"),
+    fecha_desde: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_desde"),
+    fecha_hasta: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_hasta"),
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de registros a omitir para paginación"),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite máximo de solicitudes a retornar (default: 20)"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
@@ -119,24 +124,41 @@ async def get_auditoria_buses_taller(
     Dashboard Auditor para Supervisores/Administradores:
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
-    y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico y paginación (default: 20 OTs).
+    y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico,
+    rango de fecha de última modificación y paginación (default: 20 OTs).
     """
+    f_desde = fecha_modificacion_desde or fecha_desde
+    f_hasta = fecha_modificacion_hasta or fecha_hasta
     total = await supervision_service.count_auditoria_solicitudes(
-        db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre
+        db,
+        n_bus=n_bus,
+        estado=estado,
+        mecanico_nombre=mecanico_nombre,
+        fecha_desde=f_desde,
+        fecha_hasta=f_hasta,
     )
     response.headers["X-Total-Count"] = str(total)
     logger.info(
-        "[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s | total=%s",
+        "[SUPERVISION] Consulta auditoría buses taller | supervisor_id=%s | n_bus=%s | estado=%s | mecanico_nombre=%s | fecha_desde=%s | fecha_hasta=%s | skip=%s | limit=%s | total=%s",
         current_user.id,
         n_bus,
         estado,
         mecanico_nombre,
+        f_desde,
+        f_hasta,
         skip,
         limit,
         total,
     )
     result = await supervision_service.get_auditoria_solicitudes(
-        db, n_bus=n_bus, estado=estado, mecanico_nombre=mecanico_nombre, skip=skip, limit=limit
+        db,
+        n_bus=n_bus,
+        estado=estado,
+        mecanico_nombre=mecanico_nombre,
+        fecha_desde=f_desde,
+        fecha_hasta=f_hasta,
+        skip=skip,
+        limit=limit,
     )
     logger.debug("[SUPERVISION] Auditoría retornada | total_solicitudes=%s", len(result))
     return result

@@ -47,8 +47,8 @@ async def test_middleware_passthrough_when_disabled(app_with_restriction, monkey
 
 
 @pytest.mark.asyncio
-async def test_middleware_mobile_only_blocks_desktop(app_with_restriction, monkeypatch):
-    """Verifica que con ENFORCE_MOBILE_ONLY=True se bloquee User-Agent de escritorio (AAA)."""
+async def test_middleware_mobile_only_ya_no_bloquea_dispositivos(app_with_restriction, monkeypatch):
+    """ENFORCE_MOBILE_ONLY queda retrocompatible, pero ya no restringe dispositivos."""
     # Arrange
     monkeypatch.setattr(settings, "ENFORCE_MOBILE_ONLY", True)
     monkeypatch.setattr(settings, "ENFORCE_ORIGIN_CHECK", False)
@@ -62,13 +62,13 @@ async def test_middleware_mobile_only_blocks_desktop(app_with_restriction, monke
         )
 
         # Assert
-        assert res.status_code == 403
-        assert "dispositivos móviles" in res.json()["detail"]
+        assert res.status_code == 200
+        assert res.text == "success"
 
 
 @pytest.mark.asyncio
 async def test_middleware_mobile_only_allows_mobile_devices(app_with_restriction, monkeypatch):
-    """Verifica que con ENFORCE_MOBILE_ONLY=True se permitan User-Agents móviles (AAA)."""
+    """Verifica que cualquier User-Agent sea aceptado cuando no se valida origen."""
     # Arrange
     monkeypatch.setattr(settings, "ENFORCE_MOBILE_ONLY", True)
     monkeypatch.setattr(settings, "ENFORCE_ORIGIN_CHECK", False)

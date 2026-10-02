@@ -17,7 +17,9 @@ async def test_register_and_login_flow(client):
     assert reg_response.status_code == 201
     reg_data = reg_response.json()
     assert "access_token" in reg_data
+    assert "refresh_token" in reg_data
     assert reg_data["user"]["username"] == "newuser"
+    assert reg_data["user"]["rol"] == "CONDUCTOR"
 
     # 2. Intentar registrar usuario duplicado (ConflictException -> 409)
     dup_response = await client.post("/api/v1/auth/register", json=register_payload)
@@ -32,6 +34,16 @@ async def test_register_and_login_flow(client):
     assert login_response.status_code == 200
     login_data = login_response.json()
     assert "access_token" in login_data
+    assert "refresh_token" in login_data
+
+    # 3.1 Renovar el par de tokens sin volver a pedir credenciales
+    refresh_response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": login_data["refresh_token"]},
+    )
+    assert refresh_response.status_code == 200
+    assert "access_token" in refresh_response.json()
+    assert "refresh_token" in refresh_response.json()
 
     # 4. Login OAuth2 Form
     form_response = await client.post(

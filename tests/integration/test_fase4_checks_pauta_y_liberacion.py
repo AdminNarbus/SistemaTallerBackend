@@ -95,28 +95,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     assert data_pauta_post["pendientes"] == 4
     assert data_pauta_post["completado"] is False
 
-    # 5. Intentar liberar con pauta incompleta sin motivo_incompleto_checklist -> 422 (BusinessRuleException)
-    res_lib_invalida_pauta = await client.post(
-        f"/api/v1/taller/{sol_id}/liberar",
-        json={"comentario_cierre": "Listo para salir"},
-        headers=auth_headers_mecanico1,
-    )
-    assert res_lib_invalida_pauta.status_code == 422
-    assert "pauta preventiva está incompleta" in res_lib_invalida_pauta.json()["error"]["message"]
-
-    # 6. Intentar liberar justificando pauta, pero sin motivo_cierre_parcial para la falla 2 pendiente -> 422
-    res_lib_invalida_fallas = await client.post(
-        f"/api/v1/taller/{sol_id}/liberar",
-        json={
-            "motivo_incompleto_checklist": "No se revisaron items 7 a 10 por urgencia de horario",
-            "comentario_cierre": "Liberando bus",
-        },
-        headers=auth_headers_mecanico1,
-    )
-    assert res_lib_invalida_fallas.status_code == 422
-    assert "falla(s) no resueltas o con falta de repuestos" in res_lib_invalida_fallas.json()["error"]["message"]
-
-    # 7. Liberar correctamente con justificaciones completas
+    # 5. Liberar correctamente con justificaciones opcionales registradas
     res_lib_ok = await client.post(
         f"/api/v1/taller/{sol_id}/liberar",
         json={

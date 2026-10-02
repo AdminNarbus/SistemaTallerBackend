@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import logging
 from typing import Dict, List, Optional, Tuple
@@ -516,6 +517,8 @@ class SupervisionRepository:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[dict] | List[TallerSolicitud]:
@@ -525,10 +528,12 @@ class SupervisionRepository:
         reduciendo la latencia de 6 viajes de red (~950ms) a exactamente 1 viaje (~160ms).
         """
         logger.debug(
-            "[SUPERVISION_REPO] Consulta auditoria | n_bus=%s | estado=%s | mecanico_nombre=%s | skip=%s | limit=%s",
+            "[SUPERVISION_REPO] Consulta auditoria | n_bus=%s | estado=%s | mecanico_nombre=%s | fecha_desde=%s | fecha_hasta=%s | skip=%s | limit=%s",
             n_bus,
             estado,
             mecanico_nombre,
+            fecha_desde,
+            fecha_hasta,
             skip,
             limit,
         )
@@ -536,7 +541,7 @@ class SupervisionRepository:
             sql = text("""
                 WITH base_filtered AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
-                           s.estado, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.estado, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller,
                            COALESCE(s.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                            ROUND((EXTRACT(EPOCH FROM (COALESCE(s.fecha_cierre, now()) - s.fecha_creacion)) / 3600)::numeric, 1) as horas_en_taller,
@@ -550,6 +555,8 @@ class SupervisionRepository:
                     FROM taller_solicitudes s
                     WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
                       AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                      AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                      AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
                       AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
                           SELECT 1 FROM taller_solicitud_mecanicos sm
                           JOIN usuarios um ON um.id = sm.mecanico_id
@@ -566,7 +573,7 @@ class SupervisionRepository:
                           WHERE af.solicitud_id = s.id
                             AND (uaf.nombre ILIKE CAST(:mec_pattern AS VARCHAR) OR uaf.apellido ILIKE CAST(:mec_pattern AS VARCHAR) OR uaf.username ILIKE CAST(:mec_pattern AS VARCHAR) OR CONCAT(uaf.nombre, ' ', uaf.apellido) ILIKE CAST(:mec_pattern AS VARCHAR))
                       ))
-                    ORDER BY s.fecha_creacion DESC
+                    ORDER BY s.fecha_actualizacion DESC, s.id DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 mecanicos_raw AS (
@@ -651,6 +658,7 @@ class SupervisionRepository:
                     bf.n_bus,
                     bf.estado,
                     bf.fecha_creacion,
+                    bf.fecha_actualizacion,
                     bf.fecha_cierre,
                     bf.fecha_liberacion,
                     bf.fecha_primer_ingreso_taller,
@@ -669,12 +677,17 @@ class SupervisionRepository:
                     COALESCE((
                         SELECT COUNT(*)::int
                         FROM taller_solicitud_detalles d
-                        WHERE d.solicitud_id = bf.id AND d.resuelto = true
+                        WHERE d.solicitud_id = bf.id AND (d.estado = 'RESUELTA' OR d.resuelto = true)
                     ), 0) as fallas_resueltas,
                     COALESCE((
                         SELECT COUNT(*)::int
                         FROM taller_solicitud_detalles d
-                        WHERE d.solicitud_id = bf.id AND d.resuelto = false
+                        WHERE d.solicitud_id = bf.id AND d.estado = 'INCOMPLETA'
+                    ), 0) as fallas_incompletas,
+                    COALESCE((
+                        SELECT COUNT(*)::int
+                        FROM taller_solicitud_detalles d
+                        WHERE d.solicitud_id = bf.id AND (d.estado = 'PENDIENTE' OR (d.estado IS NULL AND d.resuelto = false))
                     ), 0) as fallas_pendientes,
                     COALESCE((
                         SELECT COUNT(*)::int
@@ -697,7 +710,7 @@ class SupervisionRepository:
                 LEFT JOIN mecanicos_agg ma ON ma.solicitud_id = bf.id
                 LEFT JOIN detalles_agg da ON da.solicitud_id = bf.id
                 LEFT JOIN estadias_agg esa ON esa.solicitud_id = bf.id
-                ORDER BY bf.fecha_creacion DESC;
+                ORDER BY bf.fecha_actualizacion DESC, bf.id DESC;
             """)
             params = {
                 "n_bus": n_bus.strip() if n_bus and n_bus.strip() else None,
@@ -705,6 +718,8 @@ class SupervisionRepository:
                 "estado": estado.upper().strip() if estado and estado.strip() else None,
                 "mecanico_nombre": mecanico_nombre.strip() if mecanico_nombre and mecanico_nombre.strip() else None,
                 "mec_pattern": f"%{mecanico_nombre.strip()}%" if mecanico_nombre and mecanico_nombre.strip() else None,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta,
                 "limit": limit if limit is not None else DEFAULT_PAGE_LIMIT,
                 "skip": skip if skip is not None else DEFAULT_PAGE_SKIP,
             }
@@ -715,7 +730,7 @@ class SupervisionRepository:
         stmt = (
             select(TallerSolicitud)
             .execution_options(populate_existing=True)
-            .order_by(TallerSolicitud.fecha_creacion.desc())
+            .order_by(TallerSolicitud.fecha_actualizacion.desc(), TallerSolicitud.id.desc())
             .options(
                 joinedload(TallerSolicitud.creador),
                 joinedload(TallerSolicitud.mecanico_cierre),
@@ -733,6 +748,10 @@ class SupervisionRepository:
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))
         if estado and estado.strip():
             stmt = stmt.where(TallerSolicitud.estado == estado.upper().strip())
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         if mecanico_nombre and mecanico_nombre.strip():
             pattern = f"%{mecanico_nombre.strip()}%"
             u_mec = aliased(Usuario)
@@ -799,6 +818,8 @@ class SupervisionRepository:
         n_bus: Optional[str] = None,
         estado: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
     ) -> int:
         """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
         if db.bind and db.bind.dialect.name == "postgresql":
@@ -807,6 +828,8 @@ class SupervisionRepository:
                 FROM taller_solicitudes s
                 WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
                   AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                  AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
+                  AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
                   AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
                       SELECT 1 FROM taller_solicitud_mecanicos sm
                       JOIN usuarios um ON um.id = sm.mecanico_id
@@ -830,6 +853,8 @@ class SupervisionRepository:
                 "estado": estado.upper().strip() if estado and estado.strip() else None,
                 "mecanico_nombre": mecanico_nombre.strip() if mecanico_nombre and mecanico_nombre.strip() else None,
                 "mec_pattern": f"%{mecanico_nombre.strip()}%" if mecanico_nombre and mecanico_nombre.strip() else None,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta,
             }
             res = await db.execute(sql, params)
             return res.scalar() or 0
@@ -840,6 +865,10 @@ class SupervisionRepository:
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))
         if estado and estado.strip():
             stmt = stmt.where(TallerSolicitud.estado == estado.upper().strip())
+        if fecha_desde:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
+        if fecha_hasta:
+            stmt = stmt.where(TallerSolicitud.fecha_actualizacion <= fecha_hasta)
         if mecanico_nombre and mecanico_nombre.strip():
             pattern = f"%{mecanico_nombre.strip()}%"
             u_mec = aliased(Usuario)

@@ -1,4 +1,8 @@
-from app.modules.auth.dtos.token_dto import TokenDTO, TokenPayloadDTO
+from app.modules.auth.dtos.token_dto import (
+    RefreshTokenRequestDTO,
+    TokenDTO,
+    TokenPayloadDTO,
+)
 from app.modules.auth.dtos.usuario_dto import (
     UsuarioBaseDTO,
     UsuarioCreateDTO,
@@ -13,4 +17,5 @@ __all__ = [
     "UsuarioResponseDTO",
     "TokenDTO",
     "TokenPayloadDTO",
+    "RefreshTokenRequestDTO",
 ]

@@ -338,7 +338,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
         headers=auth_headers_supervisor,
     )
     assert res_sin_mec.status_code == 422
-    assert "Debe indicar el ID del mecánico" in res_sin_mec.json()["error"]["message"]
+    assert "Debe indicar al menos un mec" in res_sin_mec.json()["error"]["message"]
 
     # 3. Supervisora resuelve la falla indicando qué mecánico la arregló
     res_resolver = await client.patch(

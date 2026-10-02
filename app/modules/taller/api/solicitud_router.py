@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import logging
 from typing import Any, List, Optional
@@ -123,14 +124,22 @@ async def list_pendientes(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
     limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar (default: 20)"),
+    fecha_modificacion_desde: Optional[datetime] = Query(None, description="Fecha/hora mínima de última modificación (ISO 8601)"),
+    fecha_modificacion_hasta: Optional[datetime] = Query(None, description="Fecha/hora máxima de última modificación (ISO 8601)"),
+    fecha_desde: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_desde"),
+    fecha_hasta: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_hasta"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 1 Mecánico: Buses esperando en taller (REPORTADO / PENDIENTE, default: 20 por página)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
-    total = await solicitud_service.count_pendientes(db)
+    f_desde = fecha_modificacion_desde or fecha_desde
+    f_hasta = fecha_modificacion_hasta or fecha_hasta
+    total = await solicitud_service.count_pendientes(db, fecha_desde=f_desde, fecha_hasta=f_hasta)
     response.headers["X-Total-Count"] = str(total)
-    return await solicitud_service.list_pendientes(db, limit=limit, skip=skip)
+    return await solicitud_service.list_pendientes(
+        db, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta
+    )
 
 
 @router.get("/mis-trabajos", response_model=List[SolicitudResumenDTO])
@@ -138,14 +147,24 @@ async def list_mis_trabajos(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de solicitudes a omitir para paginación"),
     limit: Optional[int] = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite de solicitudes a retornar (default: 20)"),
+    fecha_modificacion_desde: Optional[datetime] = Query(None, description="Fecha/hora mínima de última modificación (ISO 8601)"),
+    fecha_modificacion_hasta: Optional[datetime] = Query(None, description="Fecha/hora máxima de última modificación (ISO 8601)"),
+    fecha_desde: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_desde"),
+    fecha_hasta: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_hasta"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
     """Pestaña 2 Mecánico: Buses asignados activamente al mecánico que realiza la consulta (default: 20 por página)."""
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
-    total = await solicitud_service.count_mis_trabajos(db, mecanico_id=current_user.id)
+    f_desde = fecha_modificacion_desde or fecha_desde
+    f_hasta = fecha_modificacion_hasta or fecha_hasta
+    total = await solicitud_service.count_mis_trabajos(
+        db, mecanico_id=current_user.id, fecha_desde=f_desde, fecha_hasta=f_hasta
+    )
     response.headers["X-Total-Count"] = str(total)
-    return await solicitud_service.list_mis_trabajos(db, mecanico_id=current_user.id, limit=limit, skip=skip)
+    return await solicitud_service.list_mis_trabajos(
+        db, mecanico_id=current_user.id, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta
+    )
 
 
 @router.get("/{id}", response_model=SolicitudDTO)

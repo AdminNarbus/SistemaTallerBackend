@@ -189,7 +189,7 @@ async def _seed_solicitudes_iniciales(db: AsyncSession) -> None:
     sol1 = TallerSolicitud(
         n_bus="301",
         usuario_creador_id=user_id,
-        estado="PENDIENTE",
+        estado="REPORTADO",
         descripcion_general="Revisión urgente de sistema de frenos",
     )
     db.add(sol1)
@@ -209,7 +209,7 @@ async def _seed_solicitudes_iniciales(db: AsyncSession) -> None:
     sol2 = TallerSolicitud(
         n_bus="500",
         usuario_creador_id=user_id,
-        estado="PENDIENTE",
+        estado="REPORTADO",
         descripcion_general="Luces quemadas lado izquierdo",
     )
     db.add(sol2)

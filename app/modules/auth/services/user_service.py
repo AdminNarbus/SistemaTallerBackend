@@ -10,6 +10,7 @@ from app.core.exceptions import (
     PermissionException,
 )
 from app.core.security import create_access_token, create_refresh_token, get_password_hash
+from app.core.db_metrics import mark_user_cache
 from app.modules.auth.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -26,8 +27,10 @@ from app.modules.auth.models.usuario import Usuario
 from app.modules.auth.repository.user_repository import user_repository
 from app.modules.auth.user_cache import (
     clear_user_cache,
+    get_cached_user,
     set_cached_user,
 )
+from app.core.realtime.events import RealtimeEvent, publish_event_soon
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +86,9 @@ class UserService:
         except IntegrityError as exc:
             await db.rollback()
             raise ConflictException("El nombre de usuario ya está registrado en el sistema.") from exc
+        publish_event_soon(RealtimeEvent(
+            resource_type="user", resource_id=nuevo_usuario.id, action="created"
+        ))
         return nuevo_usuario
 
     async def register(
@@ -144,12 +150,23 @@ class UserService:
         await user_repository.desactivar(db, user)
         await db.commit()
         clear_user_cache(usuario_id)
+        publish_event_soon(RealtimeEvent(
+            resource_type="user", resource_id=usuario_id,
+            action="deactivated", actor_id=current_user_id,
+        ))
+        from app.core.realtime.runtime import realtime_runtime
+        await realtime_runtime.disconnect_user(usuario_id)
         return UsuarioResponseDTO.model_validate(user)
 
     async def get_current_user_profile(
         self, db: AsyncSession, user_id: int
     ) -> Optional[UsuarioResponseDTO]:
         """Obtiene el perfil actual desde BD para validar inmediatamente is_active y rol."""
+        cached_user = get_cached_user(user_id)
+        if cached_user:
+            mark_user_cache("hit")
+            return cached_user
+        mark_user_cache("miss")
         user = await user_repository.get_by_id(db, user_id=user_id)
         if not user or not user.is_active:
             clear_user_cache(user_id)

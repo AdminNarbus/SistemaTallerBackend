@@ -16,6 +16,7 @@ class SolicitudEvidenciaDTO(BaseModel):
     solicitud_id: int
     detalle_id: Optional[int] = None
     usuario_id: Optional[int] = None
+    comentario_id: Optional[int] = None
     url: str
     original_filename: Optional[str] = None
     size_bytes: Optional[int] = None
@@ -127,5 +128,9 @@ class SolicitudResumenDTO(BaseModel):
     )
     numero_fallas: int = Field(
         0, description="Número de fallas contextual: en pendientes son las disponibles sin resolver, en mis trabajos son las asignadas al mecánico"
+    )
+    fallas_asignadas_al_mecanico: int = Field(
+        0,
+        description="Fallas pendientes o incompletas con una asignación activa para el mecánico autenticado en mis trabajos",
     )
 

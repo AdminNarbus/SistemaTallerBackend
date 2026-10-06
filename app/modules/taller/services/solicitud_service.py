@@ -1,6 +1,7 @@
+import asyncio
 import logging
-from datetime import datetime
-from typing import Any, List, Optional
+from datetime import datetime, timezone
+from typing import Any, List, Optional, Tuple
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +12,15 @@ from app.modules.taller.constants import (
     DEFAULT_PAGE_LIMIT,
     DEFAULT_PAGE_SKIP,
     EstadoSolicitud,
+    TipoComentarioBitacora,
+    EstadoFalla,
+    TipoEventoFalla,
 )
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
+from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.dtos import (
     CategoriaFallaDTO,
     EstadiaTallerDTO,
@@ -37,6 +42,10 @@ from app.modules.taller.services.mappers import (
     orm_to_solicitud_dto,
     orm_to_solicitud_resumen_dto,
 )
+from app.core.realtime.events import RealtimeEvent, publish_event_soon
+from app.modules.taller.services.trazabilidad_fallas import registrar_evento_falla
+
+from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +73,13 @@ class SolicitudService:
         if isinstance(sol, dict):
             return dict_to_solicitud_dto(sol, storage=self.storage)
         return orm_to_solicitud_dto(sol, storage=self.storage)
+
+    async def get_historial_estados(self, db: AsyncSession, solicitud_id: int, skip: int, limit: int):
+        from app.modules.taller.dtos.estado_evento_dto import EstadoEventoDTO
+        if not await self.repo.check_solicitud_exists(db, solicitud_id):
+            raise NotFoundException("Solicitud de taller no encontrada")
+        eventos, total = await self.repo.get_historial_estados(db, solicitud_id, skip, limit)
+        return [EstadoEventoDTO.model_validate(evento) for evento in eventos], total
 
     async def list_pendientes(
         self,
@@ -107,6 +123,46 @@ class SolicitudService:
         return await self.repo.count_pendientes(
             db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
         )
+
+    async def list_pendientes_con_total(
+        self,
+        db: AsyncSession,
+        limit: Optional[int] = DEFAULT_PAGE_LIMIT,
+        skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+        estado: Optional[str] = None,
+    ) -> Tuple[List[SolicitudResumenDTO], int]:
+        """Entrega la página y su total desde la misma consulta en PostgreSQL.
+
+        ``total_count`` proviene de ``count(*) over()``. Sólo se consulta el
+        conteo por separado en el fallback SQLite o si se pidió una página
+        fuera de rango, caso que no produce ninguna fila desde la cual leerlo.
+        """
+        solicitudes = await self.repo.list_pendientes(
+            db, limit=limit, skip=skip, fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta, estado=estado,
+        )
+        if solicitudes and isinstance(solicitudes[0], dict):
+            total = int(solicitudes[0].get("total_count") or 0)
+        elif solicitudes:
+            total = await self.repo.count_pendientes(
+                db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
+            )
+        elif db.bind and db.bind.dialect.name == "postgresql" and skip:
+            total = await self.repo.count_pendientes(
+                db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado
+            )
+        else:
+            total = 0
+
+        results = [
+            dict_to_solicitud_resumen_dto(s, storage=self.storage)
+            if isinstance(s, dict)
+            else orm_to_solicitud_resumen_dto(s, storage=self.storage)
+            for s in solicitudes
+        ]
+        return results, total
 
     async def list_mis_trabajos(
         self,
@@ -165,6 +221,47 @@ class SolicitudService:
             fecha_hasta=fecha_hasta,
         )
 
+    async def list_mis_trabajos_con_total(
+        self,
+        db: AsyncSession,
+        mecanico_id: int,
+        limit: Optional[int] = DEFAULT_PAGE_LIMIT,
+        skip: int = DEFAULT_PAGE_SKIP,
+        fecha_desde: Optional[datetime] = None,
+        fecha_hasta: Optional[datetime] = None,
+    ) -> Tuple[List[SolicitudResumenDTO], int]:
+        """Entrega Mis trabajos y total sin un COUNT separado en PostgreSQL."""
+        solicitudes = await self.repo.list_mis_trabajos(
+            db, mecanico_id, limit=limit, skip=skip,
+            fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+        )
+        if solicitudes and isinstance(solicitudes[0], dict):
+            total = int(solicitudes[0].get("total_count") or 0)
+        elif solicitudes:
+            total = await self.repo.count_mis_trabajos(
+                db, mecanico_id=mecanico_id, fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+            )
+        elif db.bind and db.bind.dialect.name == "postgresql" and skip:
+            total = await self.repo.count_mis_trabajos(
+                db, mecanico_id=mecanico_id, fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+            )
+        else:
+            total = 0
+
+        results = [
+            dict_to_solicitud_resumen_dto(
+                s, storage=self.storage, mecanico_id=mecanico_id
+            )
+            if isinstance(s, dict)
+            else orm_to_solicitud_resumen_dto(
+                s, storage=self.storage, mecanico_id=mecanico_id
+            )
+            for s in solicitudes
+        ]
+        return results, total
+
     async def list_auditoria(self, db: AsyncSession) -> List[SolicitudDTO]:
         """Retorna el historial completo de solicitudes para auditoría."""
         logger.debug("[MANTENCION] Consultando auditoría completa de solicitudes")
@@ -193,9 +290,21 @@ class SolicitudService:
         archivos_fotos = recopilar_archivos_fotos(foto=foto, fotos=fotos)
 
         uploaded_evidencias: List[dict] = []
-        for f in archivos_fotos:
-            upload_res = await self.storage.upload_image(file=f, folder="solicitudes")
-            uploaded_evidencias.append(upload_res)
+        if archivos_fotos:
+            # Las cargas son I/O externo y no deben retener ningún lock de BD.
+            # El límite evita saturar GCS/local storage con un multipart grande.
+            upload_semaphore = asyncio.Semaphore(4)
+
+            async def _subir_evidencia(archivo: UploadFile) -> dict:
+                async with upload_semaphore:
+                    return await self.storage.upload_image(
+                        file=archivo, folder="solicitudes"
+                    )
+
+            uploaded_evidencias = list(
+                await asyncio.gather(*(_subir_evidencia(f) for f in archivos_fotos))
+            )
+        for upload_res in uploaded_evidencias:
             logger.info(
                 "[MANTENCION] Evidencia de solicitud subida | path='%s' | url='%s' | tamano=%s bytes",
                 upload_res.get("path"),
@@ -236,21 +345,18 @@ class SolicitudService:
         n_bus = dto.n_bus
         bus_obj = None
 
-        if bus_id and n_bus:
-            logger.debug(
-                "[MANTENCION] Bus resuelto directamente desde frontend | bus_id=%s, n_bus='%s'",
-                bus_id,
-                n_bus,
-            )
+        if bus_id:
+            bus_obj = await self.repo.get_bus_by_id(db, bus_id)
+            if not bus_obj:
+                raise NotFoundException("El bus indicado no existe")
+            if n_bus and bus_obj.n_bus and n_bus.strip().lower() != bus_obj.n_bus.strip().lower():
+                raise BusinessRuleException("bus_id y n_bus deben identificar el mismo bus")
+            bus_patente = bus_obj.patente
+            n_bus = bus_obj.n_bus or n_bus or str(bus_id)
         elif dto.n_bus:
             bus_info = await self.repo.get_bus_info_by_n_bus(db, dto.n_bus)
             if bus_info:
                 bus_id, bus_patente = bus_info
-        elif bus_id:
-            bus_obj = await self.repo.get_bus_by_id(db, bus_id)
-            if bus_obj:
-                bus_patente = bus_obj.patente
-                n_bus = bus_obj.n_bus
 
         # 2. Creador de la solicitud
         if not creador_nombre or not creador_rol:
@@ -260,18 +366,28 @@ class SolicitudService:
                 if not creador_rol:
                     creador_rol = getattr(getattr(u_creador, "rol_rel", None), "nombre", None) or "CONDUCTOR"
 
-        now = datetime.now()
-        solicitud = TallerSolicitud(
-            n_bus=n_bus or (dto.n_bus if dto.n_bus else str(bus_id)),
-            bus_id=bus_id,
-            usuario_creador_id=creador_id,
-            estado=EstadoSolicitud.PENDIENTE.value,
-            descripcion_general=dto.descripcion_general,
-            foto_url=dto.foto_url,
-            fecha_creacion=now,
-            fecha_actualizacion=now,
-            horas_taller_acumuladas=0.0,
-        )
+        now = datetime.now(timezone.utc)
+        solicitud = await self.repo.get_solicitud_activa_por_bus(db, bus_id, n_bus)
+        es_nueva_ot = solicitud is None
+        if es_nueva_ot:
+            solicitud = TallerSolicitud(
+                n_bus=n_bus or (dto.n_bus if dto.n_bus else str(bus_id)),
+                bus_id=bus_id,
+                usuario_creador_id=creador_id,
+                estado=EstadoSolicitud.PENDIENTE.value,
+                descripcion_general=dto.descripcion_general,
+                foto_url=dto.foto_url,
+                fecha_creacion=now,
+                fecha_actualizacion=now,
+                horas_taller_acumuladas=0.0,
+            )
+        else:
+            solicitud.fecha_actualizacion = now
+            logger.info(
+                "[MANTENCION] Nuevas fallas se anexarán a OT activa | solicitud_id=%s | bus_id=%s",
+                solicitud.id,
+                solicitud.bus_id,
+            )
 
         rol_upper = (creador_rol or "").upper().strip()
         debe_marcar_en_taller = False
@@ -284,7 +400,7 @@ class SolicitudService:
             debe_marcar_en_taller = True
 
         estadias_a_procesar: List[TallerSolicitudEstadia] = []
-        if debe_marcar_en_taller:
+        if es_nueva_ot and debe_marcar_en_taller:
             solicitud.fecha_primer_ingreso_taller = now
             solicitud.horas_demora_primer_ingreso = 0.0
 
@@ -318,7 +434,11 @@ class SolicitudService:
                 content_type=ev_data.get("content_type"),
                 fecha_creacion=now,
             )
-            solicitud.evidencias.append(ev_obj)
+            if es_nueva_ot:
+                solicitud.evidencias.append(ev_obj)
+            else:
+                ev_obj.solicitud_id = solicitud.id
+                self.repo.add_evidencia(db, ev_obj)
             evidencias_a_procesar.append(ev_obj)
 
         detalles_dtos: List[SolicitudDetalleDTO] = []
@@ -376,149 +496,77 @@ class SolicitudService:
                 falla_nombre = falla_nombre or texto
 
                 detalle = TallerSolicitudDetalle(
+                    solicitud_id=solicitud.id if not es_nueva_ot else None,
                     falla_id=falla_id,
                     descripcion_personalizada=texto,
                     resuelto=False,
                     fecha_creacion=now,
+                    fecha_reporte=now,
+                    reportado_por_id=creador_id,
                 )
-                solicitud.detalles.append(detalle)
+                if es_nueva_ot:
+                    solicitud.detalles.append(detalle)
+                else:
+                    self.repo.add_detalle(db, detalle)
                 detalles_a_procesar.append(
                     (detalle, det_dto, falla_id, cat_id, falla_nombre, cat_nombre_res)
                 )
 
-        self.repo.add_solicitud(db, solicitud)
+        if es_nueva_ot:
+            self.repo.add_solicitud(db, solicitud)
         try:
+            await self.repo.flush(db)
+            for detalle, *_ in detalles_a_procesar:
+                registrar_evento_falla(
+                    db,
+                    self.repo,
+                    detalle_id=detalle.id,
+                    tipo_evento=TipoEventoFalla.REPORTADA.value,
+                    actor_id=creador_id,
+                    actor_nombre=creador_nombre,
+                    estado_anterior=None,
+                    estado_nuevo=EstadoFalla.PENDIENTE.value,
+                    fecha_evento=now,
+                    comentario=detalle.descripcion_personalizada,
+                )
+            if not es_nueva_ot:
+                descripcion = (dto.descripcion_general or "").strip()
+                resumen = f"{creador_nombre or 'Usuario'} reportó {len(detalles_a_procesar)} nueva(s) falla(s)."
+                if descripcion:
+                    resumen = f"{resumen} Detalle: {descripcion}"
+                self.repo.add_comentario(
+                    db,
+                    TallerSolicitudComentario(
+                        solicitud_id=solicitud.id,
+                        usuario_id=creador_id,
+                        tipo=TipoComentarioBitacora.SISTEMA.value,
+                        comentario=resumen,
+                        fecha_registro=now,
+                    ),
+                )
+            if es_nueva_ot:
+                await registrar_evento_estado(
+                    db, RegistroEstadoOT(
+                        solicitud_id=solicitud.id, estado_anterior=None,
+                        estado_nuevo=solicitud.estado, actor_id=creador_id,
+                        actor_nombre=creador_nombre, fecha_evento=now, tipo_evento="CREACION",
+                    ),
+                )
             await db.commit()
         except Exception as exc:
             await db.rollback()
             logger.error("[MANTENCION] Error al persistir solicitud: %s", exc)
             raise
 
-        if detalles_a_procesar:
-            for (
-                detalle,
-                det_dto,
-                falla_id,
-                cat_id,
-                falla_nombre,
-                cat_nombre_res,
-            ) in detalles_a_procesar:
-                falla_dto = None
-                cat_dto = None
-                cat_nom_final = (
-                    getattr(det_dto, "categoria_nombre", None)
-                    or cat_nombre_res
-                    or (f"Categoría #{cat_id}" if cat_id else None)
-                )
-                if cat_id:
-                    cat_dto = CategoriaFallaDTO(
-                        id=cat_id,
-                        nombre=cat_nom_final or f"Categoría #{cat_id}",
-                        is_active=True,
-                        falla_id=falla_id,
-                        falla_nombre=falla_nombre,
-                    )
-                if falla_id:
-                    falla_nom_final = (
-                        getattr(det_dto, "falla_nombre", None)
-                        or falla_nombre
-                        or det_dto.descripcion_personalizada
-                        or f"Avería #{falla_id}"
-                    )
-                    falla_dto = FallaTallerDTO(
-                        id=falla_id,
-                        categoria_id=cat_id or 1,
-                        nombre=falla_nom_final,
-                        is_active=True,
-                        categoria=cat_dto,
-                    )
-                cat_nombre = cat_dto.nombre if cat_dto else None
-                detalles_dtos.append(
-                    SolicitudDetalleDTO(
-                        id=detalle.id,
-                        solicitud_id=solicitud.id,
-                        categoria_id=cat_id or (falla_dto.categoria_id if falla_dto else 1),
-                        categoria_nombre=cat_nombre,
-                        falla_id=falla_id,
-                        falla=falla_dto,
-                        descripcion_personalizada=det_dto.descripcion_personalizada,
-                        resuelto=False,
-                        falta_repuesto=False,
-                        comentario_repuesto=None,
-                        fecha_creacion=now,
-                        fecha_resolucion=None,
-                        mecanico_resolvio_id=None,
-                        mecanico_resolvio_nombre=None,
-                        mecanicos_asignados=[],
-                        historial_asignaciones=[],
-                    )
-                )
-
-        evidencias_dtos = [
-            SolicitudEvidenciaDTO(
-                id=ev.id,
-                solicitud_id=solicitud.id,
-                detalle_id=ev.detalle_id,
-                usuario_id=ev.usuario_id,
-                url=self.storage.get_url(ev.url) or ev.url,
-                original_filename=ev.original_filename,
-                size_bytes=ev.size_bytes,
-                content_type=ev.content_type,
-                fecha_creacion=ev.fecha_creacion,
-            )
-            for ev in evidencias_a_procesar
-        ]
-
-        estadias_dtos = [
-            EstadiaTallerDTO(
-                id=getattr(e, "id", None),
-                solicitud_id=solicitud.id,
-                numero_visita=e.numero_visita,
-                fecha_ingreso=e.fecha_ingreso,
-                fecha_salida=e.fecha_salida,
-                horas_estadia=e.horas_estadia,
-                motivo_salida=e.motivo_salida,
-            )
-            for e in estadias_a_procesar
-        ]
-
-        return SolicitudDTO(
-            id=solicitud.id,
-            n_bus=solicitud.n_bus,
-            bus_id=solicitud.bus_id,
-            bus_patente=bus_patente,
-            usuario_creador_id=solicitud.usuario_creador_id,
-            usuario_creador_nombre=creador_nombre,
-            mecanico_cierre_id=None,
-            mecanico_cierre_nombre=None,
-            estado=solicitud.estado,
-            descripcion_general=solicitud.descripcion_general,
-            foto_url=self.storage.get_url(solicitud.foto_url),
-            motivo_incompleto_checklist=None,
-            motivo_cierre_parcial=None,
-            fecha_creacion=solicitud.fecha_creacion,
-            fecha_actualizacion=solicitud.fecha_actualizacion or now,
-            fecha_cierre=None,
-            fecha_liberacion=None,
-            fecha_primer_ingreso_taller=solicitud.fecha_primer_ingreso_taller,
-            horas_demora_primer_ingreso=solicitud.horas_demora_primer_ingreso,
-            horas_taller_acumuladas=0.0,
-            total_visitas=len(estadias_dtos),
-            horas_en_taller=0.0 if len(estadias_dtos) > 0 else None,
-            reincidencias_30d=0,
-            pauta_completada=False,
-            total_fallas=len(detalles_dtos),
-            fallas_resueltas=0,
-            fallas_con_falta_repuesto=0,
-            fallas_pendientes=len(detalles_dtos),
-            detalles=detalles_dtos,
-            mecanicos=[],
-            historial_mecanicos=[],
-            comentarios=[],
-            pauta_respuestas=[],
-            evidencias=evidencias_dtos,
-            estadias=estadias_dtos,
-        )
+        result = await self.get_solicitud(db, solicitud.id)
+        publish_event_soon(RealtimeEvent(
+            resource_type="work_order",
+            resource_id=result.id,
+            action="created" if es_nueva_ot else "updated",
+            actor_id=creador_id,
+            version=result.fecha_actualizacion,
+        ))
+        return result
 
 
 solicitud_service = SolicitudService()

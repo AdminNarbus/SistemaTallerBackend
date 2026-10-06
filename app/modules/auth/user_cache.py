@@ -5,7 +5,7 @@ from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 
 # Caché en memoria de usuarios autenticados: {user_id: (timestamp_monotonic, UsuarioResponseDTO)}
 _USER_CACHE: Dict[int, Tuple[float, UsuarioResponseDTO]] = {}
-_USER_CACHE_TTL_SECONDS: float = 300.0  # 5 minutos de TTL
+_USER_CACHE_TTL_SECONDS: float = 60.0  # TTL corto: reduce viajes sin prolongar permisos obsoletos
 
 
 def get_cached_user(user_id: int) -> Optional[UsuarioResponseDTO]:

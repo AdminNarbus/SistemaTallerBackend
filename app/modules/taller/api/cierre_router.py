@@ -1,11 +1,11 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     SessionDep,
-    require_current_user,
     require_mecanico_or_admin,
+    require_mecanico_or_supervisor_or_admin,
     require_supervisor_or_admin,
 )
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
@@ -18,6 +18,7 @@ from app.modules.taller.dtos import (
     SolicitudDTO,
 )
 from app.modules.taller.services.cierre_service import cierre_service
+from app.modules.taller.api.request_parsers import parse_json_or_multipart
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,12 @@ async def cambiar_estado_solicitud(
 @router.post("/{id}/comentarios", response_model=ComentarioAddedDTO)
 async def agregar_comentario(
     id: int,
-    dto: ComentarioCreateDTO,
-    current_user: UsuarioResponseDTO = Depends(require_current_user),
+    request: Request,
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Agrega un comentario a la bitácora independiente de la solicitud."""
+    """Agrega un comentario JSON o multipart con hasta tres imágenes a la bitácora."""
+    dto, fotos = await parse_json_or_multipart(request, ComentarioCreateDTO)
     logger.info(
         "[MANTENCION] Agregando comentario en solicitud_id=%s | usuario_id=%s",
         id,
@@ -69,6 +71,7 @@ async def agregar_comentario(
         usuario_id=current_user.id,
         dto=dto,
         usuario_nombre=current_user.nombre_completo,
+        fotos=fotos,
     )
 
 

@@ -1,6 +1,7 @@
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import List, Optional
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
@@ -35,6 +36,12 @@ from app.modules.taller.services.estadias_helper import (
     cerrar_estadia_activa,
 )
 from app.modules.taller.services.solicitud_service import solicitud_service
+from app.modules.taller.services.bitacora_adjuntos import (
+    guardar_adjuntos_bitacora,
+    normalizar_fotos,
+)
+
+from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,7 @@ class CierreService:
         usuario_id: int,
         dto: ComentarioCreateDTO,
         usuario_nombre: Optional[str] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> ComentarioAddedDTO:
         """Agrega un comentario a la bitácora independiente de la solicitud."""
         logger.info(
@@ -66,24 +74,37 @@ class CierreService:
         if not await self.repo.check_solicitud_exists(db, solicitud_id):
             raise NotFoundException("Solicitud de taller no encontrada")
 
+        comentario_limpio = (dto.comentario or "").strip()
+        archivos = normalizar_fotos(fotos)
+        if not comentario_limpio and not archivos:
+            raise BusinessRuleException("Debe enviar un comentario o al menos una imagen adjunta.")
+
         if not usuario_nombre:
             u_usr = await self.repo.get_usuario_by_id(db, usuario_id)
         else:
             u_usr = None
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         tipo_com = dto.tipo if dto.tipo else "GENERAL"
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
             usuario_id=usuario_id,
             tipo=tipo_com,
-            comentario=dto.comentario,
+            comentario=comentario_limpio,
             fecha_registro=now,
         )
         if u_usr:
             comentario_entry.usuario = u_usr
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
+
+        adjuntos = await guardar_adjuntos_bitacora(
+            db,
+            comentario=comentario_entry,
+            solicitud_id=solicitud_id,
+            usuario_id=usuario_id,
+            fotos=archivos,
+        )
 
         await db.commit()
         return ComentarioAddedDTO(
@@ -92,8 +113,9 @@ class CierreService:
             usuario_id=usuario_id,
             usuario_nombre=usuario_nombre or (u_usr.nombre_completo if u_usr else None),
             tipo=tipo_com,
-            comentario=dto.comentario,
+            comentario=comentario_limpio,
             fecha_registro=now,
+            adjuntos=adjuntos,
         )
 
     async def finalizar_solicitud(
@@ -111,6 +133,7 @@ class CierreService:
             mecanico_cierre_id,
         )
 
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         ctx = None
         if (
             hasattr(self.repo, "get_contexto_finalizacion")
@@ -122,9 +145,10 @@ class CierreService:
             if not ctx:
                 raise NotFoundException("Solicitud de taller no encontrada")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         if ctx is not None:
+            estado_ot_anterior = ctx["estado"]
             total_items_pauta = ctx.get("total_pauta", 0)
             items_respondidos = ctx.get("respondidos_pauta", 0)
             mec_cierre_nom = (
@@ -139,6 +163,7 @@ class CierreService:
             )
             if not solicitud_fallback:
                 raise NotFoundException("Solicitud de taller no encontrada")
+            estado_ot_anterior = solicitud_fallback.estado
             (
                 total_items_pauta,
                 items_respondidos,
@@ -188,7 +213,7 @@ class CierreService:
         )
 
         if hasattr(self.repo, "ejecutar_cierre_ot_batch"):
-            await self.repo.ejecierre_batch_wrapper(
+            comentario_cierre = await self.repo.ejecierre_batch_wrapper(
                 db,
                 solicitud_id=solicitud_id,
                 nuevo_estado=nuevo_estado,
@@ -212,6 +237,14 @@ class CierreService:
                 mecanico_cierre_id=mecanico_cierre_id,
                 comentario_cierre_texto=texto_cierre,
                 liberar_bus=liberar_bus,
+            )
+            await registrar_evento_estado(
+                db, RegistroEstadoOT(
+                    solicitud_id=solicitud_id, estado_anterior=estado_ot_anterior,
+                    estado_nuevo=nuevo_estado, actor_id=mecanico_cierre_id,
+                    actor_nombre=mec_cierre_nom, fecha_evento=now,
+                    comentario=comentario_cierre, motivo=texto_cierre,
+                ),
             )
         else:
             await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
@@ -265,6 +298,15 @@ class CierreService:
             dto.estado.value,
             supervisor_id,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        # La lectura debe repetirse después de obtener el mismo lock usado al
+        # registrar reportes: mientras se esperaba pudo haberse creado una OT
+        # posterior para este bus.
+        await self.repo.lock_bus_cycle(db, solicitud.bus_id, solicitud.n_bus)
         solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
@@ -276,7 +318,24 @@ class CierreService:
                 f"La solicitud ya se encuentra en estado '{nuevo_estado}'"
             )
 
-        now = datetime.now()
+        es_reapertura = (
+            estado_anterior == EstadoSolicitud.FINALIZADO.value
+            and nuevo_estado != EstadoSolicitud.FINALIZADO.value
+        )
+        if es_reapertura and await self.repo.existe_solicitud_posterior_mismo_bus(
+            db, solicitud
+        ):
+            raise BusinessRuleException(
+                "No se puede reabrir esta OT porque el bus ya posee una OT posterior"
+            )
+        if es_reapertura and await self.repo.existe_otra_solicitud_activa_mismo_bus(
+            db, solicitud
+        ):
+            raise BusinessRuleException(
+                "No se puede reabrir esta OT porque el bus ya posee otra OT activa"
+            )
+
+        now = datetime.now(timezone.utc)
         sup_nom = supervisor_nombre
 
         if not sup_nom:
@@ -420,6 +479,13 @@ class CierreService:
             comentario_entry.usuario = u_sup
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, sup_nom)
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_anterior,
+                estado_nuevo=nuevo_estado, actor_id=supervisor_id, actor_nombre=sup_nom,
+                fecha_evento=now, comentario=comentario_entry, motivo=dto.comentario,
+            ),
+        )
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)

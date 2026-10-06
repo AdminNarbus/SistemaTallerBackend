@@ -189,9 +189,10 @@ class TallerService:
         dto: PautaBatchUpdateDTO,
         mecanico_id: int,
     ) -> PautaEstadoResumenDTO:
-        return await self.pauta_srv.guardar_respuestas_pauta(
+        result = await self.pauta_srv.guardar_respuestas_pauta(
             db, solicitud_id, dto, mecanico_id
         )
+        return result
 
     # --- Solicitudes ---
 
@@ -249,7 +250,7 @@ class TallerService:
         foto: Optional[UploadFile] = None,
         fotos: Optional[List[UploadFile]] = None,
     ) -> SolicitudDTO:
-        return await self.solicitud_srv.create_solicitud(
+        result = await self.solicitud_srv.create_solicitud(
             db,
             dto,
             creador_id=creador_id,
@@ -258,6 +259,7 @@ class TallerService:
             foto=foto,
             fotos=fotos,
         )
+        return result
 
     # --- Cuadrilla ---
 
@@ -268,9 +270,10 @@ class TallerService:
         mecanico_id: int,
         dto: TomarTrabajoDTO,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.tomar_trabajo(
+        result = await self.cuadrilla_srv.tomar_trabajo(
             db, solicitud_id=solicitud_id, mecanico_id=mecanico_id, dto=dto
         )
+        return result
 
     async def agregar_colaborador(
         self,
@@ -279,9 +282,10 @@ class TallerService:
         mecanico_id: int,
         dto: AgregarColaboradorDTO,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.agregar_colaborador(
+        result = await self.cuadrilla_srv.agregar_colaborador(
             db, solicitud_id=solicitud_id, mecanico_id=mecanico_id, dto=dto
         )
+        return result
 
     async def desasignar_mecanico(
         self,
@@ -291,13 +295,14 @@ class TallerService:
         comentario: Optional[str] = None,
         mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.desasignar_mecanico(
+        result = await self.cuadrilla_srv.desasignar_mecanico(
             db,
             solicitud_id=solicitud_id,
             mecanico_id=mecanico_id,
             comentario=comentario,
             mecanico_nombre=mecanico_nombre,
         )
+        return result
 
     async def liberar_turno(
         self,
@@ -307,13 +312,14 @@ class TallerService:
         dto: LiberarTurnoDTO,
         usuario_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.liberar_turno(
+        result = await self.cuadrilla_srv.liberar_turno(
             db,
             solicitud_id=solicitud_id,
             usuario_id=usuario_id,
             dto=dto,
             usuario_nombre=usuario_nombre,
         )
+        return result
 
     async def autoasignar_fallas(
         self,
@@ -323,13 +329,14 @@ class TallerService:
         mecanico_id: int,
         mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.autoasignar_fallas(
+        result = await self.cuadrilla_srv.autoasignar_fallas(
             db,
             solicitud_id=solicitud_id,
             dto=dto,
             mecanico_id=mecanico_id,
             mecanico_nombre=mecanico_nombre,
         )
+        return result
 
     async def asignar_fallas_supervisora(
         self,
@@ -338,12 +345,13 @@ class TallerService:
         dto: AsignarFallasSupervisoraDTO,
         supervisor_id: int,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.asignar_fallas_supervisora(
+        result = await self.cuadrilla_srv.asignar_fallas_supervisora(
             db,
             solicitud_id=solicitud_id,
             dto=dto,
             supervisor_id=supervisor_id,
         )
+        return result
 
     async def terminar_avance(
         self,
@@ -353,13 +361,14 @@ class TallerService:
         mecanico_id: int,
         mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cuadrilla_srv.terminar_avance(
+        result = await self.cuadrilla_srv.terminar_avance(
             db,
             solicitud_id=solicitud_id,
             dto=dto,
             mecanico_id=mecanico_id,
             mecanico_nombre=mecanico_nombre,
         )
+        return result
 
     # --- Averías ---
 
@@ -370,9 +379,10 @@ class TallerService:
         mecanico_id: int,
         dto: AgregarFallaDTO,
     ) -> SolicitudDTO:
-        return await self.averias_srv.agregar_falla(
+        result = await self.averias_srv.agregar_falla(
             db, solicitud_id=solicitud_id, mecanico_id=mecanico_id, dto=dto
         )
+        return result
 
     async def check_detalle(
         self,
@@ -384,7 +394,7 @@ class TallerService:
         mecanico_nombre: Optional[str] = None,
         mecanico_resolvio_id: Optional[int] = None,
     ) -> DetalleUpdateDTO:
-        return await self.averias_srv.check_detalle(
+        result = await self.averias_srv.check_detalle(
             db,
             solicitud_id=solicitud_id,
             detalle_id=detalle_id,
@@ -393,6 +403,7 @@ class TallerService:
             mecanico_nombre=mecanico_nombre,
             mecanico_resolvio_id=mecanico_resolvio_id,
         )
+        return result
 
     async def reportar_repuesto(
         self,
@@ -403,7 +414,7 @@ class TallerService:
         mecanico_id: int,
         mecanico_nombre: Optional[str] = None,
     ) -> DetalleUpdateDTO:
-        return await self.averias_srv.reportar_repuesto(
+        result = await self.averias_srv.reportar_repuesto(
             db,
             solicitud_id=solicitud_id,
             detalle_id=detalle_id,
@@ -411,6 +422,7 @@ class TallerService:
             mecanico_id=mecanico_id,
             mecanico_nombre=mecanico_nombre,
         )
+        return result
 
     async def resolver_falla_supervisora(
         self,
@@ -420,15 +432,18 @@ class TallerService:
         dto: ResolverFallaSupervisoraDTO,
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> DetalleUpdateDTO:
-        return await self.averias_srv.resolver_falla_supervisora(
+        result = await self.averias_srv.resolver_falla_supervisora(
             db,
             solicitud_id=solicitud_id,
             detalle_id=detalle_id,
             dto=dto,
             supervisor_id=supervisor_id,
             supervisor_nombre=supervisor_nombre,
+            fotos=fotos,
         )
+        return result
 
     # --- Cierre / Finalización / Bitácora ---
 
@@ -440,13 +455,14 @@ class TallerService:
         dto: ComentarioCreateDTO,
         usuario_nombre: Optional[str] = None,
     ) -> ComentarioAddedDTO:
-        return await self.cierre_srv.agregar_comentario(
+        result = await self.cierre_srv.agregar_comentario(
             db,
             solicitud_id=solicitud_id,
             usuario_id=usuario_id,
             dto=dto,
             usuario_nombre=usuario_nombre,
         )
+        return result
 
     async def finalizar_solicitud(
         self,
@@ -456,13 +472,14 @@ class TallerService:
         dto: FinalizarSolicitudDTO,
         mecanico_cierre_nom: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cierre_srv.finalizar_solicitud(
+        result = await self.cierre_srv.finalizar_solicitud(
             db,
             solicitud_id=solicitud_id,
             mecanico_cierre_id=mecanico_cierre_id,
             dto=dto,
             mecanico_cierre_nom=mecanico_cierre_nom,
         )
+        return result
 
     async def liberar_solicitud(
         self,
@@ -472,13 +489,14 @@ class TallerService:
         mecanico_id: int,
         mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cierre_srv.liberar_solicitud(
+        result = await self.cierre_srv.liberar_solicitud(
             db,
             solicitud_id=solicitud_id,
             dto=dto,
             mecanico_id=mecanico_id,
             mecanico_nombre=mecanico_nombre,
         )
+        return result
 
     async def cambiar_estado_solicitud(
         self,
@@ -488,13 +506,14 @@ class TallerService:
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        return await self.cierre_srv.cambiar_estado_solicitud(
+        result = await self.cierre_srv.cambiar_estado_solicitud(
             db,
             solicitud_id=solicitud_id,
             dto=dto,
             supervisor_id=supervisor_id,
             supervisor_nombre=supervisor_nombre,
         )
+        return result
 
 
 taller_service = TallerService()

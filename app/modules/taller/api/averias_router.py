@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -18,6 +18,7 @@ from app.modules.taller.dtos import (
 )
 from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.services.averias_service import averias_service
+from app.modules.taller.api.request_parsers import parse_json_or_multipart
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,14 @@ async def agregar_falla(
 async def check_detalle(
     id: int,
     detalle_id: int,
-    dto: Optional[CheckFallaDTO] = Body(None, description="Payload JSON de resolución o estado de avería"),
+    request: Request,
     resuelto: Optional[bool] = Query(None, description="Parámetro alternativo de resolución"),
     mecanico_id: Optional[int] = Query(None, description="ID del mecánico resolutor alternativo"),
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Marca una falla como PENDIENTE, INCOMPLETA o RESUELTA guardando el timestamp y el ID del mecánico."""
+    """Marca una falla; acepta JSON legado o multipart con fotos opcionales."""
+    dto, fotos = await parse_json_or_multipart(request, CheckFallaDTO)
     estado_final, motivo_final, resuelto_final, resolutor_id = _resolver_check_params(dto, resuelto, mecanico_id)
 
     logger.info(
@@ -92,6 +94,8 @@ async def check_detalle(
         mecanico_resolvio_id=resolutor_id,
         estado=estado_final,
         motivo_incompleto=motivo_final,
+        comentario=dto.comentario,
+        fotos=fotos,
     )
 
 

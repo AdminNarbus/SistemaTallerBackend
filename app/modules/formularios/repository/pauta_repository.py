@@ -31,7 +31,9 @@ class PautaRepository:
 
     async def get_pauta_items_by_ids(self, db: AsyncSession, item_ids: List[int]) -> Set[int]:
         """Retorna el conjunto de IDs válidos para una lista de ítems solicitada."""
-        stmt = select(PautaTallerItem.id).where(PautaTallerItem.id.in_(item_ids))
+        stmt = select(PautaTallerItem.id).where(
+            PautaTallerItem.id.in_(item_ids), PautaTallerItem.is_active.is_(True)
+        )
         res = await db.execute(stmt)
         return set(res.scalars().all())
 

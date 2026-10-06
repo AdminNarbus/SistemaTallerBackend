@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import text, Index, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -13,13 +13,13 @@ class FallaTaller(Base):
     """
 
     __tablename__ = "fallas_taller"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (Index("ix_fallas_taller_cat_active", "categoria_id", "is_active"), {"extend_existing": True})
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     categoria_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("categorias_falla.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("categorias_falla.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
 
     categoria: Mapped["CategoriaFalla"] = relationship("CategoriaFalla", lazy="selectin")

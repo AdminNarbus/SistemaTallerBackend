@@ -1,8 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 from fastapi import UploadFile
 
 from app.core.exceptions import BusinessRuleException
+
+
+def normalizar_fecha_utc(fecha: datetime) -> datetime:
+    """Legacy naive timestamps are UTC; offsets are converted before arithmetic."""
+    return fecha.astimezone(timezone.utc).replace(tzinfo=None) if fecha.tzinfo else fecha
 
 
 def calcular_duracion_minutos(inicio: Optional[datetime], fin: Optional[datetime]) -> int:
@@ -14,8 +19,8 @@ def calcular_duracion_minutos(inicio: Optional[datetime], fin: Optional[datetime
     if not inicio or not fin:
         return 0
 
-    d_inicio = inicio.replace(tzinfo=None) if inicio.tzinfo else inicio
-    d_fin = fin.replace(tzinfo=None) if fin.tzinfo else fin
+    d_inicio = normalizar_fecha_utc(inicio)
+    d_fin = normalizar_fecha_utc(fin)
 
     delta_seconds = max(0.0, (d_fin - d_inicio).total_seconds())
     return max(1, int(delta_seconds / 60))
@@ -28,16 +33,13 @@ def calcular_horas_en_taller(
     """
     Función de Dominio Pura: Calcula las horas transcurridas en taller de forma segura,
     normalizando diferencias entre datetimes naive y aware (offset-naive vs offset-aware).
-    Si fin es None, toma datetime.now().
+    Si fin es None, toma datetime.now(timezone.utc).
     """
     if not inicio:
         return None
 
-    d_inicio = inicio.replace(tzinfo=None) if inicio.tzinfo else inicio
-    if fin:
-        d_fin = fin.replace(tzinfo=None) if fin.tzinfo else fin
-    else:
-        d_fin = datetime.now()
+    d_inicio = normalizar_fecha_utc(inicio)
+    d_fin = normalizar_fecha_utc(fin or datetime.now(timezone.utc))
 
     delta_seconds = max(0.0, (d_fin - d_inicio).total_seconds())
     return round(delta_seconds / 3600.0, 1)
@@ -53,8 +55,8 @@ def calcular_telemetria_estadias(
     Calcula el tiempo real acumulado en maestranza (sumando estadías cerradas más la abierta si el bus está en taller)
     y el conteo total de visitas.
     """
-    ref_now = now or datetime.now()
-    d_ref_now = ref_now.replace(tzinfo=None) if ref_now.tzinfo else ref_now
+    ref_now = now or datetime.now(timezone.utc)
+    d_ref_now = normalizar_fecha_utc(ref_now)
 
     total_visitas = len(estadias)
     if not estadias:
@@ -76,11 +78,11 @@ def calcular_telemetria_estadias(
             horas_acumuladas += float(h)
         elif f_ing is not None and f_sal is None:
             # Estadía en curso actualmente
-            d_ing = f_ing.replace(tzinfo=None) if hasattr(f_ing, "replace") and f_ing.tzinfo else f_ing
+            d_ing = normalizar_fecha_utc(f_ing) if isinstance(f_ing, datetime) else f_ing
             if isinstance(d_ing, str):
                 try:
                     d_ing = datetime.fromisoformat(d_ing)
-                    d_ing = d_ing.replace(tzinfo=None) if d_ing.tzinfo else d_ing
+                    d_ing = normalizar_fecha_utc(d_ing)
                 except Exception:
                     d_ing = None
             if d_ing:
@@ -140,13 +142,13 @@ def describir_detalle_averia(det: Any) -> str:
     desc_pers = det.descripcion_personalizada.strip() if getattr(det, "descripcion_personalizada", None) else None
 
     falla_obj = det.__dict__.get("falla") if hasattr(det, "__dict__") else None
-    nom_falla = getattr(falla_obj, "nombre", None) if falla_obj else None
+    nom_falla = getattr(det, "falla_nombre_snapshot", None) or (getattr(falla_obj, "nombre", None) if falla_obj else None)
 
-    nom_cat = None
+    nom_cat = getattr(det, "categoria_nombre_snapshot", None)
     if falla_obj and hasattr(falla_obj, "__dict__"):
         cat_obj = falla_obj.__dict__.get("categoria")
         if cat_obj:
-            nom_cat = getattr(cat_obj, "nombre", None)
+            nom_cat = nom_cat or getattr(cat_obj, "nombre", None)
 
     if nom_falla and desc_pers:
         return f"{nom_falla} ({desc_pers})"

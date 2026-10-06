@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 116,
+  "id": "AV-0116",
+  "timestamp": "2026-10-06T00:00:00Z",
+  "phase": "backend_migrations",
+  "milestone": {
+    "id": "TALLER-OT-UNICA-2",
+    "name": "Compatibilidad asyncpg de la consolidación de OTs",
+    "statusBefore": "blocked",
+    "statusAfter": "implemented"
+  },
+  "type": "completed",
+  "summary": "La migración 021 ejecuta cada sentencia de consolidación por separado para que asyncpg pueda prepararla correctamente.",
+  "scope": {
+    "planned": ["Ejecutar migración de consolidación en PostgreSQL mediante Alembic"],
+    "completed": ["Separación de sentencias SQL conservando la misma transacción Alembic"],
+    "pending": ["Reejecutar alembic upgrade head en la base del usuario"],
+    "outOfScope": []
+  },
+  "changes": [
+    {"path": "alembic/versions/021_consolidar_ots_activas.py", "action": "modified", "summary": "Reemplaza el bloque multi-statement incompatible por una secuencia de op.execute."}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-TALLER-MIG-001",
+      "title": "Una sentencia preparada por ejecución asyncpg",
+      "rationale": "asyncpg rechaza cadenas con múltiples comandos, incluso dentro de una única operación Alembic.",
+      "consequences": "Las operaciones siguen siendo atómicas bajo la transacción de Alembic y la tabla temporal permanece disponible en la misma conexión."
+    }
+  ],
+  "verification": [
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de formato."}
+  ],
+  "blockers": [],
+  "nextStep": "Ejecutar alembic upgrade head nuevamente.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "main", "dirty": true},
+  "notes": []
+}

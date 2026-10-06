@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 118,
+  "id": "AV-0118",
+  "timestamp": "2026-10-06T19:26:33Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "OT-HISTORIAL", "name": "Historial inmutable de estados de OT", "statusBefore": "in_progress", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Tabla y endpoint de historial de estados implementados, con registro transaccional, importación conservadora y protección PostgreSQL. BD local migrada a 024 con respaldo y 11 antecedentes importados.",
+  "scope": {
+    "planned": ["Tabla protegida y migración 024", "Registro de transiciones", "Endpoint paginado", "Importación histórica", "Validación PostgreSQL"],
+    "completed": ["Modelo y migración alineados", "Creación, cierres, cambios administrativos y automáticos", "Bloqueo de ciclo de bus antes de OT", "DTO y endpoint autenticado", "Importación idempotente por lotes", "Pruebas y auditoría extendidas", "Respaldo, migración e importación locales", "Documentación del contrato y despliegue"],
+    "pending": [],
+    "outOfScope": ["Frontend", "Cambios o despliegue en producción"]
+  },
+  "changes": [
+    {"path": "alembic/versions/024_historial_estados_ot.py", "action": "created", "summary": "Tabla con checks, FK y trigger inmutable"},
+    {"path": "app/modules/taller/models/taller_solicitud_estado_evento.py", "action": "created", "summary": "Modelo registrado con relaciones históricas"},
+    {"path": "app/modules/taller/services/trazabilidad_estados.py", "action": "created", "summary": "Registro compartido sin commit propio"},
+    {"path": "app/modules/taller/services", "action": "modified", "summary": "Integración en cada operación que cambia el estado"},
+    {"path": "app/modules/taller/api/solicitud_router.py", "action": "modified", "summary": "Consulta paginada del historial"},
+    {"path": "scripts/importar_historial_estados_ot.py", "action": "created", "summary": "Simulación READ ONLY e importación conservadora por lotes"},
+    {"path": "scripts/validar_historial_estados_postgres.py", "action": "created", "summary": "Restricciones, importación, rollback y concurrencia en BD desechable"},
+    {"path": "tests/integration/test_historial_estados_ot.py", "action": "created", "summary": "Ciclos, paginación, autorización, cierre parcial y rollback"},
+    {"path": "tests/unit/test_importar_historial_estados_ot.py", "action": "created", "summary": "Formatos reconocibles y cierres ambiguos"},
+    {"path": "trazabilidad/08_HISTORIAL_ESTADOS_OT.md", "action": "created", "summary": "Contrato y procedimiento de despliegue"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Conservar política histórica de 022 y 023", "rationale": "Las migraciones recientes usan RESTRICT y triggers inmutables.", "consequences": "La tabla nueva impide borrados en cascada y modificaciones directas; FK compuesta verifica la OT del comentario."},
+    {"id": "DEC-002", "title": "Importación con evidencia explícita", "rationale": "El comentario de cierre también se utiliza cuando el estado final es LIBERADO.", "consequences": "Los cierres ambiguos se preservan con estados nulos y no cuentan como finalizaciones confirmadas."},
+    {"id": "DEC-003", "title": "Serialización por ciclo y OT", "rationale": "Leer el estado antes de obtener el bloqueo podría registrar una transición anterior incorrecta.", "consequences": "Las operaciones bloquean el ciclo de bus y la OT antes de validar y registrar; fallas y repuestos coordinan con el cierre."},
+    {"id": "DEC-004", "title": "Consulta separada y paginada", "rationale": "El historial puede crecer con múltiples ciclos.", "consequences": "No se carga en listados existentes; el endpoint usa skip/limit y X-Total-Count."}
+  ],
+  "verification": [
+    {"command": "pytest -q -p no:cacheprovider", "result": "passed", "evidence": "230 pruebas pasaron; cinco tuvieron errores de preparación por permisos temporales. Reejecución de los archivos afectados con basetemp accesible: 17 passed, incluidas las cinco; 235 casos únicos aprobados."},
+    {"command": "pytest historial_estados_ot, taller_service y comentarios_predeterminados", "result": "passed", "evidence": "40 passed tras los ajustes finales del registro compartido y cierre batch."},
+    {"command": "python -m scripts.validar_migraciones_postgres", "result": "passed", "evidence": "Upgrade/check y downgrade/upgrade/check; rechazos reales, importación idempotente y operaciones concurrentes en PostgreSQL desechable."},
+    {"command": "python -m scripts.aplicar_migraciones_locales", "result": "passed", "evidence": "Respaldo backups/integridad_20261006T192611558612Z.json y versión local 024; alembic check sin diferencias."},
+    {"command": "python -m scripts.importar_historial_estados_ot --aplicar", "result": "passed", "evidence": "11 importados: 6 cambios explícitos y 5 cierres ambiguos; 84 comentarios omitidos. Reejecución: cero insertados, 11 existentes."},
+    {"command": "python -m scripts.verificar_integridad_bd", "result": "passed", "evidence": "Sin datos incompatibles."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar migraciones y backend en producción mediante el procedimiento documentado, después de verificar la revisión y respaldar el entorno.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/integridad-bd-taller", "commit": null, "dirty": true},
+  "notes": ["Cambios previos del usuario conservados; sin commits ni publicaciones.", "Producción no fue modificada.", "El intérprete del venv no arrancó en el sandbox; las comprobaciones usaron Python 3.12 del runtime con los paquetes existentes del venv."]
+}

@@ -109,6 +109,21 @@ Para que Cloud Build pueda desplegar en Cloud Run e inyectar secretos, la Servic
 
 ## 5. Verificación de Salud en Producción
 
+### Configuración de WebSocket en una sola instancia
+
+Para la primera etapa de tiempo real, desplegar con `REALTIME_ENABLED=true`,
+`REALTIME_BACKEND=memory`, timeout de 3600 segundos, concurrencia 80 y máximo una
+instancia. Mantener un solo worker Uvicorn. El frontend debe reconectar ante cierres
+de socket durante una nueva revisión.
+
+```bash
+gcloud run services update narbus-backend-api --timeout=3600 --concurrency=80 --max=1 --min=0 \
+  --update-env-vars=REALTIME_ENABLED=true,REALTIME_BACKEND=memory
+```
+
+Validar luego `GET /api/v1/health/realtime`. No habilitar varias instancias hasta
+reemplazar el bus en memoria por un adaptador Redis.
+
 Una vez finalizado el despliegue, Cloud Run proporcionará una URL pública segura (ej: `https://narbus-backend-api-xyz-uc.a.run.app`).
 
 ### Comprobaciones Recomendadas:

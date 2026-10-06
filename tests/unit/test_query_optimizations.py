@@ -142,6 +142,7 @@ async def test_auth_user_cache_in_memory(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_create_solicitud_con_falla_id_y_falla_nombre_zero_queries(db_session: AsyncSession):
     """Verifica que al enviar falla_id y falla_nombre, la creación construye el DTO sin consultas adicionales."""
+    db_session.add_all([CategoriaFalla(id=3, nombre="LUCES"), FallaTaller(id=99, categoria_id=3, nombre="Falla Eléctrica")])
     bus = Bus(patente="ZERO-01", n_bus="550", is_active=True)
     db_session.add(bus)
 
@@ -194,6 +195,7 @@ async def test_create_solicitud_con_falla_id_y_falla_nombre_zero_queries(db_sess
 @pytest.mark.asyncio
 async def test_create_solicitud_con_falla_id_sin_falla_nombre_fallback(db_session: AsyncSession):
     """Verifica que si no se envía falla_nombre, use la descripción personalizada como fallback en memoria sin error."""
+    db_session.add_all([CategoriaFalla(id=4, nombre="TRANSMISION"), FallaTaller(id=88, categoria_id=4, nombre="Ruido extraño en caja")])
     bus = Bus(patente="FALL-01", n_bus="551", is_active=True)
     db_session.add(bus)
 

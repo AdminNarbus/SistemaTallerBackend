@@ -70,6 +70,7 @@ async def test_supervision_resumen_taller_kpis(db_session, seed_test_data):
         falla_id=901,
         descripcion_personalizada="Alternador quemado",
         resuelto=True,
+        estado="RESUELTA",
     )
     det2 = TallerSolicitudDetalle(
         id=802,

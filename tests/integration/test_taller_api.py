@@ -3,6 +3,69 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_bitacora_adjuntos_y_cambio_falla_multipart(
+    client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data
+):
+    """Las fotos quedan ligadas al evento de bitácora que las originó."""
+    create_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": "BIT-001",
+            "detalles": [{"falla_id": seed_test_data["falla1"].id}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert create_res.status_code == 201
+    solicitud = create_res.json()
+    solicitud_id = solicitud["id"]
+    detalle_id = solicitud["detalles"][0]["id"]
+
+    # Un conductor no puede publicar en la bitácora técnica.
+    denied = await client.post(
+        f"/api/v1/taller/{solicitud_id}/comentarios",
+        json={"comentario": "No autorizado"},
+        headers=auth_headers_conductor,
+    )
+    assert denied.status_code == 403
+
+    fake_jpg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"hallazgo"
+    comentario = await client.post(
+        f"/api/v1/taller/{solicitud_id}/comentarios",
+        data={"tipo": "GENERAL"},
+        files=[
+            ("fotos", ("hallazgo_1.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("hallazgo_2.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+        ],
+        headers=auth_headers_mecanico1,
+    )
+    assert comentario.status_code == 200
+    assert comentario.json()["comentario"] == ""
+    assert len(comentario.json()["adjuntos"]) == 2
+
+    cambio = await client.patch(
+        f"/api/v1/taller/{solicitud_id}/detalles/{detalle_id}/check",
+        data={
+            "estado": "INCOMPLETA",
+            "motivo_incompleto": "Se requiere una pieza especial",
+            "comentario": "Se dejó evidencia visual",
+        },
+        files={"fotos": ("falla_incompleta.jpg", io.BytesIO(fake_jpg), "image/jpeg")},
+        headers=auth_headers_mecanico1,
+    )
+    assert cambio.status_code == 200
+    assert cambio.json()["estado"] == "INCOMPLETA"
+
+    detalle_res = await client.get(
+        f"/api/v1/taller/{solicitud_id}", headers=auth_headers_mecanico1
+    )
+    assert detalle_res.status_code == 200
+    comentarios = detalle_res.json()["comentarios"]
+    assert any(len(item["adjuntos"]) == 2 for item in comentarios)
+    avance = next(item for item in comentarios if item["tipo"] == "AVANCE")
+    assert avance["adjuntos"][0]["detalle_id"] == detalle_id
+
+
+@pytest.mark.asyncio
 async def test_get_catalogos_mantencion(client, auth_headers_mecanico1, seed_test_data):
     """Prueba la obtención de catálogos de categorías y fallas."""
     # Categorías
@@ -477,7 +540,6 @@ async def test_numero_fallas_en_pendientes_y_mis_trabajos(
     sol_data = create_res.json()
     sol_id = sol_data["id"]
     detalles = sol_data["detalles"]
-    det1_id = detalles[0]["id"]
 
     # 2. Consultar /pendientes: ambas fallas están disponibles
     res_pends = await client.get("/api/v1/taller/pendientes", headers=auth_headers_mecanico1)
@@ -485,28 +547,57 @@ async def test_numero_fallas_en_pendientes_y_mis_trabajos(
     item_pends = next((p for p in res_pends.json() if p["id"] == sol_id), None)
     assert item_pends is not None
     assert item_pends["numero_fallas"] == 2
+    assert item_pends["fallas_asignadas_al_mecanico"] == 0
 
-    # 3. Mecánico 1 se autoasigna SOLO la falla 1
+    # 3. Mecánico 1 se autoasigna las dos fallas.
     asig_payload = {
-        "detalles_ids": [det1_id],
-        "comentario": "Tomando únicamente la falla 1",
+        "detalles_ids": [detalle["id"] for detalle in detalles],
+        "comentario": "Tomando las dos fallas",
     }
     asig_res = await client.post(
         f"/api/v1/taller/{sol_id}/autoasignar", json=asig_payload, headers=auth_headers_mecanico1
     )
     assert asig_res.status_code == 200
 
-    # 4. Consultar /mis-trabajos para Mecánico 1: debe tener numero_fallas = 1 (la asignada)
+    # 4. Consultar /mis-trabajos para Mecánico 1: ambas fallas aparecen asignadas.
     res_trabajos_m1 = await client.get("/api/v1/taller/mis-trabajos", headers=auth_headers_mecanico1)
     assert res_trabajos_m1.status_code == 200
     item_trabajos_m1 = next((m for m in res_trabajos_m1.json() if m["id"] == sol_id), None)
     assert item_trabajos_m1 is not None
-    assert item_trabajos_m1["numero_fallas"] == 1
+    assert item_trabajos_m1["numero_fallas"] == 2
+    assert item_trabajos_m1["fallas_asignadas_al_mecanico"] == 2
 
     # 5. Para Mecánico 2 (que no tiene asignaciones en esta OT): no debe aparecer en mis-trabajos
     res_trabajos_m2 = await client.get("/api/v1/taller/mis-trabajos", headers=auth_headers_mecanico2)
     assert res_trabajos_m2.status_code == 200
     assert not any(m["id"] == sol_id for m in res_trabajos_m2.json())
+
+    # 6. Una OT tomada por el mecánico, pero sin fallas asignadas a él, conserva
+    # el resumen en Mis Trabajos e informa explícitamente cero fallas asignadas.
+    sin_asignaciones_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": "BUS-SIN-ASIGNACIONES",
+            "detalles": [{"falla_id": falla1_id}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert sin_asignaciones_res.status_code == 201
+    sin_asignaciones_id = sin_asignaciones_res.json()["id"]
+    tomar_res = await client.post(
+        f"/api/v1/taller/{sin_asignaciones_id}/tomar",
+        json={},
+        headers=auth_headers_mecanico1,
+    )
+    assert tomar_res.status_code == 200
+
+    res_sin_asignaciones = await client.get(
+        "/api/v1/taller/mis-trabajos", headers=auth_headers_mecanico1
+    )
+    item_sin_asignaciones = next(
+        item for item in res_sin_asignaciones.json() if item["id"] == sin_asignaciones_id
+    )
+    assert item_sin_asignaciones["fallas_asignadas_al_mecanico"] == 0
 
 
 

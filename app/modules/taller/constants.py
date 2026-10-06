@@ -18,6 +18,17 @@ class EstadoFalla(str, Enum):
     RESUELTA = "RESUELTA"
 
 
+class TipoEventoFalla(str, Enum):
+    """Eventos inmutables que describen el ciclo de vida de una falla."""
+
+    REPORTADA = "REPORTADA"
+    RESUELTA = "RESUELTA"
+    REABIERTA = "REABIERTA"
+    INCOMPLETA = "INCOMPLETA"
+    FALTA_REPUESTO_ACTIVADA = "FALTA_REPUESTO_ACTIVADA"
+    FALTA_REPUESTO_RETIRADA = "FALTA_REPUESTO_RETIRADA"
+
+
 
 class OrigenAsignacion(str, Enum):
     """Origen de asignación de mecánicos a averías."""
@@ -35,6 +46,13 @@ class TipoComentarioBitacora(str, Enum):
     CAMBIO_ESTADO = "CAMBIO_ESTADO"
     ASIGNACION = "ASIGNACION"
     ENTREGA_TURNO = "ENTREGA_TURNO"
+    SALIDA_MECANICO = "SALIDA_MECANICO"
+    RESOLUCION = "RESOLUCION"
+    CHECKLIST = "CHECKLIST"
+    REAPERTURA = "REAPERTURA"
+    FALTA_REPUESTO = "FALTA_REPUESTO"
+    REPUESTO_DISPONIBLE = "REPUESTO_DISPONIBLE"
+    SUPERVISION = "SUPERVISION"
 
 
 

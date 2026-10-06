@@ -1,14 +1,30 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.modules.taller.constants import EstadoSolicitud
+from app.modules.taller.constants import EstadoSolicitud, TipoComentarioBitacora
 
 
 class ComentarioCreateDTO(BaseModel):
     """Payload para añadir un comentario general o técnico a la bitácora."""
-    comentario: str
-    tipo: Optional[str] = "GENERAL"
+    comentario: Optional[str] = None
+    tipo: Optional[TipoComentarioBitacora] = TipoComentarioBitacora.GENERAL
+
+
+class ComentarioAdjuntoDTO(BaseModel):
+    """Imagen inmutable adjunta a un evento de bitácora."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    solicitud_id: int
+    detalle_id: Optional[int] = None
+    usuario_id: Optional[int] = None
+    comentario_id: Optional[int] = None
+    url: str
+    original_filename: Optional[str] = None
+    size_bytes: Optional[int] = None
+    content_type: Optional[str] = None
+    fecha_creacion: Optional[datetime] = None
 
 
 class SolicitudComentarioDTO(BaseModel):
@@ -22,6 +38,7 @@ class SolicitudComentarioDTO(BaseModel):
     tipo: str
     comentario: str
     fecha_registro: datetime
+    adjuntos: List[ComentarioAdjuntoDTO] = []
 
 
 class ComentarioAddedDTO(BaseModel):
@@ -33,6 +50,7 @@ class ComentarioAddedDTO(BaseModel):
     tipo: str
     comentario: str
     fecha_registro: datetime
+    adjuntos: List[ComentarioAdjuntoDTO] = []
 
 
 class CambiarEstadoSolicitudDTO(BaseModel):

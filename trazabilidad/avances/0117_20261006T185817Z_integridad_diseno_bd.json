@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 117,
+  "id": "AV-0117",
+  "timestamp": "2026-10-06T18:58:17Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BD-INTEGRIDAD",
+    "name": "Integridad relacional y conservación del historial",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se fortaleció el diseño de la BD mediante nuevas migraciones Alembic, restricciones de integridad, protección del historial y telemetría consistente. La BD local fue respaldada y actualizada hasta 023_auditoria_inmutable; producción no fue modificada.",
+  "scope": {
+    "planned": ["Aplicar mejoras del análisis de diseño", "Mantener solo la pauta vigente", "Un neumático por reporte con marca opcional", "Conservar empresa_id externo"],
+    "completed": ["Checks de estados, coherencia resuelto/estado, fechas y magnitudes", "Unicidad de asignaciones activas y estadías", "Identidades normalizadas de bus", "FK compuestas para pertenencia a la misma OT", "Protección de referencias históricas", "Snapshots inmutables de catálogo", "Bitácora y eventos inmutables en PostgreSQL", "Telemetría calculada y reconciliada por triggers", "Fechas UTC y normalización de offsets", "Saneamiento de datos confirmado por el operador", "Validación de neumático único y marca opcional", "Seed de pauta sin borrados por ID", "Ciclo PostgreSQL completo y pruebas", "Respaldo y migración local"],
+    "pending": [],
+    "outOfScope": ["Despliegue o cambios directos en producción", "Versionado de pauta", "Inventario de neumáticos y montajes", "Tabla de empresas", "Eliminación destructiva de columnas heredadas de ficha externa", "Cambio incompatible del contrato foto_url"]
+  },
+  "changes": [
+    {"path": "alembic/versions/021a_saneamiento_historial.py", "action": "created", "summary": "Correcciones históricas autorizadas y normalización reversible de reportes"},
+    {"path": "alembic/versions/022_integridad_bd.py", "action": "created", "summary": "Preflight, checks, FK, índices y defaults congelados, sin importar modelos actuales"},
+    {"path": "alembic/versions/023_auditoria_inmutable.py", "action": "created", "summary": "Triggers de inmutabilidad y telemetría"},
+    {"path": "alembic/env.py", "action": "modified", "summary": "Comparación de tipos y defaults del servidor"},
+    {"path": "app/modules/taller/models", "action": "modified", "summary": "Restricciones, índices, snapshots y relaciones históricas"},
+    {"path": "app/modules/formularios", "action": "modified", "summary": "Validación de neumático único, marca opcional y pauta vigente"},
+    {"path": "app/modules/buses", "action": "modified", "summary": "Identidad de flota, conflictos y movimientos físicos ligados a estadías"},
+    {"path": "app/core/seed.py", "action": "modified", "summary": "Evita borrar respuestas vigentes con item_id mayor a diez"},
+    {"path": "app/core/exceptions.py", "action": "modified", "summary": "Errores de integridad convertidos a respuestas de dominio sin exponer SQL"},
+    {"path": "scripts/validar_migraciones_postgres.py", "action": "created", "summary": "Verificación PostgreSQL sobre copia local desechable"},
+    {"path": "scripts/aplicar_migraciones_locales.py", "action": "created", "summary": "Respaldo SELECT y actualización local exclusivamente mediante Alembic"},
+    {"path": "scripts/verificar_integridad_bd.py", "action": "created", "summary": "Auditoría de datos en transacción READ ONLY"},
+    {"path": "tests/unit/test_integridad_bd.py", "action": "created", "summary": "Quince casos de validación, FK, offsets y conservación de pauta"},
+    {"path": "trazabilidad/07_DISENO_BD_INTEGRIDAD.md", "action": "created", "summary": "Decisiones, compatibilidad, saneamiento, pruebas y despliegue"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Pauta vigente y empresa externa", "rationale": "El usuario descartó versionado de pauta y confirmó que empresa_id no requiere una entidad administrada.", "consequences": "Solo se usan ítems activos, preservando respuestas históricas; no se añade tabla de empresas."},
+    {"id": "DEC-002", "title": "Compatibilidad sin pérdida de historial", "rationale": "Los contratos existentes utilizan resuelto, foto_url y campos importados; eliminar columnas o interpretar campos ambiguos destruiría datos o rompería clientes.", "consequences": "resuelto se protege con CHECK; foto_url se conserva como portada; precio queda solo como atributo histórico, sin uso operativo."},
+    {"id": "DEC-003", "title": "Correcciones confirmadas y condicionadas", "rationale": "El operador confirmó la salida de estadía 1 el 29/09 a las 13:00 y estadías 3/4 el 02/10 a las 14:00/15:00 en Chile. Confirmó marca de fuego del reporte 1 para 1D.", "consequences": "La migración comprueba ID y datos originales, conserva ambas ruedas y no inventa una marca para 1I."},
+    {"id": "DEC-004", "title": "Migraciones preparadas para producción", "rationale": "El usuario indicó que todo será desplegado posteriormente en producción.", "consequences": "No se modifican revisiones originales; se prueban nuevas revisiones y su reversión en PostgreSQL con copia de datos, preflight y límites de espera de bloqueos."},
+    {"id": "DEC-005", "title": "Protección histórica en PostgreSQL", "rationale": "Las validaciones de API y los comentarios de inmutabilidad no impiden escrituras incompatibles fuera del servicio.", "consequences": "FK RESTRICT, índices parciales, checks y triggers protegen datos incluso mediante SQL; los usuarios y catálogos referenciados deben desactivarse."}
+  ],
+  "verification": [
+    {"command": "pytest (suite existente)", "result": "passed", "evidence": "209 passed; se corrigieron fixtures de neumáticos obligatorios, estado coherente y URLs GET de detalle."},
+    {"command": "pytest test_integridad_bd y módulos afectados", "result": "passed", "evidence": "41 passed, incluyendo quince pruebas nuevas."},
+    {"command": "python -m scripts.validar_migraciones_postgres", "result": "passed", "evidence": "Copia SELECT de la BD local en base desechable; upgrade/check, rechazos reales de integridad, downgrade hasta 021, nuevo upgrade/check."},
+    {"command": "python -m scripts.aplicar_migraciones_locales", "result": "passed", "evidence": "Respaldo backups/integridad_20261006T185506721316Z.json; versión local 023_auditoria_inmutable; alembic check sin operaciones nuevas."},
+    {"command": "python -m scripts.verificar_integridad_bd", "result": "passed", "evidence": "Sin datos incompatibles tras el saneamiento; fechas confirmadas verificadas; tres reportes y vínculo del reporte separado."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Revisar y desplegar el código junto con las nuevas migraciones por el proceso Alembic habitual, después de respaldar y validar el entorno de producción.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/integridad-bd-taller", "commit": null, "dirty": true},
+  "notes": ["Se conservaron los cambios existentes del usuario; no se hicieron commits ni publicaciones.", "El respaldo local contiene datos del proyecto y está excluido de Git.", "El script de aplicación rechaza hosts remotos y perfiles distintos de dev_local."]
+}

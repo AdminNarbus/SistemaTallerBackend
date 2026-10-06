@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, func
+from sqlalchemy import CheckConstraint, Index, text, Boolean, DateTime, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -18,19 +18,26 @@ class TallerSolicitudMecanico(Base):
     """
 
     __tablename__ = "taller_solicitud_mecanicos"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        Index('ix_sol_mecanicos_mec_activo', 'mecanico_id', 'is_activo'),
+        Index("uq_cuadrilla_activa", "solicitud_id", "mecanico_id", unique=True,
+              postgresql_where=text("is_activo = true"), sqlite_where=text("is_activo = 1")),
+        CheckConstraint("duracion_minutos IS NULL OR duracion_minutos >= 0", name="ck_cuadrilla_duracion"),
+        CheckConstraint("fecha_desasignacion IS NULL OR fecha_desasignacion >= fecha_asignacion", name="ck_cuadrilla_fechas"),
+        {"extend_existing": True},
+    )
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     solicitud_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("taller_solicitudes.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("taller_solicitudes.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     mecanico_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    es_lider_responsable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    es_lider_responsable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    is_activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
     asignado_por_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     duracion_minutos: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 

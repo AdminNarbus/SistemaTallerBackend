@@ -1,6 +1,7 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
@@ -15,6 +16,8 @@ from app.modules.formularios.repository.pauta_repository import (
     pauta_repository,
 )
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.core.realtime.events import RealtimeEvent, publish_event_soon
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +72,7 @@ class FormularioPautaService:
         if not dto.respuestas:
             raise BusinessRuleException("Debe enviar al menos una respuesta de pauta")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # 1. Validar existencia de solicitud, obtener datos del mecánico y verificar ítems
         item_ids = [r.item_id for r in dto.respuestas]
@@ -101,9 +104,22 @@ class FormularioPautaService:
             fecha_registro=now,
         )
         db.add(comentario_entry)
+        await db.execute(
+            update(TallerSolicitud)
+            .where(TallerSolicitud.id == solicitud_id)
+            .values(fecha_actualizacion=now)
+        )
 
         await db.commit()
-        return await self.get_pauta_resumen(db, solicitud_id)
+        result = await self.get_pauta_resumen(db, solicitud_id)
+        publish_event_soon(RealtimeEvent(
+            resource_type="work_order",
+            resource_id=solicitud_id,
+            action="checklist.changed",
+            actor_id=mecanico_id,
+            version=now,
+        ))
+        return result
 
 
 # Instancia por defecto y alias canónico

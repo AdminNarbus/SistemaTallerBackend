@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import List, Optional
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.auth.constants import RolUsuario
-from app.modules.taller.constants import EstadoSolicitud, EstadoFalla
+from app.modules.taller.constants import EstadoSolicitud, EstadoFalla, TipoEventoFalla
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
@@ -29,6 +30,10 @@ from app.modules.taller.services.estadias_helper import (
     attach_comentario_safe,
     attach_mecanico_safe,
 )
+from app.modules.taller.services.bitacora_adjuntos import guardar_adjuntos_bitacora
+from app.modules.taller.services.trazabilidad_fallas import registrar_evento_falla
+
+from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +62,18 @@ class AveriasService:
             mecanico_id,
             dto.autoasignar,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
         if solicitud.estado == "FINALIZADO":
             raise BusinessRuleException(
                 "No se pueden agregar fallas a una solicitud que ya ha sido finalizada"
             )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         texto = dto.texto_falla
         if not texto and not dto.falla_id:
             raise BusinessRuleException(
@@ -105,12 +112,26 @@ class AveriasService:
             resuelto=False,
             falta_repuesto=False,
             fecha_creacion=now,
+            fecha_reporte=now,
+            reportado_por_id=mecanico_id,
             asignaciones=[],
         )
         if f_obj:
             nuevo_detalle.falla = f_obj
         self.repo.add_detalle(db, nuevo_detalle)
         await self.repo.flush(db)
+        registrar_evento_falla(
+            db,
+            self.repo,
+            detalle_id=nuevo_detalle.id,
+            tipo_evento=TipoEventoFalla.REPORTADA.value,
+            actor_id=mecanico_id,
+            actor_nombre=mec_nombre,
+            estado_anterior=None,
+            estado_nuevo=EstadoFalla.PENDIENTE.value,
+            fecha_evento=now,
+            comentario=texto,
+        )
 
         # 4. Asignación / Resolución según rol y DTO
         es_supervisor = False
@@ -152,7 +173,7 @@ class AveriasService:
                 detalle_id=nuevo_detalle.id,
                 mecanico_id=asignado_id,
                 asignado_por_id=mecanico_id,
-                origen="SUPERVISION",
+                origen="SUPERVISOR",
                 is_activo=True,
                 fecha_asignacion=now,
                 resuelto_en_esta_asignacion=False,
@@ -291,7 +312,29 @@ class AveriasService:
         self.repo.add_comentario(db, comentario_entry)
         attach_comentario_safe(solicitud, comentario_entry, mec_nombre)
         solicitud.fecha_actualizacion = now
+        if nuevo_detalle.resuelto:
+            registrar_evento_falla(
+                db,
+                self.repo,
+                detalle_id=nuevo_detalle.id,
+                tipo_evento=TipoEventoFalla.RESUELTA.value,
+                actor_id=mecanico_id,
+                actor_nombre=mec_nombre,
+                estado_anterior=EstadoFalla.PENDIENTE.value,
+                estado_nuevo=EstadoFalla.RESUELTA.value,
+                fecha_evento=now,
+                comentario=dto.descripcion_personalizada,
+                mecanicos_resolutores=[u_resolutor] if u_resolutor else [],
+            )
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=mecanico_id, actor_nombre=mec_nombre,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -306,6 +349,8 @@ class AveriasService:
         mecanico_resolvio_id: Optional[int] = None,
         estado: Optional[EstadoFalla] = None,
         motivo_incompleto: Optional[str] = None,
+        comentario: Optional[str] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> DetalleUpdateDTO:
         """Actualiza el estado de una falla (PENDIENTE, INCOMPLETA, RESUELTA) retornando un DTO atómico."""
         target_estado: EstadoFalla
@@ -324,6 +369,7 @@ class AveriasService:
             target_estado.value,
             mecanico_resolvio_id,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         detalle_target = await self.repo.get_detalle_operacional(
             db, solicitud_id, detalle_id
         )
@@ -332,7 +378,8 @@ class AveriasService:
                 raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException("Detalle de falla no encontrado")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
+        estado_anterior = detalle_target.estado
         is_resuelta = target_estado == EstadoFalla.RESUELTA
         detalle_target.estado = target_estado.value
         detalle_target.resuelto = is_resuelta
@@ -453,6 +500,13 @@ class AveriasService:
             resolutor_nom = None
             mecanicos_resolvieron_dtos = []
 
+        observacion = (comentario or "").strip()
+        if observacion and not (
+            target_estado == EstadoFalla.INCOMPLETA
+            and observacion == (detalle_target.motivo_incompleto or "")
+        ):
+            texto_check += f" - Observación: {observacion}"
+
         db.add(detalle_target)
 
         comentario_entry = TallerSolicitudComentario(
@@ -466,6 +520,32 @@ class AveriasService:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
+        await guardar_adjuntos_bitacora(
+            db,
+            comentario=comentario_entry,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            usuario_id=mecanico_id,
+            fotos=fotos,
+        )
+        tipo_evento = {
+            EstadoFalla.RESUELTA: TipoEventoFalla.RESUELTA.value,
+            EstadoFalla.INCOMPLETA: TipoEventoFalla.INCOMPLETA.value,
+            EstadoFalla.PENDIENTE: TipoEventoFalla.REABIERTA.value,
+        }[target_estado]
+        registrar_evento_falla(
+            db,
+            self.repo,
+            detalle_id=detalle_target.id,
+            tipo_evento=tipo_evento,
+            actor_id=mecanico_id,
+            actor_nombre=actor_nom,
+            estado_anterior=estado_anterior,
+            estado_nuevo=detalle_target.estado,
+            fecha_evento=now,
+            comentario=observacion or detalle_target.motivo_incompleto,
+            mecanicos_resolutores=mecanicos_resolvieron_dtos if is_resuelta else [],
+        )
 
         await db.commit()
         return DetalleUpdateDTO(
@@ -498,6 +578,7 @@ class AveriasService:
             detalle_id,
             dto.falta_repuesto,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         detalle = await self.repo.get_detalle_operacional(db, solicitud_id, detalle_id)
         if not detalle:
             if not await self.repo.check_solicitud_exists(db, solicitud_id):
@@ -517,7 +598,7 @@ class AveriasService:
             dto.comentario.strip() if dto.comentario else None
         )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         tipo_accion = (
             "FALTA_REPUESTO" if dto.falta_repuesto else "REPUESTO_DISPONIBLE"
         )
@@ -549,6 +630,22 @@ class AveriasService:
             comentario_entry.usuario = u_mec
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
+        registrar_evento_falla(
+            db,
+            self.repo,
+            detalle_id=detalle.id,
+            tipo_evento=(
+                TipoEventoFalla.FALTA_REPUESTO_ACTIVADA.value
+                if dto.falta_repuesto
+                else TipoEventoFalla.FALTA_REPUESTO_RETIRADA.value
+            ),
+            actor_id=mecanico_id,
+            actor_nombre=mec_nom,
+            estado_anterior=detalle.estado,
+            estado_nuevo=detalle.estado,
+            fecha_evento=now,
+            comentario=detalle.comentario_repuesto,
+        )
 
         await db.commit()
         return DetalleUpdateDTO(
@@ -570,6 +667,7 @@ class AveriasService:
         dto: ResolverFallaSupervisoraDTO,
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> DetalleUpdateDTO:
         """Permite a la supervisora marcar una falla como resuelta indicando qué mecánico la arregló."""
         logger.info(
@@ -580,6 +678,7 @@ class AveriasService:
             dto.resuelto,
             dto.mecanico_id,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
@@ -606,7 +705,8 @@ class AveriasService:
                 "Detalle de falla no encontrado en la orden de taller"
             )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
+        estado_anterior = detalle_target.estado
         falla_nom = describir_detalle_averia(detalle_target)
 
         sup_nom = supervisor_nombre
@@ -671,7 +771,7 @@ class AveriasService:
                         detalle_id=detalle_id,
                         mecanico_id=mec_id_item,
                         asignado_por_id=supervisor_id,
-                        origen="SUPERVISION",
+                        origen="SUPERVISOR",
                         is_activo=True,
                         fecha_asignacion=now,
                         resuelto_en_esta_asignacion=True,
@@ -757,6 +857,32 @@ class AveriasService:
         )
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
+        await guardar_adjuntos_bitacora(
+            db,
+            comentario=comentario_entry,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            usuario_id=supervisor_id,
+            fotos=fotos,
+        )
+        tipo_evento = {
+            EstadoFalla.RESUELTA: TipoEventoFalla.RESUELTA.value,
+            EstadoFalla.INCOMPLETA: TipoEventoFalla.INCOMPLETA.value,
+            EstadoFalla.PENDIENTE: TipoEventoFalla.REABIERTA.value,
+        }[target_estado]
+        registrar_evento_falla(
+            db,
+            self.repo,
+            detalle_id=detalle_target.id,
+            tipo_evento=tipo_evento,
+            actor_id=supervisor_id,
+            actor_nombre=sup_nom,
+            estado_anterior=estado_anterior,
+            estado_nuevo=detalle_target.estado,
+            fecha_evento=now,
+            comentario=dto.comentario or detalle_target.motivo_incompleto,
+            mecanicos_resolutores=mecanicos_resolvieron_dtos if is_resuelta else [],
+        )
 
         await db.commit()
         return DetalleUpdateDTO(

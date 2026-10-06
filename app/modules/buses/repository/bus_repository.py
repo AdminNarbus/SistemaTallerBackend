@@ -19,7 +19,7 @@ class BusRepository:
 
     async def get_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[Bus]:
         """Obtiene un bus por su número de máquina único."""
-        stmt = select(Bus).where(Bus.n_bus == n_bus)
+        stmt = select(Bus).where(func.lower(func.trim(Bus.n_bus)) == n_bus.strip().lower())
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -111,7 +111,7 @@ class BusRepository:
     async def get_by_patente(self, db: AsyncSession, patente: str) -> Optional[Bus]:
         """Obtiene un bus buscando por patente normalizada en mayúsculas."""
         clean = patente.strip().upper()
-        stmt = select(Bus).where(func.upper(Bus.patente) == clean)
+        stmt = select(Bus).where(func.upper(func.trim(Bus.patente)) == clean)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 

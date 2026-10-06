@@ -1,12 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import BusinessRuleException, ConflictException, NotFoundException
 from app.modules.buses.dtos.bus_lifecycle_dto import BusCreateDTO, BusDarDeBajaDTO, BusResponseDTO
 from app.modules.buses.models.bus import Bus
 from app.modules.buses.repository.bus_repository import BusRepository, bus_repository
+from app.core.realtime.events import RealtimeEvent, publish_event_soon
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +30,15 @@ class BusFleetService:
         Asigna fecha_creacion con timestamp exacto para trazabilidad.
         """
         bus_existente = await self.repo.get_by_patente(db, dto.patente)
-        if bus_existente and bus_existente.is_active:
-            raise ConflictException(f"Ya existe un bus activo registrado con la patente '{dto.patente}'")
+        if bus_existente:
+            raise ConflictException(f"Ya existe un bus registrado con la patente '{dto.patente}'; reactive su ficha si está dado de baja")
 
         if dto.n_bus:
             bus_num = await self.repo.get_by_n_bus(db, dto.n_bus)
-            if bus_num and bus_num.is_active:
-                raise ConflictException(f"Ya existe un bus activo registrado con el número de máquina '{dto.n_bus}'")
+            if bus_num:
+                raise ConflictException(f"Ya existe un bus registrado con el número de máquina '{dto.n_bus}'")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         bus = Bus(
             patente=dto.patente,
             n_bus=dto.n_bus,
@@ -60,7 +62,14 @@ class BusFleetService:
             fecha_creacion=now,
         )
         self.repo.add_bus(db, bus)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ConflictException("El bus ya existe o sus datos incumplen las restricciones de la flota") from exc
+        publish_event_soon(RealtimeEvent(
+            resource_type="bus", resource_id=bus.id, action="created", actor_id=usuario_id
+        ))
 
         logger.info(
             "[BUSES-FLEET] Bus creado exitosamente | id=%s, patente='%s', n_bus='%s', supervisor_id=%s",
@@ -98,13 +107,16 @@ class BusFleetService:
                     "Finalice o cierre las OTs primero, o envíe 'forzar=true'."
                 )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         bus.is_active = False
         bus.en_taller = False
         bus.fecha_baja = now
         bus.motivo_baja = dto.motivo
         bus.usuario_baja_id = usuario_id
         await db.commit()
+        publish_event_soon(RealtimeEvent(
+            resource_type="bus", resource_id=bus.id, action="deactivated", actor_id=usuario_id
+        ))
 
         logger.info(
             "[BUSES-FLEET] Bus dado de baja | bus_id=%s, n_bus='%s', motivo='%s', supervisor_id=%s",
@@ -136,6 +148,9 @@ class BusFleetService:
         bus.motivo_baja = None
         bus.usuario_baja_id = None
         await db.commit()
+        publish_event_soon(RealtimeEvent(
+            resource_type="bus", resource_id=bus.id, action="reactivated", actor_id=usuario_id
+        ))
 
         logger.info(
             "[BUSES-FLEET] Bus reactivado exitosamente | bus_id=%s, n_bus='%s', supervisor_id=%s",

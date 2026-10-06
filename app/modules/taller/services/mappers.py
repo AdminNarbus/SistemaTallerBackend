@@ -6,6 +6,7 @@ from app.modules.taller.dtos import (
     AsignacionFallaDTO,
     CategoriaFallaDTO,
     EstadiaTallerDTO,
+    FallaEventoDTO,
     FallaTallerDTO,
     MecanicoAsignadoDTO,
     MecanicoResumenDTO,
@@ -49,6 +50,7 @@ def parse_evidencias_dtos(
                 solicitud_id=ev.get("solicitud_id") or 0,
                 detalle_id=ev.get("detalle_id"),
                 usuario_id=ev.get("usuario_id"),
+                comentario_id=ev.get("comentario_id"),
                 url=signed_url,
                 original_filename=ev.get("original_filename"),
                 size_bytes=ev.get("size_bytes"),
@@ -79,6 +81,10 @@ def dict_to_solicitud_dto(
     if isinstance(pauta_respuestas_raw, str):
         pauta_respuestas_raw = json.loads(pauta_respuestas_raw)
     evidencias_dtos = parse_evidencias_dtos(r.get("evidencias_json"), storage=storage)
+    adjuntos_por_comentario = {}
+    for evidencia in evidencias_dtos:
+        if evidencia.comentario_id:
+            adjuntos_por_comentario.setdefault(evidencia.comentario_id, []).append(evidencia)
 
     tot = (
         r["total_fallas"]
@@ -172,7 +178,10 @@ def dict_to_solicitud_dto(
         detalles=detalles_raw,
         mecanicos=mecanicos_raw,
         historial_mecanicos=historial_mecanicos_raw,
-        comentarios=comentarios_raw,
+        comentarios=[
+            {**comentario, "adjuntos": [adjunto.model_dump() for adjunto in adjuntos_por_comentario.get(comentario.get("id"), [])]}
+            for comentario in comentarios_raw
+        ],
         pauta_respuestas=pauta_respuestas_raw,
         evidencias=evidencias_dtos,
         estadias=estadias_dtos,
@@ -213,13 +222,21 @@ def dict_to_solicitud_resumen_dto(
             detalles_raw = []
 
     if mecanico_id is not None:
-        # En "mis-trabajos": contar fallas que el mecánico tiene asignadas activamente
+        # Cada detalle se cuenta una vez aunque el mecánico esté presente en ambas
+        # representaciones de asignación (el campo directo legacy y la colección).
         conteo_fallas = 0
         for d in detalles_raw:
+            if d.get("resuelto") or d.get("estado") == "RESUELTA":
+                continue
             asigs = d.get("mecanicos_asignados") or []
-            if isinstance(asigs, list) and any(
-                isinstance(a, dict) and a.get("id") == mecanico_id for a in asigs
-            ):
+            asignado_directamente = d.get("mecanico_id") == mecanico_id
+            asignado_en_lista = isinstance(asigs, list) and any(
+                isinstance(a, dict)
+                and a.get("is_activo", True)
+                and (a.get("id") == mecanico_id or a.get("mecanico_id") == mecanico_id)
+                for a in asigs
+            )
+            if asignado_directamente or asignado_en_lista:
                 conteo_fallas += 1
     else:
         # En "pendientes": contar todas las fallas que quedan disponibles (no resueltas)
@@ -236,6 +253,7 @@ def dict_to_solicitud_resumen_dto(
         chofer=r.get("usuario_creador_nombre"),
         tiempo_taller=horas_en_taller_val,
         numero_fallas=conteo_fallas,
+        fallas_asignadas_al_mecanico=conteo_fallas if mecanico_id is not None else 0,
     )
 
 
@@ -294,8 +312,16 @@ def orm_to_solicitud_resumen_dto(
     if mecanico_id is not None:
         conteo_fallas = 0
         for det in detalles_orm:
+            if getattr(det, "resuelto", False) or getattr(det, "estado", None) == "RESUELTA":
+                continue
             asigs = _get_rel(det, "asignaciones") or []
-            if any(getattr(a, "mecanico_id", None) == mecanico_id and getattr(a, "is_activo", False) for a in asigs):
+            asignado_directamente = getattr(det, "mecanico_id", None) == mecanico_id
+            asignado_en_lista = any(
+                getattr(a, "mecanico_id", None) == mecanico_id
+                and getattr(a, "is_activo", False)
+                for a in asigs
+            )
+            if asignado_directamente or asignado_en_lista:
                 conteo_fallas += 1
     else:
         conteo_fallas = sum(1 for det in detalles_orm if not getattr(det, "resuelto", False))
@@ -309,6 +335,7 @@ def orm_to_solicitud_resumen_dto(
         chofer=creador_nombre,
         tiempo_taller=horas_en_taller_val,
         numero_fallas=conteo_fallas,
+        fallas_asignadas_al_mecanico=conteo_fallas if mecanico_id is not None else 0,
     )
 
 
@@ -330,28 +357,29 @@ def orm_to_solicitud_dto(
     for det in detalles_list:
         falla_dto = None
         cat_id = None
-        cat_nombre = None
+        cat_nombre = getattr(det, "categoria_nombre_snapshot", None)
         falla_obj = _get_rel(det, "falla")
         if falla_obj:
             cat_dto = None
             cat_obj = _get_rel(falla_obj, "categoria")
             if cat_obj:
                 cat_id = cat_obj.id
-                cat_nombre = cat_obj.nombre
+                cat_nombre = cat_nombre or cat_obj.nombre
                 cat_dto = CategoriaFallaDTO(
                     id=cat_obj.id,
-                    nombre=cat_obj.nombre,
+                    nombre=cat_nombre,
                     is_active=cat_obj.is_active,
                 )
             falla_dto = FallaTallerDTO(
                 id=falla_obj.id,
                 categoria_id=falla_obj.categoria_id,
-                nombre=falla_obj.nombre,
+                nombre=getattr(det, "falla_nombre_snapshot", None) or falla_obj.nombre,
                 is_active=falla_obj.is_active,
                 categoria=cat_dto,
             )
 
         mec_resolvio = _get_rel(det, "mecanico_resolvio")
+        reportado_por = _get_rel(det, "reportado_por")
         mec_resolvio_nombre = (
             mec_resolvio.nombre_completo if mec_resolvio else None
         )
@@ -433,6 +461,30 @@ def orm_to_solicitud_dto(
             mec_resolvio_nombre = None
             mecanicos_resolvieron = []
 
+        historial_eventos = []
+        for evento in _get_rel(det, "eventos") or []:
+            resolutores = []
+            for evento_mecanico in _get_rel(evento, "mecanicos_resolutores") or []:
+                resolutores.append(
+                    MecanicoResumenDTO(
+                        id=getattr(evento_mecanico, "mecanico_id", None) or 0,
+                        nombre=getattr(evento_mecanico, "mecanico_nombre_snapshot", "No registrado"),
+                    )
+                )
+            historial_eventos.append(
+                FallaEventoDTO(
+                    id=evento.id,
+                    tipo_evento=evento.tipo_evento,
+                    usuario_actor_id=evento.usuario_actor_id,
+                    actor_nombre=evento.actor_nombre_snapshot,
+                    estado_anterior=evento.estado_anterior,
+                    estado_nuevo=evento.estado_nuevo,
+                    comentario=evento.comentario,
+                    fecha_evento=evento.fecha_evento,
+                    mecanicos_resolvieron=resolutores,
+                )
+            )
+
         detalles_dtos.append(
             SolicitudDetalleDTO(
                 id=det.id,
@@ -445,6 +497,9 @@ def orm_to_solicitud_dto(
                 estado=getattr(det, "estado", None) or ("RESUELTA" if det.resuelto else "PENDIENTE"),
                 motivo_incompleto=getattr(det, "motivo_incompleto", None),
                 resuelto=det.resuelto,
+                reportado_por_id=getattr(det, "reportado_por_id", None),
+                reportado_por_nombre=(reportado_por.nombre_completo if reportado_por else None),
+                fecha_reporte=getattr(det, "fecha_reporte", None) or det.fecha_creacion,
                 mecanico_resolvio_id=det.mecanico_resolvio_id,
                 mecanico_resolvio_nombre=mec_resolvio_nombre,
                 mecanicos_resolvieron=mecanicos_resolvieron,
@@ -454,6 +509,7 @@ def orm_to_solicitud_dto(
                 fecha_resolucion=det.fecha_resolucion,
                 mecanicos_asignados=mecanicos_asignados,
                 historial_asignaciones=historial_asignaciones,
+                historial_eventos=historial_eventos,
             )
         )
 
@@ -543,6 +599,21 @@ def orm_to_solicitud_dto(
                 tipo=com.tipo,
                 comentario=com.comentario,
                 fecha_registro=com.fecha_registro,
+                adjuntos=[
+                    {
+                        "id": ev.id,
+                        "solicitud_id": ev.solicitud_id,
+                        "detalle_id": ev.detalle_id,
+                        "usuario_id": ev.usuario_id,
+                        "comentario_id": ev.comentario_id,
+                        "url": storage.get_url(ev.url) or ev.url,
+                        "original_filename": ev.original_filename,
+                        "size_bytes": ev.size_bytes,
+                        "content_type": ev.content_type,
+                        "fecha_creacion": ev.fecha_creacion,
+                    }
+                    for ev in (_get_rel(com, "adjuntos") or [])
+                ],
             )
         )
 
@@ -596,6 +667,7 @@ def orm_to_solicitud_dto(
                 solicitud_id=ev.solicitud_id,
                 detalle_id=ev.detalle_id,
                 usuario_id=ev.usuario_id,
+                comentario_id=ev.comentario_id,
                 url=storage.get_url(ev.url) or ev.url,
                 original_filename=ev.original_filename,
                 size_bytes=ev.size_bytes,

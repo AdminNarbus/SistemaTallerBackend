@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, require_supervisor_or_admin
@@ -18,6 +18,7 @@ from app.modules.taller.dtos import (
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
 )
+from app.modules.taller.api.request_parsers import parse_json_or_multipart
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -332,17 +333,18 @@ async def agregar_falla_supervision(
     description="Alias compatible con /check para marcar o desmarcar resolución indicando el mecánico que arregló la avería.",
 )
 async def resolver_falla_supervision(
+    request: Request,
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
     detalle_id: int = Path(..., description="ID numérico del detalle de falla", ge=1),
-    dto: Optional[ResolverFallaSupervisoraDTO] = Body(None),
     resuelto: Optional[bool] = Query(None, description="Parámetro query opcional para resuelto"),
     mecanico_id: Optional[int] = Query(None, description="Parámetro query opcional para mecánico resolutor"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ) -> DetalleUpdateDTO:
-    """Registra qué mecánico arregló una falla puntual desde la vista de detalle de la OT."""
-    final_dto = dto or ResolverFallaSupervisoraDTO()
-    if resuelto is not None and dto is None:
+    """Registra un cambio de falla por JSON o multipart con fotos opcionales."""
+    dto, fotos = await parse_json_or_multipart(request, ResolverFallaSupervisoraDTO)
+    final_dto = dto
+    if resuelto is not None and dto.resuelto is None:
         final_dto.resuelto = resuelto
     if mecanico_id is not None and not final_dto.effective_mecanico_id:
         final_dto.mecanico_id = mecanico_id
@@ -362,6 +364,7 @@ async def resolver_falla_supervision(
         dto=final_dto,
         supervisor_id=current_user.id,
         supervisor_nombre=current_user.nombre_completo,
+        fotos=fotos,
     )
 
 

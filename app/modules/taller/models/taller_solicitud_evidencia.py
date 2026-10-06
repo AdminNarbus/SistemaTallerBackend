@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -19,17 +19,31 @@ class TallerSolicitudEvidencia(Base):
     """
 
     __tablename__ = "taller_solicitud_evidencias"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        ForeignKeyConstraint(["detalle_id", "solicitud_id"],
+                             ["taller_solicitud_detalles.id", "taller_solicitud_detalles.solicitud_id"],
+                             name="fk_evidencias_detalle_ot", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["comentario_id", "solicitud_id"],
+                             ["taller_solicitud_comentarios.id", "taller_solicitud_comentarios.solicitud_id"],
+                             name="fk_evidencias_comentario_ot", ondelete="RESTRICT"),
+        CheckConstraint("size_bytes IS NULL OR size_bytes >= 0", name="ck_evidencias_tamano"),
+        {"extend_existing": True},
+    )
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     solicitud_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("taller_solicitudes.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("taller_solicitudes.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     detalle_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("taller_solicitud_detalles.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, nullable=True, index=True
     )
     usuario_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    comentario_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
     )
 
     url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -42,6 +56,9 @@ class TallerSolicitudEvidencia(Base):
     )
 
     # Relaciones
-    solicitud: Mapped["TallerSolicitud"] = relationship("TallerSolicitud", back_populates="evidencias")
-    detalle: Mapped[Optional["TallerSolicitudDetalle"]] = relationship("TallerSolicitudDetalle", lazy="selectin")
+    solicitud: Mapped["TallerSolicitud"] = relationship("TallerSolicitud", back_populates="evidencias", foreign_keys=[solicitud_id])
+    detalle: Mapped[Optional["TallerSolicitudDetalle"]] = relationship("TallerSolicitudDetalle", lazy="selectin", foreign_keys=[detalle_id])
+    comentario: Mapped[Optional["TallerSolicitudComentario"]] = relationship(
+        "TallerSolicitudComentario", back_populates="adjuntos", foreign_keys=[comentario_id]
+    )
     usuario: Mapped[Optional["Usuario"]] = relationship("Usuario", lazy="selectin")

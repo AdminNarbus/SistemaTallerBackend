@@ -26,6 +26,7 @@ from app.modules.taller.dtos import (
     SolicitudResumenDTO,
 )
 from app.modules.taller.services.solicitud_service import solicitud_service
+from app.modules.taller.dtos.estado_evento_dto import EstadoEventoDTO
 
 logger = logging.getLogger(__name__)
 
@@ -136,13 +137,12 @@ async def list_pendientes(
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
     f_desde = fecha_modificacion_desde or fecha_desde
     f_hasta = fecha_modificacion_hasta or fecha_hasta
-    total = await solicitud_service.count_pendientes(
-        db, fecha_desde=f_desde, fecha_hasta=f_hasta, estado=estado
+    solicitudes, total = await solicitud_service.list_pendientes_con_total(
+        db, limit=limit, skip=skip, fecha_desde=f_desde,
+        fecha_hasta=f_hasta, estado=estado,
     )
     response.headers["X-Total-Count"] = str(total)
-    return await solicitud_service.list_pendientes(
-        db, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta, estado=estado
-    )
+    return solicitudes
 
 
 @router.get("/mis-trabajos", response_model=List[SolicitudResumenDTO])
@@ -161,13 +161,27 @@ async def list_mis_trabajos(
     response.headers["Cache-Control"] = "private, max-age=15, stale-while-revalidate=30"
     f_desde = fecha_modificacion_desde or fecha_desde
     f_hasta = fecha_modificacion_hasta or fecha_hasta
-    total = await solicitud_service.count_mis_trabajos(
-        db, mecanico_id=current_user.id, fecha_desde=f_desde, fecha_hasta=f_hasta
+    solicitudes, total = await solicitud_service.list_mis_trabajos_con_total(
+        db, mecanico_id=current_user.id, limit=limit, skip=skip,
+        fecha_desde=f_desde, fecha_hasta=f_hasta,
     )
     response.headers["X-Total-Count"] = str(total)
-    return await solicitud_service.list_mis_trabajos(
-        db, mecanico_id=current_user.id, limit=limit, skip=skip, fecha_desde=f_desde, fecha_hasta=f_hasta
-    )
+    return solicitudes
+
+
+@router.get("/{id}/historial-estados", response_model=List[EstadoEventoDTO])
+async def get_historial_estados(
+    id: int,
+    response: Response,
+    skip: int = Query(DEFAULT_PAGE_SKIP, ge=0),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+    db: AsyncSession = SessionDep,
+):
+    """Consulta paginada de transiciones y antecedentes históricos de la OT."""
+    eventos, total = await solicitud_service.get_historial_estados(db, id, skip, limit)
+    response.headers["X-Total-Count"] = str(total)
+    return eventos
 
 
 @router.get("/{id}", response_model=SolicitudDTO)

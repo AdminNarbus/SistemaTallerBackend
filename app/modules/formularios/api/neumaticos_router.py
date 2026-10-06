@@ -1,4 +1,6 @@
 import logging
+from pydantic import ValidationError
+from fastapi.exceptions import RequestValidationError
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,7 +57,7 @@ async def obtener_formulario_neumatico():
 async def enviar_formulario_neumatico(
     usuario_id: Optional[int] = Form(None),
     maquina: Optional[str] = Form(None),
-    ruedas: Optional[str] = Form(None),
+    ruedas: str = Form(...),
     motivo: Optional[str] = Form(None),
     marca_fuego: Optional[str] = Form(None),
     evidencia: Optional[UploadFile] = File(None),
@@ -79,13 +81,16 @@ async def enviar_formulario_neumatico(
         bool(evidencia and evidencia.filename),
     )
 
-    dto = ReporteNeumaticoCreateDTO(
-        usuario_id=effective_user_id,
-        maquina=maquina,
-        ruedas=ruedas,
-        motivo=motivo,
-        marca_fuego=marca_fuego,
-    )
+    try:
+        dto = ReporteNeumaticoCreateDTO(
+            usuario_id=effective_user_id,
+            maquina=maquina,
+            ruedas=ruedas,
+            motivo=motivo,
+            marca_fuego=marca_fuego,
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
 
     return await formulario_neumatico_service.procesar_formulario(
         db=db,

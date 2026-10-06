@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 119,
+  "id": "AV-0119",
+  "timestamp": "2026-10-06T19:37:40.590109+00:00",
+  "type": "verification",
+  "summary": "Copia de Neon taller y validación de migraciones bloqueada por estadías abiertas duplicadas tras consolidación 021.",
+  "scope": {
+    "completed": [
+      "Respaldo SELECT consistente de 16 tablas y 666 filas de Neon en revisión 018",
+      "Reproducción local y prueba Alembic hasta 024",
+      "Identificación de estadías 16 y 19 abiertas bajo OT16 tras 021"
+    ],
+    "pending": [
+      "Confirmar salidas reales y preparar saneamiento Alembic",
+      "Repetir actualización y pruebas hasta head"
+    ],
+    "outOfScope": [
+      "Modificar Neon"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "DEC-119",
+      "title": "Validar producción exclusivamente sobre copia local",
+      "rationale": "Usuario identificó Neon taller como origen correcto; el origen se consultó en transacción de solo lectura.",
+      "consequences": "Producción intacta; copia local conservada para diagnóstico."
+    },
+    {
+      "id": "DEC-119-2",
+      "title": "No inventar fecha de salida",
+      "rationale": "022 detectó duplicidad después de consolidación; requiere información operativa confirmada.",
+      "consequences": "Actualización pendiente de confirmación del usuario."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head sobre copia Neon",
+      "result": "failed",
+      "evidence": "022: [('estadia_abierta_duplicada', 1)]; estadías 16 y 19 en OT16"
+    }
+  ],
+  "backup": "backups/neon_taller_20261006T193626Z.json",
+  "copyDatabase": "narbus_bd_test_neon_671e8864b4",
+  "notes": [
+    "La validación inicial de narbus_taller_db local no corresponde a Neon.",
+    "Neon permanece en 018; copia local conservada en 021a tras diagnóstico."
+  ]
+}

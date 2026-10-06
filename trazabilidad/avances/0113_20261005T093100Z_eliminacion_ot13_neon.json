@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 113,
+  "id": "AV-0113",
+  "timestamp": "2026-10-05T09:31:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-MANTENIMIENTO-BD",
+    "name": "Eliminación Quirúrgica de OT 13 en Neon y Protección de Flota",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Eliminación atómica y controlada de la Orden de Trabajo 13 (taller_solicitudes) y todos sus registros asociados en la base de datos Neon PostgreSQL remota, garantizando la preservación del estado del Bus 407 (en_taller = true) debido a la existencia de la OT 27 activa.",
+  "scope": {
+    "planned": [
+      "Inspección previa de solo lectura de la OT 13 y dependencias relacionales en Neon.",
+      "Confirmación explícita con el usuario bajo política de prevención de pérdida de datos.",
+      "Ejecución transaccional de script para purgar registros hijos y la OT principal.",
+      "Verificación de estado de flota (Bus 407 con OT 27 activa).",
+      "Comprobación final de eliminación (0 registros restantes de OT 13)."
+    ],
+    "completed": [
+      "Inspección realizada identificando Bus 407, estado PENDIENTE, 5 fallas, 5 comentarios, 2 mecánicos y 1 estadía.",
+      "Confirmación explícita otorgada por el usuario para proceder.",
+      "Script scripts/eliminar_ot_especifica_neon.py ejecutado exitosamente con commit atómico.",
+      "Eliminadas 2 asignaciones, 5 comentarios, 2 mecánicos en cuadrilla, 5 fallas/detalles, 1 estadía y 1 solicitud maestra.",
+      "Preservación de en_taller = true en Bus 407 por existencia de OT 27 en estado PENDIENTE.",
+      "Verificación final confirmando 0 registros de OT 13 en la base de datos remota."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Alteración del estado del Bus 407.",
+      "Modificaciones de DDL o migraciones de Alembic."
+    ]
+  },
+  "changes": [
+    {
+      "path": "scripts/eliminar_ot_especifica_neon.py",
+      "action": "created",
+      "summary": "Script automatizado y seguro para eliminación atómica de una OT específica en Neon con validación de estado de flota."
+    },
+    {
+      "path": "trazabilidad/avances/0113_20261005T093100Z_eliminacion_ot13_neon.json",
+      "action": "created",
+      "summary": "Registro de trazabilidad del avance de backend."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-113",
+      "title": "Evaluación contextual del estado de flota antes de alterar en_taller",
+      "rationale": "Al eliminar una OT específica, no se debe asumir automáticamente que el bus debe salir de taller (en_taller = false). El script evalúa si el bus cuenta con otras solicitudes activas (PENDIENTE, EN_REPARACION, LIBERADO). Al detectar que el Bus 407 tiene la OT 27 activa, se conservó de forma íntegra su estado en_taller = true.",
+      "consequences": "Se evita la corrupción del estado operativo de la flota en producción, manteniendo la coherencia entre las órdenes vivas y la disponibilidad del vehículo."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python scripts/eliminar_ot_especifica_neon.py 13",
+      "result": "passed",
+      "evidence": "Registros eliminados: 2 asignaciones, 5 comentarios, 2 mecánicos, 5 detalles, 1 estadía, 1 solicitud OT 13. OTs restantes con ID 13: 0. Bus 407 mantiene en_taller = true debido a OT 27."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar con las tareas de desarrollo y mantenimiento del sistema.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "",
+    "dirty": true
+  },
+  "notes": [
+    "Operación solicitada explícitamente y confirmada por el usuario para la base de datos Neon."
+  ]
+}

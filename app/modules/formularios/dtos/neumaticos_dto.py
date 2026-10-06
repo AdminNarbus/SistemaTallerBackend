@@ -1,6 +1,7 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ReporteNeumaticoBaseDTO(BaseModel):
@@ -15,6 +16,36 @@ class ReporteNeumaticoBaseDTO(BaseModel):
 
 class ReporteNeumaticoCreateDTO(ReporteNeumaticoBaseDTO):
     maquina: Optional[str] = None
+    ruedas: list[dict[str, Any] | str | int] = Field(..., min_length=1, max_length=1)
+    marca_fuego: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("ruedas", mode="before")
+    @classmethod
+    def validar_neumatico_unico(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                # El formulario también envía posiciones simples, por ejemplo "Rueda 4".
+                if value.lstrip().startswith(("[", "{")):
+                    raise ValueError("ruedas debe contener JSON válido")
+        if isinstance(value, (dict, str, int)) and not isinstance(value, bool):
+            value = [value]
+        if not isinstance(value, list) or len(value) != 1:
+            raise ValueError("Cada reporte debe indicar exactamente un neumático")
+        rueda = value[0]
+        if isinstance(rueda, bool) or not isinstance(rueda, (dict, str, int)) or not rueda:
+            raise ValueError("El neumático debe tener una identificación válida")
+        if isinstance(rueda, str) and not rueda.strip():
+            raise ValueError("El neumático no puede estar vacío")
+        if isinstance(rueda, int) and rueda <= 0:
+            raise ValueError("La posición del neumático debe ser positiva")
+        return value
+
+    @field_validator("marca_fuego", mode="before")
+    @classmethod
+    def normalizar_marca_fuego(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() or None if value is not None else None
 
 
 class ReporteNeumaticoResponseDTO(BaseModel):

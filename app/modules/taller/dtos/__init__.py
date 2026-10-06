@@ -16,6 +16,7 @@ from app.modules.taller.dtos.averias_dto import (
     DetalleUpdateDTO,
     MecanicoAsignadoDTO,
     MecanicoResumenDTO,
+    FallaEventoDTO,
     ReportarRepuestoDTO,
     ResolverFallaSupervisoraDTO,
     SolicitudDetalleCreateDTO,
@@ -32,6 +33,7 @@ from app.modules.taller.dtos.cuadrilla_dto import (
 )
 from app.modules.taller.dtos.bitacora_dto import (
     CambiarEstadoSolicitudDTO,
+    ComentarioAdjuntoDTO,
     ComentarioAddedDTO,
     ComentarioCreateDTO,
     FinalizarSolicitudDTO,
@@ -63,6 +65,7 @@ __all__ = [
     "DetalleUpdateDTO",
     "MecanicoAsignadoDTO",
     "MecanicoResumenDTO",
+    "FallaEventoDTO",
     "ReportarRepuestoDTO",
     "ResolverFallaSupervisoraDTO",
     "SolicitudDetalleCreateDTO",
@@ -77,6 +80,7 @@ __all__ = [
     "TomarTrabajoDTO",
     # Bitácora y Cierre
     "CambiarEstadoSolicitudDTO",
+    "ComentarioAdjuntoDTO",
     "ComentarioAddedDTO",
     "ComentarioCreateDTO",
     "FinalizarSolicitudDTO",

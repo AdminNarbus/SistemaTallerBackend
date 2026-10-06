@@ -47,7 +47,12 @@ def do_run_migrations(connection: Connection) -> None:
             connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": 872342})
             migration_lock_acquired = True
 
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
     except Exception:

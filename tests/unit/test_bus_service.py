@@ -109,7 +109,9 @@ async def test_actualizar_en_taller_unitario_con_mock():
     bus_mock = Bus(id=5, n_bus="339", patente="CC3399", is_active=True, en_taller=True)
     mock_repo = AsyncMock(spec=BusRepository)
     mock_repo.update_en_taller_directo.return_value = bus_mock
-    service = BusWorkshopService(repository=mock_repo)
+    mock_taller_repo = AsyncMock()
+    mock_taller_repo.get_solicitud_activa_por_bus.return_value = None
+    service = BusWorkshopService(repository=mock_repo, taller_repo=mock_taller_repo)
     mock_db = AsyncMock()
 
     # Act

@@ -58,6 +58,11 @@ $RECYCLE.BIN/
 
 # Logs & Temporary Files
 *.log
+backups/
+scripts/eliminar_ot_especifica_neon.py
+scripts/eliminar_falla_filtros_aire_neon.py
+scripts/vincular_ricardo_ot21_neon.py
+tests/_tmp_integrity*/
 logs/
 *.tmp
 *.temp

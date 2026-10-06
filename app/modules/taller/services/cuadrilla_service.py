@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,8 @@ from app.modules.taller.services.estadias_helper import (
     attach_mecanico_safe,
 )
 
+from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,11 +60,13 @@ class CuadrillaService:
             mecanico_id,
             dto.colaboradores_ids,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # 1. Desactivar mecánicos previos
         await self.repo.desactivar_mecanicos_activos(
@@ -153,6 +157,14 @@ class CuadrillaService:
         attach_comentario_safe(solicitud, comentario_entry, mec_nom)
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=mecanico_id, actor_nombre=mec_nom,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -171,6 +183,7 @@ class CuadrillaService:
         )
         from app.modules.auth.repository.user_repository import user_repository
 
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
@@ -222,14 +235,14 @@ class CuadrillaService:
             mecanico_id=colab_id,
             es_lider_responsable=False,
             is_activo=True,
-            fecha_asignacion=datetime.now(),
+            fecha_asignacion=datetime.now(timezone.utc),
         )
         u_colab = await user_repository.get_by_id(db, colab_id)
         if u_colab:
             colab_entry.mecanico = u_colab
         self.repo.add_mecanico(db, colab_entry)
         attach_mecanico_safe(solicitud, colab_entry)
-        solicitud.fecha_actualizacion = datetime.now()
+        solicitud.fecha_actualizacion = datetime.now(timezone.utc)
 
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
@@ -248,11 +261,13 @@ class CuadrillaService:
             solicitud_id,
             mecanico_id,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         mecs_desactivados = await self.repo.desactivar_mecanicos_por_ids(
             db,
             solicitud_id=solicitud.id,
@@ -325,6 +340,14 @@ class CuadrillaService:
             )
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=mecanico_id, actor_nombre=mec_nom,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -342,11 +365,13 @@ class CuadrillaService:
             solicitud_id,
             usuario_id,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
             db, solicitud_id=solicitud.id, fecha_desasignacion=now
         )
@@ -396,6 +421,14 @@ class CuadrillaService:
         attach_comentario_safe(solicitud, comentario_entry, usr_nom)
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=usuario_id, actor_nombre=usr_nom,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -414,9 +447,11 @@ class CuadrillaService:
             mecanico_id,
             dto.detalles_ids,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
         if not dto.detalles_ids:
             raise BusinessRuleException(
@@ -430,7 +465,7 @@ class CuadrillaService:
                     f"La falla con ID {d_id} no pertenece a esta solicitud"
                 )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         asignadas_count = 0
 
         mecanicos_objetivo = [mecanico_id]
@@ -493,7 +528,7 @@ class CuadrillaService:
 
         for m_id in mecanicos_objetivo:
             u_target = users_map.get(m_id)
-            for d_id in dto.detalles_ids:
+            for d_id in dict.fromkeys(dto.detalles_ids):
                 if (m_id, d_id) in activas_existentes:
                     continue
 
@@ -583,6 +618,14 @@ class CuadrillaService:
         attach_comentario_safe(solicitud, comentario_entry, mec_nom)
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=mecanico_id, actor_nombre=mec_nom,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -601,21 +644,23 @@ class CuadrillaService:
             dto.mecanico_id,
             dto.detalles_ids,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_operacional(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
         if not dto.detalles_ids:
             raise BusinessRuleException("Debe indicar al menos una falla para asignar")
 
         sol_detalles_map = {d.id: d for d in solicitud.detalles}
-        for d_id in dto.detalles_ids:
+        for d_id in dict.fromkeys(dto.detalles_ids):
             if d_id not in sol_detalles_map:
                 raise NotFoundException(
                     f"La falla con ID {d_id} no pertenece a esta solicitud"
                 )
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         asignadas_count = 0
 
         from app.modules.auth.repository.user_repository import user_repository
@@ -720,6 +765,14 @@ class CuadrillaService:
         attach_comentario_safe(solicitud, comentario_entry, sup_nom)
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=supervisor_id, actor_nombre=sup_nom,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 
@@ -738,11 +791,13 @@ class CuadrillaService:
             mecanico_id,
             dto.detalles_ids,
         )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
         solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
+        estado_ot_anterior = solicitud.estado
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         todas_asigs_activas = await self.repo.get_asignaciones_activas(
             db, solicitud_id=solicitud_id
@@ -929,6 +984,14 @@ class CuadrillaService:
         attach_comentario_safe(solicitud, comentario_entry, ejecutor_nombre)
         solicitud.fecha_actualizacion = now
 
+        await registrar_evento_estado(
+            db, RegistroEstadoOT(
+                solicitud_id=solicitud.id, estado_anterior=estado_ot_anterior,
+                estado_nuevo=solicitud.estado, actor_id=mecanico_id, actor_nombre=ejecutor_nombre,
+                fecha_evento=now, comentario=comentario_entry,
+                motivo=comentario_entry.comentario,
+            ),
+        )
         await db.commit()
         return orm_to_solicitud_dto(solicitud)
 

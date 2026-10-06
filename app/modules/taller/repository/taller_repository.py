@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlalchemy import select, update, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,9 @@ from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitu
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
+from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
+from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
+from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
 from app.modules.taller.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -198,6 +201,94 @@ class TallerRepository:
     async def get_bus_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
         return await db.get(Bus, bus_id)
 
+    async def lock_bus_cycle(
+        self, db: AsyncSession, bus_id: Optional[int], n_bus: Optional[str]
+    ) -> None:
+        """Serializa cambios de ciclo de vida para una misma identidad de bus."""
+        if not (db.bind and db.bind.dialect.name == "postgresql"):
+            return
+        if bus_id is not None:
+            advisory_key = f"bus:{bus_id}"
+        elif n_bus:
+            advisory_key = f"nbus:{n_bus.strip().lower()}"
+        else:
+            return
+        await db.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended(CAST(:advisory_key AS text), 0))"
+            ),
+            {"advisory_key": advisory_key},
+        )
+
+    async def get_solicitud_activa_por_bus(
+        self, db: AsyncSession, bus_id: Optional[int], n_bus: Optional[str]
+    ) -> Optional[TallerSolicitud]:
+        """Obtiene y bloquea la OT activa más antigua del bus.
+
+        En PostgreSQL se toma un ``pg_advisory_xact_lock`` antes de ejecutar
+        la búsqueda. El SELECT posterior obtiene un snapshot nuevo luego de
+        esperar el lock, evitando que dos reportes concluyan que no existe una
+        OT activa. La futura función batch absorberá ambas sentencias en el
+        servidor sin cambiar esta regla.
+        """
+        filtros = [TallerSolicitud.estado != "FINALIZADO"]
+        if bus_id is not None:
+            filtros.append(TallerSolicitud.bus_id == bus_id)
+        elif n_bus:
+            n_bus_normalizado = n_bus.strip().lower()
+            filtros.append(func.lower(func.trim(TallerSolicitud.n_bus)) == n_bus_normalizado)
+        else:
+            return None
+
+        stmt = (
+            select(TallerSolicitud)
+            .where(*filtros)
+            .order_by(TallerSolicitud.fecha_creacion.asc(), TallerSolicitud.id.asc())
+            .limit(1)
+            .with_for_update()
+        )
+        await self.lock_bus_cycle(db, bus_id, n_bus)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def existe_solicitud_posterior_mismo_bus(
+        self, db: AsyncSession, solicitud: TallerSolicitud
+    ) -> bool:
+        """Indica si una OT tiene una sucesora; una OT histórica no puede reabrirse."""
+        identidad = (
+            TallerSolicitud.bus_id == solicitud.bus_id
+            if solicitud.bus_id is not None
+            else func.lower(func.trim(TallerSolicitud.n_bus)) == solicitud.n_bus.strip().lower()
+        )
+        posterior = or_(
+            TallerSolicitud.fecha_creacion > solicitud.fecha_creacion,
+            and_(
+                TallerSolicitud.fecha_creacion == solicitud.fecha_creacion,
+                TallerSolicitud.id > solicitud.id,
+            ),
+        )
+        stmt = select(TallerSolicitud.id).where(identidad, posterior).limit(1)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
+    async def existe_otra_solicitud_activa_mismo_bus(
+        self, db: AsyncSession, solicitud: TallerSolicitud
+    ) -> bool:
+        """Verifica la invariante de una sola OT activa al reabrir una OT cerrada."""
+        identidad = (
+            TallerSolicitud.bus_id == solicitud.bus_id
+            if solicitud.bus_id is not None
+            else func.lower(func.trim(TallerSolicitud.n_bus)) == solicitud.n_bus.strip().lower()
+        )
+        stmt = select(TallerSolicitud.id).where(
+            identidad,
+            TallerSolicitud.id != solicitud.id,
+            TallerSolicitud.estado != "FINALIZADO",
+        ).limit(1)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
     async def get_usuario_by_id(self, db: AsyncSession, usuario_id: int) -> Optional[Usuario]:
         stmt = (
             select(Usuario)
@@ -223,6 +314,8 @@ class TallerRepository:
                 joinedload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.reportado_por),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.eventos).selectinload(TallerFallaEvento.mecanicos_resolutores),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
@@ -251,7 +344,7 @@ class TallerRepository:
                 WITH filtered_solicitud AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
-                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
                     WHERE s.id = :solicitud_id
@@ -283,6 +376,7 @@ class TallerRepository:
                                 'solicitud_id', e.solicitud_id,
                                 'detalle_id', e.detalle_id,
                                 'usuario_id', e.usuario_id,
+                                'comentario_id', e.comentario_id,
                                 'url', e.url,
                                 'original_filename', e.original_filename,
                                 'size_bytes', e.size_bytes,
@@ -302,18 +396,21 @@ class TallerRepository:
                                 'id', d.id,
                                 'solicitud_id', d.solicitud_id,
                                 'categoria_id', f.categoria_id,
-                                'categoria_nombre', cf.nombre,
+                                'categoria_nombre', COALESCE(d.categoria_nombre_snapshot, cf.nombre),
                                 'falla_id', d.falla_id,
                                 'falla', CASE WHEN f.id IS NOT NULL THEN json_build_object(
                                     'id', f.id,
                                     'categoria_id', f.categoria_id,
-                                    'nombre', f.nombre,
+                                    'nombre', COALESCE(d.falla_nombre_snapshot, f.nombre),
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
                                 'estado', d.estado,
                                 'motivo_incompleto', d.motivo_incompleto,
                                 'resuelto', d.resuelto,
+                                'reportado_por_id', d.reportado_por_id,
+                                'reportado_por_nombre', CASE WHEN upr.id IS NOT NULL THEN TRIM(CONCAT(upr.nombre, ' ', COALESCE(upr.apellido, ''))) ELSE NULL END,
+                                'fecha_reporte', d.fecha_reporte,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
                                     WHEN d.resuelto = true THEN COALESCE((
@@ -378,6 +475,33 @@ class TallerRepository:
                                     JOIN usuarios um ON um.id = a.mecanico_id
                                     LEFT JOIN usuarios uap ON uap.id = a.asignado_por_id
                                     WHERE a.detalle_id = d.id
+                                ), '[]'::json),
+                                'historial_eventos', COALESCE((
+                                    SELECT json_agg(
+                                        json_build_object(
+                                            'id', ev.id,
+                                            'tipo_evento', ev.tipo_evento,
+                                            'usuario_actor_id', ev.usuario_actor_id,
+                                            'actor_nombre', ev.actor_nombre_snapshot,
+                                            'estado_anterior', ev.estado_anterior,
+                                            'estado_nuevo', ev.estado_nuevo,
+                                            'comentario', ev.comentario,
+                                            'fecha_evento', ev.fecha_evento,
+                                            'mecanicos_resolvieron', COALESCE(resolutores.mecanicos_json, '[]'::json)
+                                        ) ORDER BY ev.fecha_evento ASC, ev.id ASC
+                                    )
+                                    FROM taller_falla_eventos ev
+                                    LEFT JOIN LATERAL (
+                                        SELECT json_agg(
+                                            json_build_object(
+                                                'id', em.mecanico_id,
+                                                'nombre', em.mecanico_nombre_snapshot
+                                            ) ORDER BY em.id ASC
+                                        ) AS mecanicos_json
+                                        FROM taller_falla_evento_mecanicos em
+                                        WHERE em.evento_id = ev.id
+                                    ) resolutores ON true
+                                    WHERE ev.detalle_id = d.id
                                 ), '[]'::json)
                             ) ORDER BY d.id ASC
                         ) as detalles_json
@@ -386,6 +510,7 @@ class TallerRepository:
                     LEFT JOIN fallas_taller f ON f.id = d.falla_id
                     LEFT JOIN categorias_falla cf ON cf.id = f.categoria_id
                     LEFT JOIN usuarios ur ON ur.id = d.mecanico_resolvio_id
+                    LEFT JOIN usuarios upr ON upr.id = d.reportado_por_id
                     GROUP BY d.solicitud_id
                 ),
                 mecanicos_agg AS (
@@ -485,6 +610,7 @@ class TallerRepository:
                     fs.motivo_incompleto_checklist,
                     fs.motivo_cierre_parcial,
                     fs.fecha_creacion,
+                    fs.fecha_actualizacion,
                     fs.fecha_cierre,
                     fs.fecha_liberacion,
                     fs.fecha_primer_ingreso_taller,
@@ -540,6 +666,32 @@ class TallerRepository:
         )
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def get_historial_estados(self, db: AsyncSession, solicitud_id: int, skip: int, limit: int):
+        from app.modules.taller.models.taller_solicitud_estado_evento import TallerSolicitudEstadoEvento
+        filtro = TallerSolicitudEstadoEvento.solicitud_id == solicitud_id
+        total = await db.scalar(select(func.count()).select_from(TallerSolicitudEstadoEvento).where(filtro))
+        eventos = (await db.scalars(
+            select(TallerSolicitudEstadoEvento).where(filtro)
+            .order_by(TallerSolicitudEstadoEvento.fecha_evento, TallerSolicitudEstadoEvento.id)
+            .offset(skip).limit(limit)
+        )).all()
+        return eventos, total
+
+    async def lock_solicitud_estado(self, db: AsyncSession, solicitud_id: int) -> None:
+        """Orden de bloqueo: ciclo de bus, luego fila de OT, antes de leer estado."""
+        with db.no_autoflush:
+            identidad = (await db.execute(
+                select(TallerSolicitud.bus_id, TallerSolicitud.n_bus)
+                .where(TallerSolicitud.id == solicitud_id)
+            )).first()
+            if identidad is None:
+                return
+            await self.lock_bus_cycle(db, identidad.bus_id, identidad.n_bus)
+            await db.execute(
+                select(TallerSolicitud.id).where(TallerSolicitud.id == solicitud_id)
+                .with_for_update()
+            )
 
     async def get_solicitud_con_detalles(
         self, db: AsyncSession, solicitud_id: int
@@ -616,7 +768,7 @@ class TallerRepository:
         self, db: AsyncSession, solicitud_id: int, now: Optional[datetime] = None
     ) -> None:
         """Actualiza la marca de tiempo de última modificación de la orden de trabajo."""
-        t_now = now or datetime.now()
+        t_now = now or datetime.now(timezone.utc)
         stmt = (
             update(TallerSolicitud)
             .where(TallerSolicitud.id == solicitud_id)
@@ -636,7 +788,7 @@ class TallerRepository:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad consolidada con CTEs y agregación JSON
             sql = text("""
-                WITH filtered_solicitudes AS (
+                WITH solicitudes_coincidentes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
@@ -646,7 +798,11 @@ class TallerRepository:
                            OR (CAST(:estado AS VARCHAR) IS NULL AND s.estado IN ('PENDIENTE', 'EN_REPARACION')))
                       AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                       AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
-                    ORDER BY s.fecha_actualizacion DESC, s.id DESC
+                ),
+                filtered_solicitudes AS (
+                    SELECT *, count(*) OVER ()::int AS total_count
+                    FROM solicitudes_coincidentes
+                    ORDER BY fecha_actualizacion DESC, id DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 asigs_por_detalle AS (
@@ -672,15 +828,15 @@ class TallerRepository:
                             json_build_object(
                                 'id', d.id,
                                 'solicitud_id', d.solicitud_id,
-                                'nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
-                                'falla_nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
+                                'nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
+                                'falla_nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
                                 'categoria_id', f.categoria_id,
-                                'categoria_nombre', cf.nombre,
+                                'categoria_nombre', COALESCE(d.categoria_nombre_snapshot, cf.nombre),
                                 'falla_id', d.falla_id,
                                 'falla', CASE WHEN f.id IS NOT NULL THEN json_build_object(
                                     'id', f.id,
                                     'categoria_id', f.categoria_id,
-                                    'nombre', f.nombre,
+                                    'nombre', COALESCE(d.falla_nombre_snapshot, f.nombre),
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
@@ -763,6 +919,7 @@ class TallerRepository:
                                 'solicitud_id', e.solicitud_id,
                                 'detalle_id', e.detalle_id,
                                 'usuario_id', e.usuario_id,
+                                'comentario_id', e.comentario_id,
                                 'url', e.url,
                                 'original_filename', e.original_filename,
                                 'size_bytes', e.size_bytes,
@@ -776,6 +933,7 @@ class TallerRepository:
                 )
                 SELECT 
                     fs.id,
+                    fs.total_count,
                     fs.n_bus,
                     fs.bus_id,
                     b.patente as bus_patente,
@@ -902,7 +1060,7 @@ class TallerRepository:
         if db.bind and db.bind.dialect.name == "postgresql":
             # 1 sola consulta SQL nativa de alta velocidad para Mis Trabajos
             sql = text("""
-                WITH filtered_solicitudes AS (
+                WITH solicitudes_coincidentes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
                            s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
@@ -916,7 +1074,11 @@ class TallerRepository:
                       )
                       AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                       AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
-                    ORDER BY s.fecha_actualizacion DESC, s.id DESC
+                ),
+                filtered_solicitudes AS (
+                    SELECT *, count(*) OVER ()::int AS total_count
+                    FROM solicitudes_coincidentes
+                    ORDER BY fecha_actualizacion DESC, id DESC
                     LIMIT :limit OFFSET :skip
                 ),
                 detalles_agg AS (
@@ -926,15 +1088,15 @@ class TallerRepository:
                             json_build_object(
                                 'id', d.id,
                                 'solicitud_id', d.solicitud_id,
-                                'nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
-                                'falla_nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
+                                'nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
+                                'falla_nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
                                 'categoria_id', f.categoria_id,
-                                'categoria_nombre', cf.nombre,
+                                'categoria_nombre', COALESCE(d.categoria_nombre_snapshot, cf.nombre),
                                 'falla_id', d.falla_id,
                                 'falla', CASE WHEN f.id IS NOT NULL THEN json_build_object(
                                     'id', f.id,
                                     'categoria_id', f.categoria_id,
-                                    'nombre', f.nombre,
+                                    'nombre', COALESCE(d.falla_nombre_snapshot, f.nombre),
                                     'is_active', f.is_active
                                 ) ELSE NULL END,
                                 'descripcion_personalizada', d.descripcion_personalizada,
@@ -1028,6 +1190,7 @@ class TallerRepository:
                                 'solicitud_id', e.solicitud_id,
                                 'detalle_id', e.detalle_id,
                                 'usuario_id', e.usuario_id,
+                                'comentario_id', e.comentario_id,
                                 'url', e.url,
                                 'original_filename', e.original_filename,
                                 'size_bytes', e.size_bytes,
@@ -1041,6 +1204,7 @@ class TallerRepository:
                 )
                 SELECT 
                     fs.id,
+                    fs.total_count,
                     fs.n_bus,
                     fs.bus_id,
                     b.patente as bus_patente,
@@ -1194,6 +1358,7 @@ class TallerRepository:
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.comentarios).joinedload(TallerSolicitudComentario.usuario),
+                selectinload(TallerSolicitud.comentarios).selectinload(TallerSolicitudComentario.adjuntos),
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.evidencias),
             )
@@ -1358,6 +1523,17 @@ class TallerRepository:
 
     def add_detalle(self, db: AsyncSession, detalle: TallerSolicitudDetalle) -> None:
         db.add(detalle)
+
+    def add_evidencia(self, db: AsyncSession, evidencia: TallerSolicitudEvidencia) -> None:
+        db.add(evidencia)
+
+    def add_evento_falla(self, db: AsyncSession, evento: TallerFallaEvento) -> None:
+        db.add(evento)
+
+    def add_evento_falla_mecanico(
+        self, db: AsyncSession, evento_mecanico: TallerFallaEventoMecanico
+    ) -> None:
+        db.add(evento_mecanico)
 
     def add_falla(self, db: AsyncSession, falla: FallaTaller) -> None:
         db.add(falla)
@@ -1534,7 +1710,7 @@ class TallerRepository:
         res = await db.execute(stmt)
         estadias = list(res.scalars().all())
         abierta = next((e for e in estadias if e.fecha_salida is None), None)
-        return abierta, len(estadias)
+        return abierta, max((e.numero_visita for e in estadias), default=0)
 
     async def get_conteo_estadias(self, db: AsyncSession, solicitud_id: int) -> int:
         stmt = select(func.count(TallerSolicitudEstadia.id)).where(
@@ -1630,7 +1806,7 @@ class TallerRepository:
         mecanico_cierre_id: int,
         comentario_cierre_texto: str,
         liberar_bus: bool,
-    ) -> None:
+    ) -> TallerSolicitudComentario:
         """
         Ejecuta en una única transacción de base de datos todas las mutaciones requeridas:
         - 1 UPDATE masivo a taller_solicitudes.
@@ -1723,7 +1899,8 @@ class TallerRepository:
                     estadia_abierta.fecha_salida = now
                     estadia_abierta.motivo_salida = motivo_egreso
                     if estadia_abierta.fecha_ingreso:
-                        dur = max(0.0, (now.replace(tzinfo=None) - estadia_abierta.fecha_ingreso.replace(tzinfo=None)).total_seconds() / 3600.0)
+                        from app.modules.taller.utils import calcular_horas_en_taller
+                        dur = calcular_horas_en_taller(estadia_abierta.fecha_ingreso, now) or 0.0
                         estadia_abierta.horas_estadia = round(dur, 1)
 
             stmt_bus = (
@@ -1749,6 +1926,7 @@ class TallerRepository:
             fecha_registro=now,
         )
         self.add_comentario(db, comentario_entry)
+        return comentario_entry
 
 
 

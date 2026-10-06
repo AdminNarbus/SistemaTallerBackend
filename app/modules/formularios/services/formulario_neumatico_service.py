@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 from datetime import datetime, timezone
@@ -103,13 +102,8 @@ class FormularioNeumaticoService:
                 resultado_upload["size_bytes"],
             )
 
-        # 3. Parseo seguro de ruedas
+        # El DTO garantiza exactamente un neumático antes de subir evidencias.
         ruedas_lista = dto.ruedas
-        if isinstance(dto.ruedas, str):
-            try:
-                ruedas_lista = json.loads(dto.ruedas)
-            except Exception:
-                pass
 
         # 4. Orquestación de Persistencia y Control de Transacción
         reporte_id: Optional[int] = None
@@ -132,7 +126,6 @@ class FormularioNeumaticoService:
                 tipo_bus=tipo_bus_resuelto,
                 ruedas=ruedas_lista,
                 motivo=dto.motivo,
-                precio=None,
                 marca_fuego=dto.marca_fuego,
                 evidencia_url=evidencia_path,
                 fecha_subida=datetime.now(timezone.utc),

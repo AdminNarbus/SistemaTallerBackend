@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 114,
+  "id": "AV-0114",
+  "timestamp": "2026-10-05T12:00:00Z",
+  "phase": "backend_realtime",
+  "milestone": {
+    "id": "REALTIME-1",
+    "name": "Tiempo real WebSocket en una instancia",
+    "statusBefore": "planned",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se incorporó WebSocket autenticado, bus en memoria e invalidaciones de recursos operacionales sin modificar Neon.",
+  "scope": {
+    "planned": ["WebSocket", "bus reemplazable", "eventos de OT, buses y usuarios"],
+    "completed": ["Canal /api/v1/realtime/ws", "health realtime", "guía frontend", "configuración de una instancia"],
+    "pending": ["Adaptador Redis cuando se habilite más de una instancia"],
+    "outOfScope": ["Migraciones Alembic", "cambios en Neon"]
+  },
+  "changes": [
+    {"path": "app/core/realtime", "action": "created", "summary": "Bus, runtime, autenticación y router WebSocket."},
+    {"path": "app/main.py", "action": "modified", "summary": "Ciclo de vida, health y emisión de eventos HTTP."},
+    {"path": "GUIA_FRONTEND_TIEMPO_REAL.md", "action": "created", "summary": "Contrato de integración y recuperación frontend."}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-REALTIME-001",
+      "title": "Bus en memoria para una instancia",
+      "rationale": "La concurrencia máxima esperada es 15 usuarios y se prioriza evitar infraestructura Redis o conexiones permanentes adicionales a Neon.",
+      "consequences": "Cloud Run debe limitarse a una instancia; un adaptador Redis podrá sustituir el bus sin cambiar el protocolo WebSocket."
+    }
+  ],
+  "verification": [
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de espacios en el diff."},
+    {"command": "pytest", "result": "not_run", "evidence": "El entorno no dispone de Python funcional y el venv apunta a un intérprete inexistente."}
+  ],
+  "blockers": [],
+  "nextStep": "Habilitar REALTIME_ENABLED en Cloud Run y conectar el frontend usando la guía publicada.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "main", "commit": "cb194a9", "dirty": true},
+  "notes": ["Los cambios locales previos de adjuntos se conservaron."]
+}

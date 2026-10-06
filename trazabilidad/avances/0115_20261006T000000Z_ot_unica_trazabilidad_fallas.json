@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 115,
+  "id": "AV-0115",
+  "timestamp": "2026-10-06T00:00:00Z",
+  "phase": "backend_taller_ot_unica",
+  "milestone": {
+    "id": "TALLER-OT-UNICA-1",
+    "name": "Ciclo único de OT y trazabilidad individual de fallas",
+    "statusBefore": "planned",
+    "statusAfter": "implemented"
+  },
+  "type": "completed",
+  "summary": "Las fallas nuevas se incorporan a la OT activa más antigua del bus; cada falla guarda reportante, fecha y un historial inmutable de acciones y resolutores.",
+  "scope": {
+    "planned": ["OT única activa", "historial por falla", "reapertura segura", "consultas de lectura eficientes"],
+    "completed": ["consolidación de reportes", "bloqueo lógico PostgreSQL", "migraciones 020 y 021", "DTO JSON de eventos", "conteo de viajes SQL", "pruebas de integración"],
+    "pending": ["funciones PostgreSQL batch para todas las mutaciones", "medición EXPLAIN/percentiles contra Neon"],
+    "outOfScope": ["cambios de frontend"]
+  },
+  "changes": [
+    {"path": "app/modules/taller", "action": "modified", "summary": "Consolidación de OT activa, trazabilidad y serialización de fallas."},
+    {"path": "alembic/versions/020_trazabilidad_fallas.py", "action": "created", "summary": "Campos, tablas de eventos y backfill histórico."},
+    {"path": "alembic/versions/021_consolidar_ots_activas.py", "action": "created", "summary": "Fusión de OTs activas duplicadas e índices parciales únicos."},
+    {"path": "tests/integration/test_ciclo_ot_unico_y_trazabilidad.py", "action": "created", "summary": "Casos de consolidación, reapertura e historia de resolución."}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-TALLER-OT-001",
+      "title": "Sólo FINALIZADO termina el ciclo de una OT",
+      "rationale": "LIBERADO sigue siendo una OT operativa y debe seguir absorbiendo nuevos hallazgos del mismo bus.",
+      "consequences": "Un reporte posterior sólo crea una nueva OT cuando no existe ninguna OT activa."
+    },
+    {
+      "id": "DEC-TALLER-OT-002",
+      "title": "La reapertura histórica se bloquea ante cualquier OT posterior",
+      "rationale": "Evita que dos ciclos del mismo bus vuelvan a convivir o se altere su secuencia histórica.",
+      "consequences": "Sólo la última OT finalizada del bus puede reabrirse y únicamente si no existe otra activa."
+    },
+    {
+      "id": "DEC-TALLER-OT-003",
+      "title": "La historia de una falla no se reescribe",
+      "rationale": "El resumen actual puede limpiarse al reabrir, pero los responsables y fechas anteriores deben permanecer auditables.",
+      "consequences": "Cada reporte, resolución, reapertura, incompleta o repuesto genera un evento independiente con snapshots de nombres."
+    }
+  ],
+  "verification": [
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de espacios en el diff."},
+    {"command": "venv\\Scripts\\python.exe -m compileall -q app tests", "result": "blocked", "evidence": "El venv apunta a C:\\Users\\Fabian\\AppData\\Local\\Programs\\Python\\Python312\\python.exe, intérprete que no existe en el equipo."},
+    {"command": "venv\\Scripts\\pytest.exe tests/integration/test_ciclo_ot_unico_y_trazabilidad.py -q", "result": "blocked", "evidence": "Misma ausencia del intérprete base del entorno virtual."}
+  ],
+  "blockers": ["No hay intérprete Python funcional para ejecutar compilación, Alembic o pytest en este workspace."],
+  "nextStep": "Restaurar el intérprete Python 3.12 del venv, ejecutar upgrade/downgrade/upgrade y las pruebas PostgreSQL reales de presupuesto y concurrencia.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "main", "dirty": true},
+  "notes": ["Se preservaron los cambios locales preexistentes en el árbol de trabajo."]
+}

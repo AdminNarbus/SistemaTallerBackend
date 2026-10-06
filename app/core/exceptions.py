@@ -187,6 +187,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return _apply_cors_headers(request, response)
 
 
+async def integrity_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Translate database invariants to domain errors without exposing SQL or data."""
+    sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    logger.warning("[DB_INTEGRITY] %s %s | sqlstate=%s", request.method, request.url.path, sqlstate)
+    if sqlstate == "23505":
+        domain_error = ConflictException("El registro o la asignación activa ya existe. Actualice los datos e intente nuevamente.")
+    else:
+        domain_error = BusinessRuleException("Los datos incumplen una regla de integridad o intentan modificar el historial.")
+    return await narbus_exception_handler(request, domain_error)
+
+
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handler de último recurso: captura cualquier excepción no prevista,
@@ -221,5 +232,6 @@ __all__ = [
     "http_exception_handler",
     "validation_exception_handler",
     "generic_exception_handler",
+    "integrity_exception_handler",
 ]
 

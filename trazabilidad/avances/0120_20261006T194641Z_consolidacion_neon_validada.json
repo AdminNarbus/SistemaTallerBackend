@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 120,
+  "id": "AV-0120",
+  "timestamp": "2026-10-06T19:48:10.361468+00:00",
+  "type": "completed",
+  "summary": "Corrección y validación de consolidación sin pérdida de originales sobre copia restaurada del respaldo de Neon taller.",
+  "scope": {
+    "completed": [
+      "Respaldo consistente de 16 tablas y 666 filas",
+      "Restauración exacta del JSON en PostgreSQL localhost",
+      "Archivo completo previo a consolidación de OTs y todos sus hijos",
+      "Unificación administrativa de estadías abiertas de distintas OTs sin inventar salidas",
+      "Protección inmutable del archivo",
+      "Upgrade y downgrade/reupgrade aprobados hasta 025",
+      "Validación de campos originales archivados y todos los IDs originales",
+      "Restricciones e historial concurrente PostgreSQL aprobados"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Aplicar cambios en Neon",
+      "Despliegue de aplicación"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "DEC-120-1",
+      "title": "Consolidación administrativa sin salidas ficticias",
+      "rationale": "Las dos estadías abiertas del bus402 pertenecían a OTs distintas antes de021; cerrar con horas inferidas falsificaría el historial.",
+      "consequences": "Una estadía operativa abierta; original redundante preservado con su OT de origen en archivo inmutable."
+    },
+    {
+      "id": "DEC-120-2",
+      "title": "Archivar antes del paso destructivo021",
+      "rationale": "021 mueve hijos y descarta pautas duplicadas. El respaldo externo es complementario al archivo interno completo.",
+      "consequences": "020a antecede021 y021b antecede022;025 ofrece esquema compatible a bases ya actualizadas."
+    },
+    {
+      "id": "DEC-120-3",
+      "title": "Restaurar la instantánea capturada",
+      "rationale": "Una segunda lectura de producción podría diferir del respaldo durante actividad concurrente.",
+      "consequences": "Pruebas y comparación referidas exactamente al JSON restaurado."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -m scripts.validar_copia_neon",
+      "result": "passed",
+      "evidence": "Copia narbus_bd_test_neon_6b1c8b4ac2, upgrade018→025/check/validaciones/downgrade021/upgrade025/check/preservación aprobados"
+    },
+    {
+      "command": "pytest suite inicial y reejecución de pruebas con tmp_path en workspace",
+      "result": "passed",
+      "evidence": "230 pruebas pasaron;5 errores de permisos tmp_path resueltos al reejecutar módulos core/storage:17 passed; integración historial adicional3 passed"
+    },
+    {
+      "command": "pg_dump16 contra Neon17",
+      "result": "failed",
+      "evidence": "Versión incompatible; respaldo de datos JSON restaurado y validado, no se afirma dump nativo completo."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "backup": "backups/neon_taller_20261006T194641Z.json",
+  "copyDatabase": "narbus_bd_test_neon_6b1c8b4ac2",
+  "notes": [
+    "No cambios de datos ni esquema en Neon.",
+    "Los archivos y modificaciones previas del usuario se conservaron.",
+    "Pautas previas preservadas solo en archivo de auditoría; la operativa continúa con la actual."
+  ]
+}

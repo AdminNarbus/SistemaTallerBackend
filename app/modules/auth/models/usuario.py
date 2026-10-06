@@ -16,7 +16,7 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(
-        primary_key=True, index=True, autoincrement=True
+        primary_key=True, autoincrement=True
     )
     nombre: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     apellido: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

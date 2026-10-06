@@ -8,21 +8,27 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
 from app.core.config import AppEnvironment, settings
 from app.core.database import engine
+from app.core.db_metrics import begin_request_metrics, end_request_metrics
 from app.core.exceptions import (
     NarbusException,
     narbus_exception_handler,
     http_exception_handler,
     validation_exception_handler,
     generic_exception_handler,
+    integrity_exception_handler,
 )
 from app.core.logging_config import setup_logging
 from app.core.seed import seed_initial_data
 from app.core.middleware.device_restriction import DeviceRestrictionMiddleware
+from app.core.realtime.runtime import realtime_runtime
+from app.core.realtime.router import router as realtime_router
+from app.core.realtime.http_events import emit_http_mutation_event
 
 # ─── Inicialización del logging (debe ejecutarse antes del lifespan) ─────────
 setup_logging(environment=settings.ENVIRONMENT.value)
@@ -79,6 +85,8 @@ async def lifespan(app: FastAPI):
     """
     keepalive_task = None
     keepalive_stop = asyncio.Event()
+    if settings.REALTIME_ENABLED:
+        await realtime_runtime.start()
     try:
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
         if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
@@ -113,6 +121,8 @@ async def lifespan(app: FastAPI):
         )
     
     yield
+    if settings.REALTIME_ENABLED:
+        await realtime_runtime.stop()
     if keepalive_task:
         keepalive_stop.set()
         try:
@@ -138,7 +148,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
-    expose_headers=["X-Total-Count"],
+    expose_headers=["X-Total-Count", "X-DB-Round-Trips"],
 )
 
 app.add_middleware(DeviceRestrictionMiddleware)
@@ -148,16 +158,42 @@ app.add_middleware(DeviceRestrictionMiddleware)
 async def log_requests_timing_middleware(request, call_next):
     """Mide y registra con precisión de milisegundos el tiempo de respuesta de cada endpoint."""
     t_start = time.perf_counter()
-    response = await call_next(request)
-    duration_ms = (time.perf_counter() - t_start) * 1000.0
-    logger.info(
-        "[HTTP] %s %s | status=%s | duracion=%.1fms",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-    )
-    return response
+    metrics_token = begin_request_metrics()
+    response = None
+    try:
+        response = await call_next(request)
+        emit_http_mutation_event(request, response.status_code)
+        return response
+    finally:
+        metrics = end_request_metrics(metrics_token)
+        duration_ms = (time.perf_counter() - t_start) * 1000.0
+        round_trips = metrics.round_trips if metrics else 0
+        db_time_ms = metrics.time_ms if metrics else 0.0
+        cache_status = metrics.user_cache if metrics else None
+        if response and settings.ENVIRONMENT != AppEnvironment.PRODUCTION:
+            response.headers["X-DB-Round-Trips"] = str(round_trips)
+        logger.info(
+            "[HTTP] %s %s | status=%s | duracion=%.1fms | db_round_trips=%s | db_time=%.1fms | user_cache=%s",
+            request.method,
+            request.url.path,
+            response.status_code if response else "error",
+            duration_ms,
+            round_trips,
+            db_time_ms,
+            cache_status or "n/a",
+        )
+        if request.url.path.startswith(f"{settings.API_V1_STR}/taller/"):
+            budget = 1 if request.method == "GET" else 2
+            # El perfil sólo agrega un viaje aceptado cuando la caché está fría.
+            if cache_status == "miss":
+                budget += 1
+            if round_trips > budget:
+                logger.warning(
+                    "[DB-BUDGET] %s excedió presupuesto de %s viajes: %s",
+                    request.url.path,
+                    budget,
+                    round_trips,
+                )
 
 # ─── Exception Handlers Globales ────────────────────────────────────────────
 # El orden de registro importa: del más específico al más genérico.
@@ -165,9 +201,11 @@ app.add_exception_handler(NarbusException, narbus_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(IntegrityError, integrity_exception_handler)
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(realtime_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/", tags=["Root"])

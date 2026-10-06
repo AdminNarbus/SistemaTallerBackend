@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Optional
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
@@ -416,6 +417,7 @@ class SupervisionService:
         dto: ResolverFallaSupervisoraDTO,
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
+        fotos: Optional[List[UploadFile]] = None,
     ) -> DetalleUpdateDTO:
         """Permite a la supervisora marcar una falla como resuelta indicando qué mecánico la reparó (o reabrirla)."""
         logger.info(
@@ -433,6 +435,7 @@ class SupervisionService:
             dto=dto,
             supervisor_id=supervisor_id,
             supervisor_nombre=supervisor_nombre,
+            fotos=fotos,
         )
 
     async def get_solicitud(

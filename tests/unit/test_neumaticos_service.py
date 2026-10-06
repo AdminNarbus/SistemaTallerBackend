@@ -40,7 +40,7 @@ async def test_procesar_formulario_neumatico_marca_fuego_opcional(db_session, se
     res = await formulario_neumatico_service.procesar_formulario(
         usuario_id=conductor_id,
         maquina="BUS-606",
-        ruedas='[]',
+        ruedas='[1]',
         motivo="Revisión de rutina",
         marca_fuego=None,
         evidencia=None,
@@ -92,6 +92,7 @@ async def test_get_reporte_by_id_flujo_completo(db_session, seed_test_data):
     dto = ReporteNeumaticoCreateDTO(
         usuario_id=conductor_id,
         maquina="BUS-808",
+        ruedas=[1],
         motivo="Test consulta ID",
     )
     res_creacion = await formulario_neumatico_service.procesar_formulario(
@@ -120,6 +121,7 @@ async def test_neumatico_repository_operaciones_atomicas(db_session, seed_test_d
     nuevo_reporte = ReporteNeumatico(
         usuario_id=conductor_id,
         n_bus=bus_existente.n_bus if bus_existente else "BUS-ATOM-1",
+        ruedas=[1],
         bus_id=bus_existente.id if bus_existente else None,
         tipo_bus="Test Atómico",
         motivo="Verificación repository",
@@ -157,6 +159,7 @@ async def test_procesar_formulario_evidencia_extension_invalida(db_session, seed
         await formulario_neumatico_service.procesar_formulario(
             usuario_id=conductor_id,
             maquina="BUS-101",
+            ruedas=[1],
             evidencia=upload_file,
             db=db_session,
         )
@@ -176,6 +179,7 @@ async def test_procesar_formulario_evidencia_tamano_excedido(db_session, seed_te
         await formulario_neumatico_service.procesar_formulario(
             usuario_id=conductor_id,
             maquina="BUS-101",
+            ruedas=[1],
             evidencia=upload_file,
             db=db_session,
         )
@@ -191,11 +195,13 @@ async def test_listar_reportes_servicio_paginado(db_session, seed_test_data):
     dto1 = ReporteNeumaticoCreateDTO(
         usuario_id=conductor_id,
         maquina="BUS-LIST-1",
+        ruedas=[1],
         motivo="Reporte 1",
     )
     dto2 = ReporteNeumaticoCreateDTO(
         usuario_id=conductor_id,
         maquina="BUS-LIST-2",
+        ruedas=[1],
         motivo="Reporte 2",
     )
     await formulario_neumatico_service.procesar_formulario(dto=dto1, db=db_session)

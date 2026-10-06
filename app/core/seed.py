@@ -6,7 +6,7 @@ Implementa el patrón Coordinador vs. Especialistas bajo principios SOLID (SRP/S
 """
 import logging
 from typing import Dict, Final, List, Tuple
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
@@ -18,7 +18,7 @@ from app.modules.auth.repository.user_repository import user_repository
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.categoria_falla import CategoriaFalla
 from app.modules.taller.models.falla_taller import FallaTaller
-from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.models.pauta_taller import PautaTallerItem
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
@@ -242,10 +242,8 @@ async def _seed_reporte_neumatico(db: AsyncSession) -> None:
         tipo_bus="Doble Piso",
         ruedas=[
             {"posicion": "1D", "estado": "Bueno", "presion": 110},
-            {"posicion": "1I", "estado": "Regular", "presion": 105},
         ],
         motivo="Control preventivo mensual de neumáticos",
-        precio=45000.0,
         marca_fuego="MF-301-A",
     )
     db.add(rep_obj)
@@ -256,7 +254,9 @@ async def _seed_reporte_neumatico(db: AsyncSession) -> None:
 async def _seed_pauta_preventiva(db: AsyncSession) -> None:
     """Sincroniza el catálogo oficial de 10 ítems de la pauta preventiva."""
     for p_data in PAUTA_10_CATALOGO_SEED:
-        res_p = await db.execute(select(PautaTallerItem).where(PautaTallerItem.orden == p_data["orden"]))
+        res_p = await db.execute(select(PautaTallerItem).where(
+            PautaTallerItem.orden == p_data["orden"], PautaTallerItem.is_active.is_(True)
+        ))
         p_obj = res_p.scalar_one_or_none()
         if not p_obj:
             db.add(PautaTallerItem(**p_data))
@@ -265,9 +265,11 @@ async def _seed_pauta_preventiva(db: AsyncSession) -> None:
             p_obj.item = str(p_data["item"])
             p_obj.is_active = True
 
-    # Limpieza de respuestas e ítems obsoletos fuera del catálogo de 11
-    await db.execute(delete(TallerSolicitudPauta).where(TallerSolicitudPauta.item_id > MAX_ITEMS_PAUTA_PREVENTIVA))
-    await db.execute(delete(PautaTallerItem).where(PautaTallerItem.orden > MAX_ITEMS_PAUTA_PREVENTIVA))
+    # IDs are historical identifiers, not positions in the current ten-item pauta.
+    # Keep previous answers and deactivate items outside the current catalogue.
+    await db.execute(update(PautaTallerItem).where(
+        PautaTallerItem.orden > MAX_ITEMS_PAUTA_PREVENTIVA
+    ).values(is_active=False))
     await db.commit()
     logger.info("[SEED] Catálogo de pauta preventiva de %d ítems sincronizado.", MAX_ITEMS_PAUTA_PREVENTIVA)
 

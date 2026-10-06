@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     ENFORCE_ORIGIN_CHECK: bool = False
     APP_CLIENT_SECRET: Optional[str] = None  # Header opcional X-App-Client-Key para bypass o clientes de confianza
 
+    # Tiempo real: la primera implementación funciona en una única instancia mediante memoria.
+    REALTIME_ENABLED: bool = False
+    REALTIME_BACKEND: str = "memory"
+    REALTIME_HEARTBEAT_SECONDS: int = 25
+
     # Supervisión: Umbrales de permanencia y alertas operacionales (horas configurables)
     # BAJA: 2-4 días | MEDIA: 5-8 días | ALTA: 9-12 días | CRITICA: 13+ días
     SUPERVISION_UMBRAL_TALLER_HORAS_BAJA: int = 48     # 2 días en taller

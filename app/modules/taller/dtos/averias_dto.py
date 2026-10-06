@@ -132,6 +132,22 @@ class MecanicoResumenDTO(BaseModel):
     nombre: str
 
 
+class FallaEventoDTO(BaseModel):
+    """Evento histórico inmutable asociado a una falla de una OT."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tipo_evento: str
+    usuario_actor_id: Optional[int] = None
+    actor_nombre: str
+    estado_anterior: Optional[str] = None
+    estado_nuevo: Optional[str] = None
+    comentario: Optional[str] = None
+    fecha_evento: datetime
+    mecanicos_resolvieron: List[MecanicoResumenDTO] = []
+
+
 class DetalleUpdateDTO(BaseModel):
     """Respuesta ultraligera tras check o actualización de estado de avería (0 RTTs adicionales)."""
     detalle_id: int
@@ -163,6 +179,9 @@ class SolicitudDetalleDTO(BaseModel):
     estado: str = EstadoFalla.PENDIENTE.value
     motivo_incompleto: Optional[str] = None
     resuelto: bool
+    reportado_por_id: Optional[int] = None
+    reportado_por_nombre: Optional[str] = None
+    fecha_reporte: Optional[datetime] = None
     mecanico_resolvio_id: Optional[int] = None
     mecanico_resolvio_nombre: Optional[str] = None
     mecanicos_resolvieron: List[MecanicoResumenDTO] = []
@@ -172,6 +191,7 @@ class SolicitudDetalleDTO(BaseModel):
     fecha_resolucion: Optional[datetime] = None
     mecanicos_asignados: List[MecanicoAsignadoDTO] = []
     historial_asignaciones: List[AsignacionFallaDTO] = []
+    historial_eventos: List[FallaEventoDTO] = []
 
     def model_post_init(self, __context: Any) -> None:
         nombre_limpio = (

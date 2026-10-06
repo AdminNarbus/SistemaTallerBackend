@@ -17,7 +17,7 @@ class Rol(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(
-        primary_key=True, index=True, autoincrement=True
+        primary_key=True, autoincrement=True
     )
     nombre: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False

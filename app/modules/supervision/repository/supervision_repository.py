@@ -621,9 +621,9 @@ class SupervisionRepository:
                         json_agg(
                             json_build_object(
                                 'id', d.id,
-                                'nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
-                                'falla_nombre', COALESCE(d.descripcion_personalizada, f.nombre, 'Avería'),
-                                'categoria_nombre', cf.nombre,
+                                'nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
+                                'falla_nombre', COALESCE(d.descripcion_personalizada, d.falla_nombre_snapshot, f.nombre, 'Avería'),
+                                'categoria_nombre', COALESCE(d.categoria_nombre_snapshot, cf.nombre),
                                 'descripcion_personalizada', d.descripcion_personalizada,
                                 'resuelto', d.resuelto,
                                 'falta_repuesto', d.falta_repuesto

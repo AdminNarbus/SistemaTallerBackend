@@ -45,6 +45,7 @@ async def test_post_formulario_neumatico_con_jwt_autenticado(client, seed_test_d
 
     data = {
         "maquina": "BUS-999",
+        "ruedas": "[1]",
         "motivo": "Cambio de neumático vía JWT",
     }
 
@@ -72,6 +73,7 @@ async def test_get_reportes_paginados_api(client, seed_test_data, auth_headers_c
     # 1. Crear un reporte previo
     data = {
         "maquina": "BUS-LIST-API",
+        "ruedas": "[1]",
         "motivo": "Test paginación API",
     }
     await client.post("/api/v1/formularios/neumaticos", data=data, headers=auth_headers_conductor)

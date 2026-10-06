@@ -1,5 +1,13 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Historial de estados de OT (AV-0118)
+
+- Nueva tabla inmutable `taller_solicitud_estado_eventos`, revisión `024_historial_estados_ot`, con FK `RESTRICT` y pertenencia del comentario a la misma OT.
+- Registro transaccional de creación y transiciones administrativas, cierres completos/parciales y cambios automáticos de cuadrilla/fallas.
+- Endpoint autenticado y paginado `GET /api/v1/taller/{id}/historial-estados`, con `X-Total-Count`.
+- Importación histórica conservadora e idempotente. BD local migrada con respaldo: 6 cambios explícitos y 5 cierres ambiguos recuperados; producción sin cambios.
+- Contrato, validación y despliegue: [Historial de estados de OT](08_HISTORIAL_ESTADOS_OT.md).
+
 ## Visión General
 El backend de **Narbus Taller** es una API REST construida en FastAPI con base de datos PostgreSQL/MySQL (vía SQLAlchemy async + Alembic). Su objetivo es proveer soporte a los módulos de mantención de buses, control de neumáticos, autenticación de usuarios y auditoría de supervisión.
 

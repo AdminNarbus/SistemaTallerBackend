@@ -16,6 +16,7 @@ from app.modules.auth.dtos import (
     UsuarioCreateDTO,
     UsuarioLoginDTO,
     UsuarioResponseDTO,
+    UsuarioUpdateDTO,
 )
 from app.modules.auth.services.auth_service import auth_service
 from app.modules.auth.services.user_service import user_service
@@ -199,6 +200,26 @@ async def crear_usuario_supervisor(
         db,
         usuario_in=usuario_in,
         actor_rol=current_user.rol,
+    )
+
+
+@router.patch(
+    "/usuarios/{usuario_id}",
+    response_model=UsuarioResponseDTO,
+    summary="Actualizar datos personales de un usuario (Solo SUPERVISOR o ADMIN)",
+)
+async def actualizar_usuario_supervisor(
+    usuario_id: int,
+    usuario_in: UsuarioUpdateDTO,
+    db: AsyncSession = SessionDep,
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+) -> UsuarioResponseDTO:
+    """Actualiza parcialmente nombre, apellido o teléfono sin cambiar credenciales ni permisos."""
+    return await user_service.actualizar_usuario(
+        db,
+        usuario_id=usuario_id,
+        usuario_in=usuario_in,
+        current_user_id=current_user.id,
     )
 
 

@@ -20,6 +20,7 @@ from app.modules.auth.constants import (
 from app.modules.auth.dtos import (
     TokenDTO,
     UsuarioCreateDTO,
+    UsuarioUpdateDTO,
     UsuarioResponseDTO,
 )
 from app.modules.auth.models.rol import Rol
@@ -156,6 +157,41 @@ class UserService:
         ))
         from app.core.realtime.runtime import realtime_runtime
         await realtime_runtime.disconnect_user(usuario_id)
+        return UsuarioResponseDTO.model_validate(user)
+
+    async def actualizar_usuario(
+        self,
+        db: AsyncSession,
+        usuario_id: int,
+        usuario_in: UsuarioUpdateDTO,
+        current_user_id: int,
+    ) -> UsuarioResponseDTO:
+        """Actualiza parcialmente nombre, apellido y teléfono de un usuario."""
+        logger.info(
+            "[USER-SERVICE] Actualizando datos personales | id=%s | solicitado_por=%s",
+            usuario_id,
+            current_user_id,
+        )
+        user = await user_repository.get_by_id(db, user_id=usuario_id)
+        if not user:
+            raise NotFoundException("El usuario especificado no fue encontrado.")
+
+        payload = usuario_in.model_dump(exclude_unset=True)
+        await user_repository.actualizar_datos_personales(
+            db,
+            user,
+            nombre=payload.get("nombre"),
+            apellido=payload.get("apellido"),
+            telefono=payload.get("telefono"),
+        )
+        await db.commit()
+        clear_user_cache(usuario_id)
+        publish_event_soon(RealtimeEvent(
+            resource_type="user",
+            resource_id=usuario_id,
+            action="updated",
+            actor_id=current_user_id,
+        ))
         return UsuarioResponseDTO.model_validate(user)
 
     async def get_current_user_profile(

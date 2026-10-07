@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 121,
+  "id": "AV-0121",
+  "timestamp": "2026-10-06T20:57:39Z",
+  "phase": "backend_taller",
+  "summary": "Compatibilidad JSON/JSONB en migraciones de neumáticos después del fallo json_typeof(jsonb) reportado en producción.",
+  "changes": [
+    {
+      "path": "alembic/versions/021a_saneamiento_historial.py",
+      "summary": "jsonb_typeof con cast explícito del operando, sin convertir la columna ni alterar el saneamiento confirmado."
+    },
+    {
+      "path": "alembic/versions/022_integridad_bd.py",
+      "summary": "Regla única compartida por auditoría y CHECK: CASE protege jsonb_array_length frente a valores no-array."
+    },
+    {
+      "path": "tests/migrations/test_jsonb_migrations.py",
+      "summary": "Pruebas en clúster PostgreSQL temporal con SQL real extraído de las migraciones."
+    }
+  ],
+  "verification": [
+    {
+      "check": "PostgreSQL 16 temporal: normalización, preflight y CHECK para JSON y JSONB; expresión de auditoría coherente",
+      "result": "7 pruebas aprobadas"
+    },
+    {
+      "check": "Sintaxis Python y git diff --check",
+      "result": "Aprobados"
+    }
+  ],
+  "outOfScope": [
+    "Aplicar migraciones o desplegar en producción",
+    "Validar los datos actuales del servidor remoto",
+    "Cambiar tipos de columnas o saltar revisiones Alembic"
+  ],
+  "notes": [
+    "No se leyeron .env ni URLs de bases para las pruebas.",
+    "El clúster temporal se detuvo al finalizar.",
+    "No se ejecutó upgrade head sobre ninguna base real."
+  ]
+}

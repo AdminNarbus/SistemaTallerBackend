@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 123,
+  "id": "AV-0123",
+  "timestamp": "2026-10-07T18:58:13Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "DOC-PRACTICA-1",
+    "name": "Documentación técnica y requerimientos para práctica profesional controlada",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Revisión del backend y creación de un documento Markdown centrado en 50 requerimientos funcionales y 28 no funcionales, con actores, criterios verificables, evidencia, reglas de negocio, casos de uso, arquitectura, BD, servicios, contratos, configuración y hallazgos. Anexos contrastados con código actual sin consultar la BD productiva.",
+  "scope": {
+    "planned": [
+      "Analizar a fondo el backend desde persistencia hasta servicios.",
+      "Priorizar requerimientos funcionales y no funcionales según indicación del usuario.",
+      "Entregar un documento .md con referencias verificables."
+    ],
+    "completed": [
+      "50 RF con criterios de aceptación y evidencia; 28 RNF con criterios y estado de cumplimiento.",
+      "Reglas de negocio, actores, seis casos de uso y matriz de trazabilidad de pruebas.",
+      "Documentación de cinco módulos, 19 tablas, 78 rutas incluyendo aliases, 72 DTOs, 356 funciones/métodos, 28 migraciones y 149 archivos Python.",
+      "Inventario de 229 funciones de prueba declaradas y 25 hallazgos observados.",
+      "Validación documental y tres pruebas unitarias concluidas."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Corregir lógica del backend o modificar el esquema/datos de PostgreSQL.",
+      "Certificar cumplimiento operativo, ejecutar carga, desplegar o aprobar requisitos contractuales.",
+      "Resolver el diagnóstico de las ejecuciones de integración que no terminaron."
+    ]
+  },
+  "changes": [
+    {
+      "path": "DOCUMENTACION_Y_REQUERIMIENTOS_BACKEND.md",
+      "action": "created",
+      "summary": "Documento principal de requisitos y explicación técnica con diccionario ORM, catálogo de rutas, contratos DTO y referencias a implementación."
+    },
+    {
+      "path": "trazabilidad/avances/0123_20261007T185813Z_documentacion_requerimientos_practica.json",
+      "action": "created",
+      "summary": "Registro de alcance, decisiones y verificación de la revisión documental."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Requerimientos como eje del documento",
+      "rationale": "El usuario priorizó explícitamente los requerimientos funcionales y no funcionales para su práctica.",
+      "consequences": "RF y RNF preceden a la documentación técnica; criterios y evidencia permiten preparar demostraciones y evaluación."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Separar implementación existente de objetivos propuestos",
+      "rationale": "La lectura de código no demuestra disponibilidad, capacidad, seguridad operacional ni aceptación contractual.",
+      "consequences": "Se clasifican implementado, parcial, configurable y propuesto, sin atribuir métricas no medidas."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Usar el directorio actual como fuente de verdad",
+      "rationale": "El repositorio tenía cambios locales previos y documentación histórica que no coincidía por completo con el código.",
+      "consequences": "Los anexos representan código con cambios locales; se preservaron los archivos previos sin modificar lógica de aplicación."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Validación aislada y resultados de pruebas explícitos",
+      "rationale": "La documentación no requiere acceder a datos productivos ni ejecutar migraciones reales; la integración no concluyó en el entorno de ejecución.",
+      "consequences": "Se importó metadata sin lifespan con dev_local y SQLite en memoria; se reportan únicamente tres tests unitarios aprobados y se deja integración sin resultado concluyente."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Mantener inventarios detallados como anexos",
+      "rationale": "La revisión debe cubrir BD y servicios sin relegar los requerimientos solicitados.",
+      "consequences": "El cuerpo principal explica comportamiento y reglas; los anexos permiten localizar tablas, columnas, endpoints, clases y métodos."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\python.exe -m pytest tests/unit/test_exceptions_and_dtos.py -q --tb=short --disable-warnings",
+      "result": "passed",
+      "evidence": "3 passed in 0.05s; exit code 0. Entorno dev_local, SQLite en memoria."
+    },
+    {
+      "command": "Ejecución local unit/integration/e2e y selección de integración auth/ciclo OT/historial",
+      "result": "not_run",
+      "evidence": "Intentadas pero interrumpidas manualmente por falta de finalización; sin resultado concluyente. not_run indica aquí que no existe veredicto de suite completa."
+    },
+    {
+      "command": "Generación de anexos desde AST, SQLAlchemy metadata, Pydantic y rutas FastAPI efectivas",
+      "result": "passed",
+      "evidence": "19 tablas; 78 rutas; 72 DTOs; 356 funciones/métodos; 28 migraciones; 149 archivos Python; 229 funciones de prueba declaradas. Sin iniciar lifespan."
+    },
+    {
+      "command": "Validación documental de identificadores, enlaces, líneas, tablas Markdown y bloques de código",
+      "result": "passed",
+      "evidence": "50 RF, 28 RNF, 745 enlaces locales incluyendo 525 con línea, 181 tablas, 26 bloques de código; cero errores."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Utilizar las secciones 2 a 6 para la presentación y revisar con el supervisor los criterios propuestos; validar posteriormente integración y reglas exclusivas de PostgreSQL en entorno local.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "main",
+    "commit": "d243db63811677d1ccf42d145e1fc6350bb39a03",
+    "dirty": true
+  },
+  "notes": [
+    "No se crearon commits ni se modificó código del backend.",
+    "Se conservaron cambios locales previos del usuario.",
+    "No se leyeron secretos ni datos personales de datasets ni se accedió a la BD productiva.",
+    "Los scripts auxiliares de generación y validación están fuera del repositorio, en el directorio de visualizaciones de la tarea."
+  ]
+}

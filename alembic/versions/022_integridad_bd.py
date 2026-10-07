@@ -14,13 +14,16 @@ down_revision = "021b_estadias_consolidadas"
 branch_labels = None
 depends_on = None
 
+# Cast the operand, not the column: support existing JSON and JSONB schemas.
+NEUMATICO_UNICO = "CASE WHEN jsonb_typeof(ruedas::jsonb) = 'array' THEN jsonb_array_length(ruedas::jsonb) = 1 ELSE false END"
+
 CHECKS = [('buses', 'ck_buses_litros', 'max_litros IS NULL OR max_litros >= 0'),
  ('buses', 'ck_buses_max', 'max IS NULL OR max >= 0'),
  ('buses', 'ck_buses_min', 'min IS NULL OR min >= 0'),
  ('buses', 'ck_buses_numero', 'n_bus IS NULL OR length(trim(n_bus)) > 0'),
  ('buses', 'ck_buses_patente', 'length(trim(patente)) > 0'),
  ('buses', 'ck_buses_rango', 'min IS NULL OR max IS NULL OR min <= max'),
- ('reportes_neumaticos', 'ck_neumaticos_rueda_unica', 'json_array_length(ruedas) = 1'),
+ ('reportes_neumaticos', 'ck_neumaticos_rueda_unica', NEUMATICO_UNICO),
  ('taller_asignacion_fallas',
   'ck_asignaciones_duracion',
   'duracion_minutos IS NULL OR duracion_minutos >= 0'),
@@ -872,8 +875,6 @@ def audit(connection):
     for table, name, expression in CHECKS:
         if name == 'ck_asignaciones_origen':
             expression = expression.replace("'SUPERVISOR'", "'SUPERVISOR','SUPERVISION'")
-        if name == 'ck_neumaticos_rueda_unica':
-            expression = "CASE WHEN json_typeof(ruedas) = 'array' THEN json_array_length(ruedas) = 1 ELSE false END"
         count = connection.scalar(sa.text(f'SELECT count(*) FROM "{table}" WHERE ({expression}) IS FALSE'))
         if count:
             findings.append((name, count))
@@ -915,7 +916,11 @@ def _replace_foreign_keys(definitions):
         op.create_foreign_key(name, table, target, cols, refs, ondelete=action)
 
 
+_INDEX_CACHE = {}
+
+
 def _replace_indexes(definitions, obsolete):
+    _INDEX_CACHE.clear()
     # Exact catalog definitions preserve older index names on downgrade.
     desired = {name for _, name, _ in definitions}
     inspector = sa.inspect(op.get_bind())
@@ -924,12 +929,15 @@ def _replace_indexes(definitions, obsolete):
         if name not in desired and name in present:
             op.drop_index(name, table_name=table)
     for table, name, statement in definitions:
-        present = {i['name'] for i in sa.inspect(op.get_bind()).get_indexes(table)}
+        if table not in _INDEX_CACHE:
+            _INDEX_CACHE[table] = {i['name'] for i in inspector.get_indexes(table)}
+        present = _INDEX_CACHE[table]
         if name == 'uq_taller_solicitudes_n_bus_activa_sin_bus_id' and name in present:
             op.drop_index(name, table_name=table)
             present.remove(name)
         if name not in present:
             op.execute(statement)
+            present.add(name)
 
 
 def upgrade():

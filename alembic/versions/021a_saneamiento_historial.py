@@ -47,7 +47,7 @@ def upgrade():
         WHERE id=1 AND ruedas::jsonb=CAST(:original AS jsonb) AND marca_fuego='MF-301-A' '''), {'original': RUEDAS_ORIGINALES})
     # A single scalar or object represents exactly one tyre; normalization loses no information.
     op.execute('''UPDATE reportes_neumaticos SET ruedas_originales=ruedas, ruedas=json_build_array(ruedas)
-        WHERE json_typeof(ruedas) IN ('string','number','object')''')
+        WHERE jsonb_typeof(ruedas::jsonb) IN ('string','number','object')''')
 
 
 def downgrade():

@@ -98,6 +98,90 @@ async def test_usuarios_rbac_permissions(client, auth_headers_conductor, auth_he
 
 
 @pytest.mark.asyncio
+async def test_supervisor_actualiza_usuario_parcialmente(client, auth_headers_supervisor, seed_test_data):
+    """La edición personal es parcial y nunca borra valores con null o texto vacío."""
+    usuario_id = seed_test_data["conductor"].id
+
+    telefono = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"telefono": "+56912345678"},
+        headers=auth_headers_supervisor,
+    )
+    assert telefono.status_code == 200
+    assert telefono.json()["telefono"] == "+56912345678"
+
+    nombres = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"nombre": "  Juan Actualizado  ", "apellido": "Conductor Nuevo"},
+        headers=auth_headers_supervisor,
+    )
+    assert nombres.status_code == 200
+    assert nombres.json()["nombre"] == "Juan Actualizado"
+    assert nombres.json()["apellido"] == "Conductor Nuevo"
+    assert nombres.json()["telefono"] == "+56912345678"
+
+    conserva_null = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"telefono": None},
+        headers=auth_headers_supervisor,
+    )
+    assert conserva_null.status_code == 200
+    assert conserva_null.json()["telefono"] == "+56912345678"
+
+    conserva_vacio = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"telefono": "   "},
+        headers=auth_headers_supervisor,
+    )
+    assert conserva_vacio.status_code == 200
+    assert conserva_vacio.json()["telefono"] == "+56912345678"
+
+    no_modifica_restringidos = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"rol": "ADMIN"},
+        headers=auth_headers_supervisor,
+    )
+    assert no_modifica_restringidos.status_code == 422
+
+    supervisor_id = seed_test_data["supervisor"].id
+    actualiza_propio = await client.patch(
+        f"/api/v1/auth/usuarios/{supervisor_id}",
+        json={"telefono": "+56987654321"},
+        headers=auth_headers_supervisor,
+    )
+    assert actualiza_propio.status_code == 200
+    assert actualiza_propio.json()["telefono"] == "+56987654321"
+
+
+@pytest.mark.asyncio
+async def test_edicion_usuario_permisos_y_validaciones(
+    client, auth_headers_conductor, auth_headers_supervisor, seed_test_data
+):
+    usuario_id = seed_test_data["conductor"].id
+
+    forbidden = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"telefono": "123"},
+        headers=auth_headers_conductor,
+    )
+    assert forbidden.status_code == 403
+
+    not_found = await client.patch(
+        "/api/v1/auth/usuarios/99999",
+        json={"telefono": "123"},
+        headers=auth_headers_supervisor,
+    )
+    assert not_found.status_code == 404
+
+    too_long = await client.patch(
+        f"/api/v1/auth/usuarios/{usuario_id}",
+        json={"telefono": "1" * 31},
+        headers=auth_headers_supervisor,
+    )
+    assert too_long.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_buscar_mecanicos_autocomplete(client, auth_headers_mecanico1, seed_test_data):
     """Prueba el buscador de mecánicos autocompletar en GET /api/v1/auth/mecanicos/buscar."""
     # 1. Búsqueda vacía -> lista todos los mecánicos activos

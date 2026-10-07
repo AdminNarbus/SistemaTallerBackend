@@ -57,12 +57,34 @@ class UsuarioCreateDTO(UsuarioBaseDTO):
         return v
 
 
+class UsuarioUpdateDTO(BaseModel):
+    """Campos personales editables mediante actualización parcial."""
+
+    nombre: Optional[str] = Field(None, max_length=100)
+    apellido: Optional[str] = Field(None, max_length=100)
+    telefono: Optional[str] = Field(None, max_length=30)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("nombre", "apellido", "telefono", mode="before")
+    @classmethod
+    def conservar_valor_si_vacio(cls, v: Any) -> Optional[str]:
+        """Normaliza valores vacíos a None; el servicio los interpreta como sin cambio."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            clean = v.strip()
+            return clean if clean else None
+        return v
+
+
 class UsuarioResponseDTO(BaseModel):
     id: int
     nombre: Optional[str] = None
     apellido: Optional[str] = None
     nombre_completo: Optional[str] = None
     rut: Optional[str] = None
+    telefono: Optional[str] = None
     username: str
     rol: str
     is_active: bool

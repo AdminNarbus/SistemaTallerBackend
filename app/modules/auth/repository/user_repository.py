@@ -167,6 +167,25 @@ class UserRepository:
         logger.info("[AUTH-REPO] Usuario desactivado en sesión (soft-delete) | id=%s | username='%s'", user.id, user.username)
         return user
 
+    async def actualizar_datos_personales(
+        self,
+        db: AsyncSession,
+        user: Usuario,
+        *,
+        nombre: Optional[str] = None,
+        apellido: Optional[str] = None,
+        telefono: Optional[str] = None,
+    ) -> Usuario:
+        """Actualiza únicamente los datos personales no vacíos recibidos."""
+        if nombre is not None:
+            user.nombre = nombre
+        if apellido is not None:
+            user.apellido = apellido
+        if telefono is not None:
+            user.telefono = telefono
+        await db.flush()
+        return user
+
     def _construir_filtro_mecanico_q(self, q: Optional[str]):
         """Construye condición de búsqueda para mecánicos por término q."""
         if not q or not q.strip():

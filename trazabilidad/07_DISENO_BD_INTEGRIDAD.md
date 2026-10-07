@@ -75,3 +75,9 @@ Se encontró que 021 reúne las OTs 16 y 19 del bus 402 y sus estadías abiertas
 Pasaron: restauración y conteos de cada tabla; upgrade 018→025; verificación de cada campo archivado contra el respaldo; comprobación de que cada ID original sigue operativo o archivado; auditoría de integridad; restricciones PostgreSQL; historial, concurrencia y rollback de servicios; downgrade a 021 y reaplicación hasta 025; alembic check en ambos upgrades. Revertir por debajo de 020a con archivos existentes aborta para no borrar el historial preservado. Downgrade es una reversión técnica del esquema, no una restauración automática de OTs ya consolidadas.
 
 Comando reproducible: `python -m scripts.validar_copia_neon`. El destino debe ser localhost y la copia se conserva. Para producción, usar una ventana de mantenimiento y respaldo/snapshot recuperable del proveedor; estas pruebas validan los datos capturados, no eliminan los riesgos de bloqueos ni cambios posteriores en el origen.
+
+## Compatibilidad JSON/JSONB (AV-0121)
+
+El error de producción json_typeof(jsonb) en 021a se corrige usando jsonb_typeof(ruedas::jsonb). 022 utiliza una sola expresión para auditoría y CHECK: CASE WHEN jsonb_typeof(ruedas::jsonb) = 'array' THEN jsonb_array_length(ruedas::jsonb) = 1 ELSE false END. La columna conserva su tipo existente. Se mantienen las condiciones de saneamiento y las copias de payload original.
+
+Siete pruebas aprobadas en PostgreSQL 16 temporal cubren ambos tipos, normalización, preservación y restricciones. Ejecutor: python tests/migrations/test_jsonb_migrations.py. No se desplegó ni se ejecutaron migraciones sobre producción; las pruebas no validan el estado remoto actual ni toda la cadena de migraciones.

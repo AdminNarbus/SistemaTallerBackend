@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 122,
+  "timestamp": "2026-10-07T12:18:59.527987+00:00",
+  "summary": "OT artificial #35 creada en Neon: bus ficticio 1, test, cuatro fallas pendientes y cuatro fotos negras asociadas a la OT.",
+  "changes": [
+    {
+      "path": "scripts/crear_ot_artificial_neon.py",
+      "action": "created",
+      "summary": "Carga ORM idempotente y verificación de la OT artificial autorizada."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Datos explícitamente artificiales",
+      "rationale": "Solicitud expresa del usuario en Neon. No atribuir datos ficticios a usuarios ni buses reales.",
+      "consequences": "Bus 1 sin FK a flota; descripción y eventos marcados TEST / NO REAL."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Fotos de la OT",
+      "rationale": "El usuario especificó que las imágenes se asocian a la OT y no a las fallas.",
+      "consequences": "Cuatro evidencias con solicitud_id=35 y detalle_id=NULL. PNG negro externo verificado HTTP 200."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -m scripts.crear_ot_artificial_neon",
+      "result": "passed",
+      "evidence": "OT #35, cuatro fallas, cuatro evidencias asociadas a la OT y sin detalle_id."
+    }
+  ],
+  "blockers": []
+}

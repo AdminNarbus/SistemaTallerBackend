@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     APP_CLIENT_SECRET: Optional[str] = None  # Header opcional X-App-Client-Key para bypass o clientes de confianza
 
     # Tiempo real: la primera implementación funciona en una única instancia mediante memoria.
-    REALTIME_ENABLED: bool = False
+    REALTIME_ENABLED: bool = True
     REALTIME_BACKEND: str = "memory"
     REALTIME_HEARTBEAT_SECONDS: int = 25
 

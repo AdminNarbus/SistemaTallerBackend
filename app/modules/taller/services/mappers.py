@@ -136,9 +136,7 @@ def dict_to_solicitud_dto(
         horas_taller_acumuladas_db=r.get("horas_taller_acumuladas"),
         en_taller=bus_en_taller,
     )
-    horas_en_taller_val = (
-        horas_acum if total_vis > 0 else r.get("horas_en_taller")
-    )
+    horas_en_taller_val = horas_acum
 
     return SolicitudDTO(
         id=r["id"],
@@ -192,25 +190,7 @@ def dict_to_solicitud_resumen_dto(
     r: dict, storage: StorageService = storage_service, mecanico_id: Optional[int] = None
 ) -> SolicitudResumenDTO:
     """Convierte una fila del listado de alta velocidad (1 sola consulta SQL) directamente a SolicitudResumenDTO."""
-    estadias_raw = r.get("estadias_json") or []
-    if isinstance(estadias_raw, str):
-        try:
-            estadias_raw = json.loads(estadias_raw)
-        except Exception:
-            estadias_raw = []
-    estadias_dtos = [
-        EstadiaTallerDTO(**e) for e in estadias_raw if isinstance(e, dict)
-    ]
-
-    bus_en_taller = bool(r.get("bus_en_taller", False))
-    horas_acum, total_vis = calcular_telemetria_estadias(
-        estadias=estadias_dtos,
-        horas_taller_acumuladas_db=r.get("horas_taller_acumuladas"),
-        en_taller=bus_en_taller,
-    )
-    horas_en_taller_val = (
-        horas_acum if total_vis > 0 else r.get("horas_en_taller")
-    )
+    horas_desde_creacion = calcular_horas_en_taller(r.get("fecha_creacion"))
 
     fecha_ingreso = r.get("fecha_primer_ingreso_taller") or r.get("fecha_creacion")
 
@@ -251,7 +231,7 @@ def dict_to_solicitud_resumen_dto(
         fecha_ingreso=fecha_ingreso,
         fecha_actualizacion=fecha_actualizacion,
         chofer=r.get("usuario_creador_nombre"),
-        tiempo_taller=horas_en_taller_val,
+        tiempo_taller=horas_desde_creacion,
         numero_fallas=conteo_fallas,
         fallas_asignadas_al_mecanico=conteo_fallas if mecanico_id is not None else 0,
     )
@@ -269,41 +249,10 @@ def orm_to_solicitud_resumen_dto(
             return None
         return getattr(obj, "__dict__", {}).get(attr)
 
-    bus_obj = _get_rel(sol, "bus")
     creador = _get_rel(sol, "creador")
     creador_nombre = creador.nombre_completo if creador else None
 
-    estadias_dtos = []
-    estadias_val = _get_rel(sol, "estadias") or []
-    for est in estadias_val:
-        estadias_dtos.append(
-            EstadiaTallerDTO(
-                id=est.id,
-                solicitud_id=est.solicitud_id,
-                numero_visita=est.numero_visita,
-                fecha_ingreso=est.fecha_ingreso,
-                fecha_salida=est.fecha_salida,
-                horas_estadia=(
-                    float(est.horas_estadia)
-                    if est.horas_estadia is not None
-                    else None
-                ),
-                motivo_salida=est.motivo_salida,
-            )
-        )
-
-    bus_en_taller = bool(bus_obj.en_taller) if bus_obj else False
-    horas_acum, total_vis = calcular_telemetria_estadias(
-        estadias=estadias_dtos,
-        horas_taller_acumuladas_db=getattr(sol, "horas_taller_acumuladas", 0.0),
-        en_taller=bus_en_taller,
-    )
-
-    horas_en_taller_val = (
-        horas_acum
-        if total_vis > 0
-        else calcular_horas_en_taller(sol.fecha_creacion, sol.fecha_cierre)
-    )
+    horas_desde_creacion = calcular_horas_en_taller(sol.fecha_creacion)
 
     fecha_ingreso = getattr(sol, "fecha_primer_ingreso_taller", None) or sol.fecha_creacion
     fecha_actualizacion = getattr(sol, "fecha_actualizacion", None) or getattr(sol, "fecha_creacion", None)
@@ -333,7 +282,7 @@ def orm_to_solicitud_resumen_dto(
         fecha_ingreso=fecha_ingreso,
         fecha_actualizacion=fecha_actualizacion,
         chofer=creador_nombre,
-        tiempo_taller=horas_en_taller_val,
+        tiempo_taller=horas_desde_creacion,
         numero_fallas=conteo_fallas,
         fallas_asignadas_al_mecanico=conteo_fallas if mecanico_id is not None else 0,
     )
@@ -702,11 +651,7 @@ def orm_to_solicitud_dto(
         en_taller=bus_en_taller,
     )
 
-    horas_en_taller_val = (
-        horas_acum
-        if total_vis > 0
-        else calcular_horas_en_taller(sol.fecha_creacion, sol.fecha_cierre)
-    )
+    horas_en_taller_val = horas_acum
 
     return SolicitudDTO(
         id=sol.id,

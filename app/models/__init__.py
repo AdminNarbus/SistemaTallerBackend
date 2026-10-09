@@ -1,5 +1,6 @@
 from app.core.base import Base, TimestampMixin
 from app.modules.taller.models.taller_consolidacion_archivo import TallerConsolidacionArchivo
+from app.modules.taller.models.taller_correccion_visita import TallerCorreccionVisita
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.models.bus import Bus
@@ -20,6 +21,7 @@ from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 from app.modules.taller.models import historical_snapshots  # register insert hooks
 
 __all__ = [
+    "TallerCorreccionVisita",
     "TallerSolicitudEstadoEvento",
     "Base",
     "TimestampMixin",

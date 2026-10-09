@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
@@ -285,9 +285,10 @@ async def test_supervision_service_get_auditoria_aislado():
         "id": 100,
         "n_bus": "500",
         "estado": "EN_REPARACION",
-        "fecha_creacion": datetime(2026, 9, 21, 12, 0, 0),
+        "fecha_creacion": datetime.now(timezone.utc) - timedelta(hours=4.5),
         "usuario_creador_nombre": "Carlos Conductor",
         "horas_en_taller": 4.5,
+        "horas_taller_acumuladas": 4.5,
         "total_fallas": 2,
         "fallas_pendientes": 1,
         "mecanicos": [{"mecanico_nombre": "Juan Pérez", "is_activo": True}],
@@ -641,10 +642,11 @@ async def test_auditoria_solicitudes_mapeo_dict_sin_fecha_asignacion(db_session)
         "foto_url": None,
         "motivo_incompleto_checklist": None,
         "motivo_cierre_parcial": None,
-        "fecha_creacion": datetime.now(),
+        "fecha_creacion": datetime.now(timezone.utc) - timedelta(hours=2.5),
         "fecha_cierre": None,
         "fecha_liberacion": None,
         "horas_en_taller": 2.5,
+        "horas_taller_acumuladas": 2.5,
         "reincidencias_30d": 0,
         "total_fallas": 1,
         "fallas_resueltas": 0,

@@ -123,6 +123,7 @@ async def get_auditoria_buses_taller(
 ):
     """
     Dashboard Auditor para Supervisores/Administradores:
+    En el resumen, tiempo_taller representa las horas desde la creación de la OT hasta ahora.
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
     y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico,

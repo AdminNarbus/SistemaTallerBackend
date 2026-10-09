@@ -48,7 +48,7 @@ class SolicitudCreateDTO(BaseModel):
     detalles: Optional[List[SolicitudDetalleCreateDTO]] = None
     ingreso_inmediato_taller: Optional[bool] = Field(
         None,
-        description="Indica si el bus ingresa inmediatamente al taller físico (bus.en_taller = True). Por defecto True si lo crea un supervisor o admin.",
+        description="Registra un ingreso físico inmediato únicamente cuando se envía True. Si se omite o es False/None, reportar la avería no abre una visita ni marca el bus en taller.",
     )
 
     @model_validator(mode="after")
@@ -124,7 +124,7 @@ class SolicitudResumenDTO(BaseModel):
         None, description="Nombre del conductor/usuario que generó la OT (usuario_creador_nombre)"
     )
     tiempo_taller: Optional[float] = Field(
-        None, description="Tiempo transcurrido en taller en horas (horas_en_taller / horas_taller_acumuladas)"
+        None, description="Antigüedad de la OT en horas desde fecha_creacion hasta ahora. Nombre del campo conservado por compatibilidad con los listados."
     )
     numero_fallas: int = Field(
         0, description="Número de fallas contextual: en pendientes son las disponibles sin resolver, en mis trabajos son las asignadas al mecánico"

@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.core.storage.storage_service import storage_service, StorageService
-from app.modules.auth.constants import RolUsuario
 from app.modules.taller.constants import (
     DEFAULT_PAGE_LIMIT,
     DEFAULT_PAGE_SKIP,
@@ -389,15 +388,9 @@ class SolicitudService:
                 solicitud.bus_id,
             )
 
-        rol_upper = (creador_rol or "").upper().strip()
-        debe_marcar_en_taller = False
-        if dto.ingreso_inmediato_taller is True:
-            debe_marcar_en_taller = True
-        elif dto.ingreso_inmediato_taller is None and rol_upper in [
-            RolUsuario.SUPERVISOR.value,
-            RolUsuario.ADMIN.value,
-        ]:
-            debe_marcar_en_taller = True
+        # Registrar una avería no acredita el ingreso físico del bus, sea cual
+        # sea el rol del reportante. El ingreso inmediato debe ser explícito.
+        debe_marcar_en_taller = dto.ingreso_inmediato_taller is True
 
         estadias_a_procesar: List[TallerSolicitudEstadia] = []
         if es_nueva_ot and debe_marcar_en_taller:

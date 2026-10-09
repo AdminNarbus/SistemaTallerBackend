@@ -1,6 +1,45 @@
 import pytest
+from datetime import datetime, timedelta, timezone
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("estado", ["PENDIENTE", "EN_REPARACION", "LIBERADO", "FINALIZADO"])
+async def test_auditoria_envia_antiguedad_ot_y_ficha_tiempo_real(
+    client, db_session, auth_headers_supervisor, seed_test_data, estado
+):
+    now = datetime.now(timezone.utc)
+    solicitud = TallerSolicitud(
+        n_bus="SUP-EDAD-001", estado=estado,
+        usuario_creador_id=seed_test_data["conductor"].id,
+        fecha_creacion=now - timedelta(hours=72),
+        fecha_cierre=now - timedelta(hours=1) if estado == "FINALIZADO" else None,
+        horas_taller_acumuladas=0.0,
+    )
+    horas_reales = 0.0
+    if estado != "PENDIENTE":
+        abierta = estado == "EN_REPARACION"
+        solicitud.fecha_primer_ingreso_taller = now - timedelta(hours=5)
+        solicitud.estadias = [TallerSolicitudEstadia(
+            numero_visita=1, fecha_ingreso=now - timedelta(hours=5),
+            fecha_salida=None if abierta else now - timedelta(hours=4),
+            horas_estadia=None if abierta else 1.0,
+        )]
+        horas_reales = 5.0 if abierta else 1.0
+    db_session.add(solicitud)
+    await db_session.commit()
+    res = await client.get(
+        "/api/v1/supervision/auditoria/buses-taller?skip=0&limit=20&_revalidar=1791561730993",
+        headers=auth_headers_supervisor,
+    )
+    assert res.status_code == 200
+    resumen = next(row for row in res.json() if row["id"] == solicitud.id)
+    assert resumen["tiempo_taller"] == pytest.approx(72.0, abs=0.1)
+    ficha = await client.get(f"/api/v1/taller/{solicitud.id}", headers=auth_headers_supervisor)
+    assert ficha.status_code == 200
+    assert ficha.json()["horas_en_taller"] == pytest.approx(horas_reales, abs=0.1)
 
 
 @pytest.mark.asyncio

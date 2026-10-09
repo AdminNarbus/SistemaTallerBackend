@@ -16,7 +16,6 @@ from app.modules.taller.dtos import (
     CambiarEstadoSolicitudDTO,
     SolicitudDTO,
     SolicitudResumenDTO,
-    EstadiaTallerDTO,
     AgregarFallaDTO,
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
@@ -70,7 +69,7 @@ class SupervisionService:
                 fecha_ingreso=getattr(item, "fecha_primer_ingreso_taller", None) or item.fecha_creacion,
                 fecha_actualizacion=getattr(item, "fecha_actualizacion", None) or item.fecha_creacion,
                 chofer=item.creador.nombre_completo if getattr(item, "creador", None) else None,
-                tiempo_taller=calcular_horas_en_taller(item.fecha_creacion, item.fecha_cierre),
+                tiempo_taller=calcular_horas_en_taller(item.fecha_creacion),
                 numero_fallas=sum(1 for d in getattr(item, "detalles", []) if not getattr(d, "resuelto", False)),
             )
         return res
@@ -88,27 +87,7 @@ class SupervisionService:
                     detalles_raw = []
             conteo_fallas = sum(1 for d in detalles_raw if not d.get("resuelto"))
 
-        # Cálculo de tiempo neto real en maestranza (idéntico a la lógica del mecánico)
-        estadias_raw = data.get("estadias") or data.get("estadias_json") or []
-        if isinstance(estadias_raw, str):
-            try:
-                estadias_raw = json.loads(estadias_raw)
-            except Exception:
-                estadias_raw = []
-        estadias_dtos = [
-            EstadiaTallerDTO(**e) for e in estadias_raw if isinstance(e, dict)
-        ]
-
-        bus_en_taller = bool(data.get("bus_en_taller", False))
-        horas_acum, total_vis = calcular_telemetria_estadias(
-            estadias=estadias_dtos,
-            horas_taller_acumuladas_db=data.get("horas_taller_acumuladas"),
-            en_taller=bus_en_taller,
-        )
-        tiempo_taller_val = (
-            horas_acum if (total_vis > 0 or data.get("horas_taller_acumuladas") is not None)
-            else data.get("horas_en_taller")
-        )
+        horas_desde_creacion = calcular_horas_en_taller(data.get("fecha_creacion"))
 
         return SolicitudResumenDTO(
             id=data["id"],
@@ -117,7 +96,7 @@ class SupervisionService:
             fecha_ingreso=fecha_ingreso,
             fecha_actualizacion=fecha_actualizacion,
             chofer=data.get("usuario_creador_nombre"),
-            tiempo_taller=tiempo_taller_val,
+            tiempo_taller=horas_desde_creacion,
             numero_fallas=conteo_fallas,
         )
 
@@ -154,6 +133,15 @@ class SupervisionService:
             for d in detalles_raw
         ]
 
+        estadias_raw = data.get("estadias") or data.get("estadias_json") or []
+        if isinstance(estadias_raw, str):
+            estadias_raw = json.loads(estadias_raw)
+        horas_taller, _ = calcular_telemetria_estadias(
+            estadias=estadias_raw,
+            horas_taller_acumuladas_db=data.get("horas_taller_acumuladas"),
+            en_taller=bool(data.get("bus_en_taller", False)),
+        )
+
         return SolicitudAuditoriaDTO(
             id=data["id"],
             n_bus=data.get("n_bus") or "S/N",
@@ -163,7 +151,7 @@ class SupervisionService:
             fecha_liberacion=data.get("fecha_liberacion"),
             usuario_creador_nombre=data.get("usuario_creador_nombre"),
             mecanico_cierre_nombre=data.get("mecanico_cierre_nombre"),
-            horas_en_taller=data.get("horas_en_taller"),
+            horas_en_taller=horas_taller,
             reincidencias_30d=data.get("reincidencias_30d", 0) or 0,
             total_fallas=data.get("total_fallas", 0) or 0,
             fallas_resueltas=data.get("fallas_resueltas", 0) or 0,
@@ -249,9 +237,10 @@ class SupervisionService:
         if getattr(sol, "mecanico_cierre", None):
             mecanico_cierre_nom = f"{sol.mecanico_cierre.nombre} {sol.mecanico_cierre.apellido}".strip()
 
-        horas_taller = getattr(sol, "horas_en_taller", None)
-        if horas_taller is None and sol.fecha_creacion:
-            horas_taller = calcular_horas_en_taller(sol.fecha_creacion, sol.fecha_cierre)
+        horas_taller, _ = calcular_telemetria_estadias(
+            estadias=sol.__dict__.get("estadias") or [],
+            horas_taller_acumuladas_db=getattr(sol, "horas_taller_acumuladas", None),
+        )
 
         return SolicitudAuditoriaDTO(
             id=sol.id,

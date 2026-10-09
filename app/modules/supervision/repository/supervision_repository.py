@@ -544,7 +544,6 @@ class SupervisionRepository:
                            s.estado, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller,
                            COALESCE(s.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
-                           ROUND((EXTRACT(EPOCH FROM (COALESCE(s.fecha_cierre, now()) - s.fecha_creacion)) / 3600)::numeric, 1) as horas_en_taller,
                            COALESCE((
                                SELECT COUNT(*)::int
                                FROM taller_solicitudes s2
@@ -667,7 +666,6 @@ class SupervisionRepository:
                     COALESCE(esa.estadias_json, '[]'::json) as estadias_json,
                     CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
-                    bf.horas_en_taller,
                     bf.reincidencias_30d,
                     COALESCE((
                         SELECT COUNT(*)::int

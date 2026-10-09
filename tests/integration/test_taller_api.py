@@ -444,6 +444,7 @@ async def test_supervisor_crea_solicitud_e_ingreso_taller_endpoint(
         "bus_id": bus.id,
         "n_bus": bus.n_bus,
         "descripcion_general": "Bus derivado a taller por la supervisora",
+        "ingreso_inmediato_taller": True,
         "detalles": [
             {"falla_id": falla1_id, "descripcion_personalizada": "Revisar pérdida de fuerza"}
         ],
@@ -457,7 +458,7 @@ async def test_supervisor_crea_solicitud_e_ingreso_taller_endpoint(
     assert data["bus_id"] == bus.id
     assert len(data["detalles"]) == 1
 
-    # 2. El bus queda automáticamente marcado con en_taller = True en BD
+    # 2. El ingreso físico explícito marca el bus con en_taller = True en BD
     await db_session.refresh(bus)
     assert bus.en_taller is True
 

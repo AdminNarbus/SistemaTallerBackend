@@ -580,7 +580,7 @@ async def test_terminar_avance_aislado_por_mecanico(db_session, seed_test_data):
 
 @pytest.mark.asyncio
 async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_test_data):
-    """Verifica que una solicitud creada por la supervisora marque automáticamente al bus como en_taller = True."""
+    """Un ingreso físico explícito abre una visita aunque la OT siga pendiente."""
     from app.modules.buses.models.bus import Bus
 
     bus = Bus(n_bus="BUS-SUP-1", patente="SUP-001", is_active=True, en_taller=False)
@@ -595,6 +595,7 @@ async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_te
         bus_id=bus.id,
         n_bus=bus.n_bus,
         descripcion_general="Ingreso directo por supervisora",
+        ingreso_inmediato_taller=True,
         detalles=[SolicitudDetalleCreateDTO(falla_id=falla1.id, descripcion_personalizada="Revisión fosa 1")],
     )
 
@@ -608,7 +609,9 @@ async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_te
 
     assert solicitud.bus_id == bus.id
     assert solicitud.estado == "PENDIENTE"
-    # El bus debe haber quedado con en_taller = True automáticamente
+    assert solicitud.total_visitas == 1
+    assert solicitud.fecha_primer_ingreso_taller is not None
+    # El bus queda en taller por el ingreso explícito.
     await db_session.refresh(bus)
     assert bus.en_taller is True
 

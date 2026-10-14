@@ -90,7 +90,8 @@ async def test_check_detalle_resolucion_grupal(db_session, seed_test_data):
         c for c in sol_cargada.comentarios if c.tipo == "RESOLUCION"
     ]
     assert len(bitacora_resolucion) >= 1
-    assert "El equipo [" in bitacora_resolucion[-1].comentario
+    assert " repararon: " in bitacora_resolucion[-1].comentario
+    assert "marcado por" not in bitacora_resolucion[-1].comentario
     assert mecanico1.nombre_completo in bitacora_resolucion[-1].comentario
     assert mecanico2.nombre_completo in bitacora_resolucion[-1].comentario
 
@@ -157,8 +158,7 @@ async def test_check_detalle_incompleta_y_reapertura_grupal(db_session, seed_tes
     sol_incompleta = await taller_service.get_solicitud(db_session, solicitud.id)
     comentarios_avance = [c for c in sol_incompleta.comentarios if c.tipo == "AVANCE"]
     assert len(comentarios_avance) >= 1
-    assert "El equipo [" in comentarios_avance[-1].comentario
-    assert "como INCOMPLETA" in comentarios_avance[-1].comentario
+    assert comentarios_avance[-1].comentario.startswith("Incompleta:")
 
     # 2. Reabrir a PENDIENTE
     res_reapertura = await taller_service.averias_srv.check_detalle(
@@ -178,8 +178,7 @@ async def test_check_detalle_incompleta_y_reapertura_grupal(db_session, seed_tes
     sol_reabierta = await taller_service.get_solicitud(db_session, solicitud.id)
     comentarios_reapertura = [c for c in sol_reabierta.comentarios if c.tipo == "REAPERTURA"]
     assert len(comentarios_reapertura) >= 1
-    assert "El equipo [" in comentarios_reapertura[-1].comentario
-    assert "reabrió la falla" in comentarios_reapertura[-1].comentario
+    assert comentarios_reapertura[-1].comentario.startswith("Reapertura:")
 
 
 @pytest.mark.asyncio
@@ -244,8 +243,8 @@ async def test_resolver_falla_supervisora_con_lista_mecanicos(db_session, seed_t
     assert len(det_cargado.mecanicos_resolvieron) == 2
     bitacora = [c for c in sol_cargada.comentarios if c.tipo == "RESOLUCION"]
     assert len(bitacora) >= 1
-    assert "Supervisora" in bitacora[-1].comentario
-    assert "equipo [" in bitacora[-1].comentario
+    assert supervisor.nombre_completo not in bitacora[-1].comentario
+    assert " repararon: " in bitacora[-1].comentario
     assert mecanico1.nombre_completo in bitacora[-1].comentario
     assert mecanico2.nombre_completo in bitacora[-1].comentario
 

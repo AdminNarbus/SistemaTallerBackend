@@ -439,6 +439,7 @@ class TallerRepository:
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
                                 'fecha_resolucion', d.fecha_resolucion,
+                                'fecha_cambio_estado', d.fecha_cambio_estado,
                                 'mecanicos_asignados', COALESCE((
                                     SELECT json_agg(
                                         json_build_object(
@@ -563,8 +564,9 @@ class TallerRepository:
                                 'usuario_nombre', CONCAT(uc.nombre, ' ', uc.apellido),
                                 'tipo', c.tipo,
                                 'comentario', c.comentario,
-                                'fecha_registro', c.fecha_registro
-                            ) ORDER BY c.fecha_registro ASC
+                                'fecha_registro', c.fecha_registro,
+                                'fecha_evento', c.fecha_evento
+                            ) ORDER BY c.fecha_registro ASC, c.id ASC
                         ) as comentarios_json
                     FROM taller_solicitud_comentarios c
                     JOIN filtered_solicitud fs ON fs.id = c.solicitud_id
@@ -871,6 +873,7 @@ class TallerRepository:
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
                                 'fecha_resolucion', d.fecha_resolucion,
+                                'fecha_cambio_estado', d.fecha_cambio_estado,
                                 'mecanicos_asignados', COALESCE(apd.mecanicos_asignados, '[]'::json)
                             ) ORDER BY d.id
                         ) as detalles_json
@@ -1131,6 +1134,7 @@ class TallerRepository:
                                 'comentario_repuesto', d.comentario_repuesto,
                                 'fecha_creacion', d.fecha_creacion,
                                 'fecha_resolucion', d.fecha_resolucion,
+                                'fecha_cambio_estado', d.fecha_cambio_estado,
                                 'mecanicos_asignados', COALESCE((
                                     SELECT json_agg(
                                         json_build_object(

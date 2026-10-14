@@ -156,8 +156,7 @@ def test_formatear_comentario_cierre_liberar_bus():
         liberar_bus=True,
         comentario_cierre="Trabajos concluidos con éxito",
     )
-    assert "Juan Pérez finalizó los trabajos de la OT y liberó el bus para operaciones." in texto
-    assert "Comentario de cierre: Trabajos concluidos con éxito." in texto
+    assert texto == "Cierre: bus liberado. Trabajos concluidos con éxito"
 
 
 def test_formatear_comentario_cierre_sin_liberar_bus():
@@ -168,9 +167,7 @@ def test_formatear_comentario_cierre_sin_liberar_bus():
         motivo_cierre_parcial="Falta repuesto",
         motivo_incompleto_checklist="Pauta en 80%",
     )
-    assert "Carlos Soto finalizó los trabajos de la OT (el bus permanece en taller)." in texto
-    assert "Motivo cierre parcial: Falta repuesto." in texto
-    assert "Justificación pauta preventiva: Pauta en 80%." in texto
+    assert texto == "Cierre: bus en taller. Falta repuesto. Pauta en 80%"
 
 
 def test_recopilar_archivos_fotos_deduplicacion():
@@ -683,9 +680,9 @@ async def test_supervisor_agrega_falla_sin_autoasignar(db_session, seed_test_dat
     # La supervisora NO debe quedar autoasignada a la avería
     assert len(falla_agregada.mecanicos_asignados) == 0
 
-    # Bitácora registra a la supervisora
+    # La autoría queda en metadatos, sin repetirse en el texto automático.
     comentarios = sol_actualizada.comentarios
-    assert any("Supervisora" in c.comentario for c in comentarios)
+    assert any(c.comentario.startswith("Nueva falla:") and c.usuario_id == supervisor.id for c in comentarios)
 
 
 @pytest.mark.asyncio

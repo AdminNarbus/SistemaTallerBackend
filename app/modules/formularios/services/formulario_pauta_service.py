@@ -100,7 +100,7 @@ class FormularioPautaService:
             solicitud_id=solicitud_id,
             usuario_id=mecanico_id,
             tipo="CHECKLIST",
-            comentario=f"{mec_nom} registró/actualizó {len(dto.respuestas)} ítem(s) de la pauta preventiva",
+            comentario=f"Pauta: {len(dto.respuestas)} ítem(s)",
             fecha_registro=now,
         )
         db.add(comentario_entry)

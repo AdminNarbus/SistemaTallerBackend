@@ -26,6 +26,7 @@ from app.modules.taller.utils import (
     describir_detalle_averia,
 )
 from app.modules.taller.services.mappers import orm_to_solicitud_dto
+from app.modules.taller.services.bitacora_textos import agregar_texto, unir_nombres
 from app.modules.taller.services.estadias_helper import (
     asegurar_ingreso_taller_y_estadia,
     attach_comentario_safe,
@@ -134,15 +135,14 @@ class CuadrillaService:
         fallas_nombres = [describir_detalle_averia(d) for d in (solicitud.detalles or [])]
         if fallas_nombres:
             fallas_str = ", ".join(fallas_nombres)
-            texto_inicio = f"{mec_nom} inició los trabajos de esta OT atendiendo las fallas: {fallas_str}"
+            texto_inicio = f"Inicio: {fallas_str}"
         else:
-            texto_inicio = f"{mec_nom} inició los trabajos de esta OT"
+            texto_inicio = "Inicio"
 
         if colab_nombres:
-            texto_inicio += f", junto al equipo: {', '.join(colab_nombres)}"
+            texto_inicio += f" ({unir_nombres([mec_nom, *colab_nombres])})"
 
-        if dto.comentario_inicial and dto.comentario_inicial.strip():
-            texto_inicio += f". Nota: {dto.comentario_inicial.strip()}"
+        texto_inicio = agregar_texto(texto_inicio, dto.comentario_inicial)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -313,9 +313,7 @@ class CuadrillaService:
             u_mec = await self.repo.get_usuario_by_id(db, mecanico_id)
             mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
 
-        texto_desasig = f"{mec_nom} se retiró de los trabajos de la OT"
-        if comentario and comentario.strip():
-            texto_desasig += f". Motivo: {comentario.strip()}"
+        texto_desasig = agregar_texto("Salida", comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -404,9 +402,7 @@ class CuadrillaService:
             u_usr = await self.repo.get_usuario_by_id(db, usuario_id)
             usr_nom = u_usr.nombre_completo if u_usr else "Usuario"
 
-        texto_liberar = f"{usr_nom} entregó y liberó su turno de trabajo en la OT"
-        if dto.comentario and dto.comentario.strip():
-            texto_liberar += f". Observación: {dto.comentario.strip()}"
+        texto_liberar = agregar_texto("Entrega de turno", dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -587,7 +583,7 @@ class CuadrillaService:
 
         colab_nombres = []
         if dto.colaboradores_ids:
-            for c_id in dto.colaboradores_ids:
+            for c_id in dict.fromkeys(dto.colaboradores_ids):
                 if c_id != mecanico_id:
                     u_c = users_map.get(c_id)
                     if u_c:
@@ -595,15 +591,13 @@ class CuadrillaService:
 
         fallas_nombres = [
             describir_detalle_averia(sol_detalles_map[d_id])
-            for d_id in dto.detalles_ids
+            for d_id in dict.fromkeys(dto.detalles_ids)
             if d_id in sol_detalles_map
         ]
         fallas_str = ", ".join(fallas_nombres) if fallas_nombres else "fallas seleccionadas"
-        colab_str = f", junto a {', '.join(colab_nombres)}" if colab_nombres else ""
+        colab_str = f" ({unir_nombres([mec_nom, *colab_nombres])})" if colab_nombres else ""
 
-        texto_bitacora = f"{mec_nom} inició trabajo en las fallas: {fallas_str}{colab_str}"
-        if dto.comentario and dto.comentario.strip():
-            texto_bitacora += f". Nota: {dto.comentario.strip()}"
+        texto_bitacora = agregar_texto(f"Inicio: {fallas_str}{colab_str}", dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -636,12 +630,15 @@ class CuadrillaService:
         dto: AsignarFallasSupervisoraDTO,
         supervisor_id: int,
     ) -> SolicitudDTO:
-        """Asignación atómica de fallas realizada por la supervisora a un mecánico específico."""
+        """Asigna todas las fallas al grupo y agrega un único comentario al final."""
+        mecanicos_ids = dto.effective_mecanicos_ids
+        if not mecanicos_ids or any(m_id <= 0 for m_id in mecanicos_ids):
+            raise BusinessRuleException("Debe indicar al menos un mecánico válido para asignar")
         logger.info(
-            "[MANTENCION] Supervisora asignando fallas | solicitud_id=%s, supervisor_id=%s, mecanico_id=%s, fallas=%s",
+            "[MANTENCION] Supervisora asignando fallas | solicitud_id=%s, supervisor_id=%s, mecanicos_ids=%s, fallas=%s",
             solicitud_id,
             supervisor_id,
-            dto.mecanico_id,
+            mecanicos_ids,
             dto.detalles_ids,
         )
         await self.repo.lock_solicitud_estado(db, solicitud_id)
@@ -661,77 +658,67 @@ class CuadrillaService:
                 )
 
         now = datetime.now(timezone.utc)
-        asignadas_count = 0
-
         from app.modules.auth.repository.user_repository import user_repository
 
         asigs_exist = await self.repo.get_asignaciones_activas(
             db,
             solicitud_id=solicitud_id,
             detalles_ids=dto.detalles_ids,
-            mecanicos_ids=[dto.mecanico_id],
+            mecanicos_ids=mecanicos_ids,
         )
         users_map = await user_repository.get_by_ids_map(
-            db, [supervisor_id, dto.mecanico_id]
+            db, list(dict.fromkeys([supervisor_id, *mecanicos_ids]))
         )
-        presencia = await self.repo.get_presencia_activa_individual(
-            db, solicitud_id, dto.mecanico_id
+        for m_id in mecanicos_ids:
+            mecanico = users_map.get(m_id)
+            if not mecanico or not mecanico.is_active:
+                raise BusinessRuleException("El mecánico indicado no existe o se encuentra inactivo")
+        presencias_existentes = await self.repo.get_presencias_activas_mecanicos(
+            db, solicitud_id=solicitud_id, mecanicos_ids=mecanicos_ids
         )
-        activas_existentes = {a.detalle_id for a in asigs_exist}
+        activas_existentes = {(a.mecanico_id, a.detalle_id) for a in asigs_exist}
 
         u_sup = users_map.get(supervisor_id)
         sup_nom = u_sup.nombre_completo if u_sup else "Supervisión"
 
-        u_mec = users_map.get(dto.mecanico_id)
-        mec_nom = u_mec.nombre_completo if u_mec else "Mecánico"
-
-        for d_id in dto.detalles_ids:
-            if d_id in activas_existentes:
-                continue
-
-            nueva_asig = TallerAsignacionFalla(
-                solicitud_id=solicitud_id,
-                detalle_id=d_id,
-                mecanico_id=dto.mecanico_id,
-                asignado_por_id=supervisor_id,
-                origen="SUPERVISOR",
-                is_activo=True,
-                fecha_asignacion=now,
-                resuelto_en_esta_asignacion=False,
-            )
-            if u_mec:
+        for m_id in mecanicos_ids:
+            u_mec = users_map[m_id]
+            for d_id in dict.fromkeys(dto.detalles_ids):
+                if (m_id, d_id) in activas_existentes:
+                    continue
+                nueva_asig = TallerAsignacionFalla(
+                    solicitud_id=solicitud_id,
+                    detalle_id=d_id,
+                    mecanico_id=m_id,
+                    asignado_por_id=supervisor_id,
+                    origen="SUPERVISOR",
+                    is_activo=True,
+                    fecha_asignacion=now,
+                    resuelto_en_esta_asignacion=False,
+                )
                 nueva_asig.mecanico = u_mec
-            if u_sup:
-                nueva_asig.asignado_por = u_sup
-            self.repo.add_asignacion_falla(db, nueva_asig)
-            if d_id in sol_detalles_map:
-                if (
-                    not hasattr(sol_detalles_map[d_id], "asignaciones")
-                    or sol_detalles_map[d_id].asignaciones is None
-                ):
-                    sol_detalles_map[d_id].asignaciones = []
-                sol_detalles_map[d_id].asignaciones.append(nueva_asig)
-            if (
-                not hasattr(solicitud, "asignaciones_fallas")
-                or solicitud.asignaciones_fallas is None
-            ):
-                solicitud.asignaciones_fallas = []
-            solicitud.asignaciones_fallas.append(nueva_asig)
-            asignadas_count += 1
-
-        if not presencia:
-            nueva_presencia = TallerSolicitudMecanico(
-                solicitud_id=solicitud_id,
-                mecanico_id=dto.mecanico_id,
-                asignado_por_id=supervisor_id,
-                es_lider_responsable=False,
-                is_activo=True,
-                fecha_asignacion=now,
-            )
-            if u_mec:
+                if u_sup:
+                    nueva_asig.asignado_por = u_sup
+                self.repo.add_asignacion_falla(db, nueva_asig)
+                detalle = sol_detalles_map[d_id]
+                if not getattr(detalle, "asignaciones", None):
+                    detalle.asignaciones = []
+                detalle.asignaciones.append(nueva_asig)
+                if not getattr(solicitud, "asignaciones_fallas", None):
+                    solicitud.asignaciones_fallas = []
+                solicitud.asignaciones_fallas.append(nueva_asig)
+            if m_id not in presencias_existentes:
+                nueva_presencia = TallerSolicitudMecanico(
+                    solicitud_id=solicitud_id,
+                    mecanico_id=m_id,
+                    asignado_por_id=supervisor_id,
+                    es_lider_responsable=False,
+                    is_activo=True,
+                    fecha_asignacion=now,
+                )
                 nueva_presencia.mecanico = u_mec
-            self.repo.add_mecanico(db, nueva_presencia)
-            attach_mecanico_safe(solicitud, nueva_presencia)
+                self.repo.add_mecanico(db, nueva_presencia)
+                attach_mecanico_safe(solicitud, nueva_presencia)
 
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,
@@ -743,14 +730,13 @@ class CuadrillaService:
 
         fallas_nombres = [
             describir_detalle_averia(sol_detalles_map[d_id])
-            for d_id in dto.detalles_ids
+            for d_id in dict.fromkeys(dto.detalles_ids)
             if d_id in sol_detalles_map
         ]
         fallas_str = ", ".join(fallas_nombres) if fallas_nombres else "fallas indicadas"
 
-        texto_bitacora = f"{sup_nom} asignó las fallas [{fallas_str}] al mecánico {mec_nom}"
-        if dto.comentario and dto.comentario.strip():
-            texto_bitacora += f". Nota: {dto.comentario.strip()}"
+        nombres = unir_nombres(users_map[m_id].nombre_completo for m_id in mecanicos_ids)
+        texto_bitacora = agregar_texto(f"Asignación: {nombres} — {fallas_str}", dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -961,15 +947,14 @@ class CuadrillaService:
         fallas_str = ", ".join(fallas_unicas)
 
         if len(mecanicos_involucrados_ids) > 1:
-            texto_bitacora = f"{ejecutor_nombre} finalizó avance grupal para el equipo [{', '.join(mecanicos_nombres)}]"
+            texto_bitacora = f"Avance: {unir_nombres(mecanicos_nombres)}"
         else:
-            texto_bitacora = f"{ejecutor_nombre} finalizó avance de trabajo"
+            texto_bitacora = "Avance"
 
         if fallas_str:
-            texto_bitacora += f" en las fallas: {fallas_str}"
+            texto_bitacora += f": {fallas_str}"
 
-        if dto.comentario and dto.comentario.strip():
-            texto_bitacora += f": {dto.comentario.strip()}"
+        texto_bitacora = agregar_texto(texto_bitacora, dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,

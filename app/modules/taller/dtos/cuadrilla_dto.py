@@ -35,10 +35,16 @@ class AutoasignarFallasDTO(BaseModel):
 
 
 class AsignarFallasSupervisoraDTO(BaseModel):
-    """Payload para asignación directa de averías a un mecánico por supervisión."""
-    mecanico_id: int
+    """Una asignación grupal; mecanico_id conserva el contrato singular anterior."""
+    mecanico_id: Optional[int] = None
+    mecanicos_ids: Optional[List[int]] = None
     detalles_ids: List[int]
     comentario: Optional[str] = None
+
+    @property
+    def effective_mecanicos_ids(self) -> List[int]:
+        ids = self.mecanicos_ids or ([self.mecanico_id] if self.mecanico_id else [])
+        return list(dict.fromkeys(ids))
 
 
 class TerminarAvanceDTO(BaseModel):

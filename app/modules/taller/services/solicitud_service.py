@@ -524,9 +524,9 @@ class SolicitudService:
                 )
             if not es_nueva_ot:
                 descripcion = (dto.descripcion_general or "").strip()
-                resumen = f"{creador_nombre or 'Usuario'} reportó {len(detalles_a_procesar)} nueva(s) falla(s)."
+                resumen = f"Reporte: {len(detalles_a_procesar)} nueva(s) falla(s)."
                 if descripcion:
-                    resumen = f"{resumen} Detalle: {descripcion}"
+                    resumen = f"{resumen} {descripcion}"
                 self.repo.add_comentario(
                     db,
                     TallerSolicitudComentario(

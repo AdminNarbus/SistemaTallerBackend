@@ -406,7 +406,7 @@ def test_supervision_utils_formatear_comentario_cambio_estado():
         nuevo_estado="EN_REPARACION",
         motivo="Ingreso urgente a fosa 2",
     )
-    assert texto_con_motivo == "Supervisora Laura Rojas cambió el estado de REPORTADO a EN_REPARACION. Motivo: Ingreso urgente a fosa 2"
+    assert texto_con_motivo == "REPORTADO → EN REPARACION. Ingreso urgente a fosa 2"
 
     # Sin motivo
     texto_sin_motivo = formatear_comentario_cambio_estado(
@@ -415,7 +415,7 @@ def test_supervision_utils_formatear_comentario_cambio_estado():
         nuevo_estado="PENDIENTE",
         motivo=None,
     )
-    assert texto_sin_motivo == "Supervisora Laura Rojas cambió el estado de EN_REPARACION a PENDIENTE."
+    assert texto_sin_motivo == "EN REPARACION → PENDIENTE"
 
 
 @pytest.mark.asyncio

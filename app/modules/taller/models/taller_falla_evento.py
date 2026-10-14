@@ -43,6 +43,9 @@ class TallerFallaEvento(Base):
     fecha_evento: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
+    fecha_registro: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
+    )
 
     detalle: Mapped["TallerSolicitudDetalle"] = relationship(
         "TallerSolicitudDetalle", back_populates="eventos"

@@ -109,9 +109,8 @@ def formatear_comentario_cambio_estado(
     nuevo_estado: str,
     motivo: Optional[str] = None,
 ) -> str:
-    """Construye el texto descriptivo canónico para la bitácora inmutable al cambiar el estado de una OT."""
-    base = f"Supervisora {supervisor_nombre} cambió el estado de {estado_anterior} a {nuevo_estado}"
-    if motivo and motivo.strip():
-        return f"{base}. Motivo: {motivo.strip()}"
-    return f"{base}."
+    """Formato breve; supervisor_nombre conserva compatibilidad de llamadas."""
+    from app.modules.taller.services.bitacora_textos import agregar_texto, formatear_cambio_estado
+
+    return agregar_texto(formatear_cambio_estado(estado_anterior, nuevo_estado), motivo)
 

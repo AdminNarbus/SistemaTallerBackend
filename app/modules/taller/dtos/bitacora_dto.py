@@ -38,6 +38,7 @@ class SolicitudComentarioDTO(BaseModel):
     tipo: str
     comentario: str
     fecha_registro: datetime
+    fecha_evento: Optional[datetime] = None
     adjuntos: List[ComentarioAdjuntoDTO] = []
 
 

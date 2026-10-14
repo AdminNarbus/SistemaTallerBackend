@@ -191,13 +191,13 @@ async def asignar_fallas_supervisora(
     db: AsyncSession = SessionDep,
 ):
     """
-    Asignación directa de fallas por parte de la supervisora a un mecánico específico.
+    Asignación directa de fallas a uno o varios mecánicos con un solo comentario.
     Permite co-responsabilidad si la falla ya tenía asignación previa.
     """
     logger.info(
-        "[SUPERVISION] Supervisora %s asignando fallas a mecanico_id=%s en solicitud_id=%s",
+        "[SUPERVISION] Supervisora %s asignando fallas a mecanicos_ids=%s en solicitud_id=%s",
         current_user.id,
-        dto.mecanico_id,
+        dto.effective_mecanicos_ids,
         id,
     )
     return await supervision_service.asignar_fallas_supervisora(

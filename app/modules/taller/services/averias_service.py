@@ -25,6 +25,7 @@ from app.modules.taller.repository.taller_repository import (
 )
 from app.modules.taller.utils import describir_detalle_averia
 from app.modules.taller.services.mappers import orm_to_solicitud_dto
+from app.modules.taller.services.bitacora_textos import agregar_texto, formatear_reparacion
 from app.modules.taller.services.estadias_helper import (
     asegurar_ingreso_taller_y_estadia,
     attach_comentario_safe,
@@ -290,15 +291,13 @@ class AveriasService:
 
         if es_supervisor:
             if u_resolutor:
-                texto_bitacora = f"Supervisora {mec_nombre} agregó la avería '{falla_txt}' resuelta por el mecánico {u_resolutor.nombre_completo}"
+                texto_bitacora = formatear_reparacion(falla_txt, [u_resolutor.nombre_completo])
             elif u_asig:
-                texto_bitacora = f"Supervisora {mec_nombre} agregó una nueva avería: '{falla_txt}' (asignada a {u_asig.nombre_completo})"
+                texto_bitacora = f"Nueva falla: {falla_txt}. Asignación: {u_asig.nombre_completo}"
             else:
-                texto_bitacora = f"Supervisora {mec_nombre} agregó una nueva avería a la orden: '{falla_txt}'"
+                texto_bitacora = f"Nueva falla: {falla_txt}"
         else:
-            texto_bitacora = f"{mec_nombre} detectó y agregó una nueva avería a la orden: '{falla_txt}'"
-            if dto.autoasignar:
-                texto_bitacora += f" (autoasignada a {mec_nombre})"
+            texto_bitacora = f"Nueva falla: {falla_txt}"
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -445,16 +444,16 @@ class AveriasService:
 
             if len(nombres_equipo) > 1:
                 resolutor_str = ", ".join(nombres_equipo)
-                texto_check = f"El equipo [{resolutor_str}] completó la reparación de la falla: '{falla_nom}' (marcado por {actor_nom})"
+                texto_check = formatear_reparacion(falla_nom, nombres_equipo)
                 resolutor_nom = resolutor_str
             elif len(nombres_equipo) == 1:
                 resolutor_nom = nombres_equipo[0]
                 if resolutor_id != mecanico_id:
-                    texto_check = f"{actor_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {resolutor_nom}"
+                    texto_check = formatear_reparacion(falla_nom, [resolutor_nom])
                 else:
-                    texto_check = f"{resolutor_nom} completó la reparación de la falla: '{falla_nom}'"
+                    texto_check = formatear_reparacion(falla_nom, [])
             else:
-                texto_check = f"{actor_nom} completó la reparación de la falla: '{falla_nom}'"
+                texto_check = formatear_reparacion(falla_nom, [])
                 mecanicos_resolvieron_dtos.append(
                     MecanicoResumenDTO(id=mecanico_id, nombre=actor_nom)
                 )
@@ -470,15 +469,7 @@ class AveriasService:
             motivo_limpio = (motivo_incompleto or "").strip() or None
             detalle_target.motivo_incompleto = motivo_limpio
 
-            if len(nombres_equipo) > 1:
-                texto_check = f"El equipo [{', '.join(nombres_equipo)}] marcó la falla '{falla_nom}' como INCOMPLETA"
-                if motivo_limpio:
-                    texto_check += f" - Motivo: {motivo_limpio}"
-                texto_check += f" (registrado por {actor_nom})"
-            else:
-                texto_check = f"{actor_nom} marcó la falla '{falla_nom}' como INCOMPLETA"
-                if motivo_limpio:
-                    texto_check += f" - Motivo: {motivo_limpio}"
+            texto_check = agregar_texto(f"Incompleta: {falla_nom}", motivo_limpio)
             tipo_check = "AVANCE"
             resolutor_nom = None
             mecanicos_resolvieron_dtos = []
@@ -492,10 +483,7 @@ class AveriasService:
             detalle_target.fecha_resolucion = None
             detalle_target.motivo_incompleto = None
 
-            if len(nombres_equipo) > 1:
-                texto_check = f"El equipo [{', '.join(nombres_equipo)}] reabrió la falla: '{falla_nom}' (registrado por {actor_nom})"
-            else:
-                texto_check = f"{actor_nom} reabrió la falla: '{falla_nom}'"
+            texto_check = f"Reapertura: {falla_nom}"
             tipo_check = "REAPERTURA"
             resolutor_nom = None
             mecanicos_resolvieron_dtos = []
@@ -505,7 +493,7 @@ class AveriasService:
             target_estado == EstadoFalla.INCOMPLETA
             and observacion == (detalle_target.motivo_incompleto or "")
         ):
-            texto_check += f" - Observación: {observacion}"
+            texto_check = agregar_texto(texto_check, observacion)
 
         db.add(detalle_target)
 
@@ -612,12 +600,10 @@ class AveriasService:
 
         falla_nom = describir_detalle_averia(detalle)
         estado_str = (
-            "FALTA DE REPUESTO" if dto.falta_repuesto else "REPUESTO DISPONIBLE"
+            "Falta repuesto" if dto.falta_repuesto else "Repuesto disponible"
         )
 
-        texto = f"{mec_nom} reportó {estado_str} para la falla: '{falla_nom}'"
-        if dto.comentario and dto.comentario.strip():
-            texto += f" - Detalle: {dto.comentario.strip()}"
+        texto = agregar_texto(f"{estado_str}: {falla_nom}", dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
@@ -706,6 +692,7 @@ class AveriasService:
             )
 
         now = datetime.now(timezone.utc)
+        fecha_cambio_estado = dto.fecha_cambio_estado or now
         estado_anterior = detalle_target.estado
         falla_nom = describir_detalle_averia(detalle_target)
 
@@ -718,6 +705,7 @@ class AveriasService:
         is_resuelta = target_estado == EstadoFalla.RESUELTA
         detalle_target.estado = target_estado.value
         detalle_target.resuelto = is_resuelta
+        detalle_target.fecha_cambio_estado = fecha_cambio_estado
 
         mec_nom = None
 
@@ -790,7 +778,7 @@ class AveriasService:
                 else (asigs_activas[0].mecanico_id if asigs_activas else None)
             )
             detalle_target.mecanico_resolvio_id = resolutor_id_principal
-            detalle_target.fecha_resolucion = now
+            detalle_target.fecha_resolucion = fecha_cambio_estado
             detalle_target.motivo_incompleto = None
             if primer_mec_obj and resolutor_id_principal == primer_mec_obj.id:
                 detalle_target.mecanico_resolvio = primer_mec_obj
@@ -798,16 +786,15 @@ class AveriasService:
 
             if len(nombres_equipo) > 1:
                 mec_nom = ", ".join(nombres_equipo)
-                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el equipo [{mec_nom}]"
+                texto_check = formatear_reparacion(falla_nom, nombres_equipo)
             elif len(nombres_equipo) == 1:
                 mec_nom = nombres_equipo[0]
-                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}' por el mecánico {mec_nom}"
+                texto_check = formatear_reparacion(falla_nom, nombres_equipo)
             else:
                 mec_nom = "Mecánico"
-                texto_check = f"Supervisora {sup_nom} registró la reparación de la falla '{falla_nom}'"
+                texto_check = formatear_reparacion(falla_nom, [])
 
-            if dto.comentario and dto.comentario.strip():
-                texto_check += f" - Observación: {dto.comentario.strip()}"
+            texto_check = agregar_texto(texto_check, dto.comentario)
             tipo_check = "RESOLUCION"
 
         elif target_estado == EstadoFalla.INCOMPLETA:
@@ -816,17 +803,13 @@ class AveriasService:
 
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
-            detalle_target.fecha_resolucion = None
             motivo_limpio = (dto.motivo_incompleto or dto.comentario or "").strip() or None
             detalle_target.motivo_incompleto = motivo_limpio
             db.add(detalle_target)
 
-            if len(nombres_equipo) > 1:
-                texto_check = f"Supervisora {sup_nom} marcó la falla '{falla_nom}' del equipo [{', '.join(nombres_equipo)}] como INCOMPLETA"
-            else:
-                texto_check = f"Supervisora {sup_nom} marcó la falla '{falla_nom}' como INCOMPLETA"
-            if motivo_limpio:
-                texto_check += f" - Motivo: {motivo_limpio}"
+            texto_check = agregar_texto(f"Incompleta: {falla_nom}", motivo_limpio)
+            if dto.comentario and dto.comentario.strip() != motivo_limpio:
+                texto_check = agregar_texto(texto_check, dto.comentario)
             tipo_check = "AVANCE"
             mec_nom = None
             mecanicos_resolvieron_dtos = []
@@ -837,13 +820,10 @@ class AveriasService:
 
             detalle_target.mecanico_resolvio_id = None
             detalle_target.mecanico_resolvio = None
-            detalle_target.fecha_resolucion = None
             detalle_target.motivo_incompleto = None
             db.add(detalle_target)
 
-            texto_check = f"Supervisora {sup_nom} reabrió la falla '{falla_nom}' (estado PENDIENTE)"
-            if dto.comentario and dto.comentario.strip():
-                texto_check += f" - Observación: {dto.comentario.strip()}"
+            texto_check = agregar_texto(f"Reapertura: {falla_nom}", dto.comentario)
             tipo_check = "REAPERTURA"
             mec_nom = None
             mecanicos_resolvieron_dtos = []
@@ -854,6 +834,7 @@ class AveriasService:
             tipo=tipo_check,
             comentario=texto_check,
             fecha_registro=now,
+            fecha_evento=fecha_cambio_estado,
         )
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.touch_fecha_actualizacion(db, solicitud_id, now)
@@ -879,7 +860,7 @@ class AveriasService:
             actor_nombre=sup_nom,
             estado_anterior=estado_anterior,
             estado_nuevo=detalle_target.estado,
-            fecha_evento=now,
+            fecha_evento=fecha_cambio_estado,
             comentario=dto.comentario or detalle_target.motivo_incompleto,
             mecanicos_resolutores=mecanicos_resolvieron_dtos if is_resuelta else [],
         )
@@ -897,6 +878,8 @@ class AveriasService:
             mecanicos_resolvieron=mecanicos_resolvieron_dtos if is_resuelta else [],
             comentario_repuesto=getattr(detalle_target, "comentario_repuesto", None),
             fecha_resolucion=detalle_target.fecha_resolucion,
+            fecha_cambio_estado=detalle_target.fecha_cambio_estado,
+            fecha_registro=now,
         )
 
 

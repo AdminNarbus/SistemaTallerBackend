@@ -40,6 +40,8 @@ class TallerSolicitudComentario(Base):
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Fecha efectiva del evento cuando el comentario registra un cambio de estado.
+    fecha_evento: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relaciones
     solicitud: Mapped["TallerSolicitud"] = relationship("TallerSolicitud", back_populates="comentarios")

@@ -241,7 +241,7 @@ async def test_terminar_avance_grupal_cronometrado(db_session, seed_test_data):
     # 6. Validar que la bitácora registra el avance grupal
     ultimo_comentario = sol_fin_avance.comentarios[-1]
     assert ultimo_comentario.tipo == "ENTREGA_TURNO"
-    assert "avance grupal" in ultimo_comentario.comentario
+    assert ultimo_comentario.comentario.startswith("Avance:")
     assert "Pausa de almuerzo" in ultimo_comentario.comentario
 
     # 7. Validar que NO aparece en mis_trabajos y SÍ aparece en pendientes

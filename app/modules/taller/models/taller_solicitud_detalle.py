@@ -63,6 +63,9 @@ class TallerSolicitudDetalle(Base):
     fecha_resolucion: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    fecha_cambio_estado: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     fecha_reporte: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )

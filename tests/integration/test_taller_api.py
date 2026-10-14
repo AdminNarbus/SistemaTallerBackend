@@ -238,7 +238,7 @@ async def test_mecanico_agregar_falla_solicitud(
     assert nueva_falla["mecanicos_asignados"][0]["id"] == mecanico1_id
 
     # Verificar que en comentarios de bitácora quedó registrada la detección
-    assert any("detectó y agregó una nueva avería" in c["comentario"] for c in data["comentarios"])
+    assert any(c["comentario"].startswith("Nueva falla:") for c in data["comentarios"])
 
 
 @pytest.mark.asyncio

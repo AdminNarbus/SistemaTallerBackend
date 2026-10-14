@@ -338,13 +338,12 @@ class SupervisionService:
         supervisor_id: int,
     ) -> SolicitudDTO:
         """
-        Caso de uso de supervisión: Asignación directa de fallas por parte de la supervisora
-        a un mecánico específico. Coordina con TallerService para la ejecución de la regla de taller.
+        Asignación de fallas al grupo seleccionado, coordinada con TallerService.
         """
         logger.info(
-            "[SUPERVISION_SERVICE] Asignando fallas a mecánico | supervisor_id=%s | mecanico_id=%s | solicitud_id=%s",
+            "[SUPERVISION_SERVICE] Asignando fallas | supervisor_id=%s | mecanicos_ids=%s | solicitud_id=%s",
             supervisor_id,
-            dto.mecanico_id,
+            dto.effective_mecanicos_ids,
             solicitud_id,
         )
         return await self.mantencion.asignar_fallas_supervisora(

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 124,
+  "id": "AV-0124",
+  "timestamp": "2026-10-13T19:57:34Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BITACORA-BREVE-1",
+    "name": "Comentarios breves y asignación grupal con comentario único",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Simplifica los comentarios automáticos de OT, omite el autor del cuerpo y adjunta las notas directamente. La asignación de supervisión admite mecanicos_ids y genera un único comentario al terminar los bucles.",
+  "scope": {
+    "planned": [
+      "Reducir todos los textos automáticos al contenido esencial.",
+      "Asignar varios mecánicos en una acción y registrar un único mensaje."
+    ],
+    "completed": [
+      "Textos breves de inicio, asignación, salida, turno, avance, fallas, repuestos, pauta, cierre y estado.",
+      "Entrada grupal compatible con mecanico_id singular; deduplicación de IDs y validación previa del grupo.",
+      "Comentario de asignación único fuera de los bucles de mecánicos y fallas.",
+      "Pruebas de regresión y guía de contrato para el frontend."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Editar el frontend de otro repositorio.",
+      "Reescribir comentarios históricos o desplegar cambios.",
+      "Corregir la pérdida de zona horaria de SQLite en pruebas de fecha efectiva."
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/bitacora_textos.py",
+      "action": "created",
+      "summary": "Composición breve de notas, participantes, reparación y transiciones."
+    },
+    {
+      "path": "app/modules/taller/dtos/cuadrilla_dto.py",
+      "action": "modified",
+      "summary": "mecanicos_ids deduplicados, con compatibilidad del campo singular."
+    },
+    {
+      "path": "app/modules/taller/services/cuadrilla_service.py",
+      "action": "modified",
+      "summary": "Asignación grupal con validación anterior a escrituras y un comentario final; mensajes breves de cuadrilla."
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Simplificación de mensajes de fallas y repuestos, preservando cambios locales anteriores de fechas."
+    },
+    {
+      "path": "app/modules/taller/services/cierre_service.py",
+      "action": "modified",
+      "summary": "Mensaje de transición breve sin repetir autor."
+    },
+    {
+      "path": "app/modules/taller/utils.py",
+      "action": "modified",
+      "summary": "Cierre breve con notas sin prefijos."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Reporte agregado sin autor."
+    },
+    {
+      "path": "app/modules/formularios/services/formulario_pauta_service.py",
+      "action": "modified",
+      "summary": "Resumen breve de pauta."
+    },
+    {
+      "path": "app/modules/supervision/utils.py",
+      "action": "modified",
+      "summary": "Usa el formato común de transición."
+    },
+    {
+      "path": "app/modules/taller/api/cuadrilla_router.py",
+      "action": "modified",
+      "summary": "Documentación y logging de entrada plural."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Documentación y logging de entrada plural."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Logging del grupo completo y documentación del caso de uso."
+    },
+    {
+      "path": "tests/unit/test_asignacion_grupal_bitacora.py",
+      "action": "created",
+      "summary": "Asignaciones/presencias únicas, comentario único, validación previa y compatibilidad singular."
+    },
+    {
+      "path": "tests/integration/test_asignacion_grupal_bitacora_api.py",
+      "action": "created",
+      "summary": "Pruebas de ambos endpoints grupales y notas directas de tres estados de falla."
+    },
+    {
+      "path": "tests/unit",
+      "action": "modified",
+      "summary": "Actualiza expectativas de mensajes en cinco archivos de pruebas."
+    },
+    {
+      "path": "tests/integration/test_supervision_api.py",
+      "action": "modified",
+      "summary": "Actualiza dos expectativas de textos, preservando pruebas de fechas existentes."
+    },
+    {
+      "path": "tests/integration/test_taller_api.py",
+      "action": "modified",
+      "summary": "Actualiza expectativa del comentario de nueva avería."
+    },
+    {
+      "path": "trazabilidad/GUIA_COMENTARIOS_BREVES_Y_ASIGNACION_GRUPAL.md",
+      "action": "created",
+      "summary": "Contrato grupal y catálogo actual de textos."
+    },
+    {
+      "path": "trazabilidad/INFORME_COMENTARIOS_AUTOMATICOS_OT.md",
+      "action": "modified",
+      "summary": "Identifica el informe anterior como revisión histórica y enlaza la guía vigente."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Autor en metadatos",
+      "rationale": "La interfaz ya puede mostrar nombre, tipo y hora de la acción.",
+      "consequences": "Los nuevos comentarios omiten el actor y los prefijos de notas; se conservan destinatarios y resolutores cuando aportan contexto."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Una petición para la selección múltiple",
+      "rationale": "El servicio anterior recibía un único mecánico por petición y ya creaba el comentario fuera del bucle de fallas.",
+      "consequences": "mecanicos_ids permite asignar todo el grupo y añadir el mensaje una sola vez al final. El frontend debe enviar una sola petición."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar historia y cambios locales previos",
+      "rationale": "La tarea ajusta la generación futura de textos sin modificar datos ni la fecha efectiva.",
+      "consequences": "Sin migración ni reescritura histórica; los campos y cambios locales de fecha permanecen."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_asignacion_grupal_bitacora.py tests/integration/test_asignacion_grupal_bitacora_api.py -q --tb=short (primera ejecución, antes de añadir seis casos de estados)",
+      "result": "passed",
+      "evidence": "7 passed in 1.42s. SQLite en memoria, dev_local, ejecución fuera del aislamiento de Windows."
+    },
+    {
+      "command": "Suite local de once archivos existentes (primera pasada amplia)",
+      "result": "failed",
+      "evidence": "105 passed y 7 failed: una expectativa antigua de texto actualizada después; seis fallos de fecha efectiva por comparar datetime naive recuperado de SQLite con UTC aware."
+    },
+    {
+      "command": "pytest tests/integration/test_supervision_api.py::test_supervision_fecha_cambio_estado_json_y_multipart -q --tb=short --show-capture=no",
+      "result": "failed",
+      "evidence": "Seis fallos en línea 58: la fecha recuperada desde SQLite no incluye zona horaria. No se modificó esta lógica."
+    },
+    {
+      "command": "pytest tests/unit/test_asignacion_grupal_bitacora.py tests/integration/test_asignacion_grupal_bitacora_api.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_resolucion_grupal_fallas.py tests/unit/test_taller_service.py tests/unit/test_supervision_service.py tests/unit/test_duracion_y_autoasignacion_colaborativa.py tests/integration/test_supervision_api.py tests/integration/test_taller_api.py tests/integration/test_fase3_asignacion_atomica.py tests/integration/test_historial_estados_ot.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/integration/test_ciclo_ot_unico_y_trazabilidad.py -k 'not test_supervision_fecha_cambio_estado_json_y_multipart' -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "119 passed, 6 deselected, 1 warning in 43.52s. Incluye trece casos nuevos de regresión."
+    },
+    {
+      "command": "git diff --check y análisis AST de archivos Python modificados/nuevos",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace ni sintaxis."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar en el frontend una única petición con mecanicos_ids para la selección grupal.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "64b048c773688d334155005fb46d5d6a9d24d54c",
+    "dirty": true
+  },
+  "notes": [
+    "Sin despliegue ni consultas a producción.",
+    "El bucle asíncrono de Windows se detuvo dentro del aislamiento. La misma prueba fuera de él completó usando la base SQLite en memoria de conftest.",
+    "Las seis pruebas excluidas se ejecutaron y diagnosticaron explícitamente; no se oculta su fallo en la pasada amplia."
+  ]
+}

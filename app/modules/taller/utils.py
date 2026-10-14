@@ -116,18 +116,16 @@ def formatear_comentario_cierre(
     motivo_cierre_parcial: Optional[str] = None,
     motivo_incompleto_checklist: Optional[str] = None,
 ) -> str:
-    """Construye el texto descriptivo canónico para la bitácora de cierre de una orden."""
-    if liberar_bus:
-        texto = f"{mecanico_nombre} finalizó los trabajos de la OT y liberó el bus para operaciones."
-    else:
-        texto = f"{mecanico_nombre} finalizó los trabajos de la OT (el bus permanece en taller)."
+    """Resume la salida del bus y las notas; el autor está en los metadatos."""
+    from app.modules.taller.services.bitacora_textos import agregar_texto
 
-    if comentario_cierre and comentario_cierre.strip():
-        texto += f" Comentario de cierre: {comentario_cierre.strip()}."
-    if motivo_cierre_parcial:
-        texto += f" Motivo cierre parcial: {motivo_cierre_parcial}."
-    if motivo_incompleto_checklist:
-        texto += f" Justificación pauta preventiva: {motivo_incompleto_checklist}."
+    if liberar_bus:
+        texto = "Cierre: bus liberado"
+    else:
+        texto = "Cierre: bus en taller"
+
+    for nota in dict.fromkeys((comentario_cierre, motivo_cierre_parcial, motivo_incompleto_checklist)):
+        texto = agregar_texto(texto, nota)
 
     return texto
 

@@ -19,9 +19,9 @@ from app.modules.taller.dtos import (
 async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_data):
     """
     Verifica que:
-    1. Iniciar OT (tomar_trabajo) añade comentario con nombre de mecánico y fallas de la OT.
+    1. Iniciar OT añade texto breve con fallas y participantes cuando hay equipo.
     2. Autoasignar fallas incluye nombres legibles de averías y colaboradores (sin IDs numéricos).
-    3. Asignación de supervisora incluye nombres legibles de fallas y participantes (sin IDs numéricos).
+    3. Asignación incluye fallas y destinatarios, sin repetir el autor.
     4. check_detalle genera comentario automático de resolución o reapertura con nombre de falla.
     5. Terminar avance, reportar repuesto, pauta preventiva y cierre generan comentarios claros sin IDs.
     """
@@ -60,7 +60,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     com_inicio = sol_tomada.comentarios[-1]
     assert com_inicio.tipo == "ASIGNACION"
     assert mecanico1_nom in com_inicio.comentario
-    assert "inició los trabajos de esta OT atendiendo las fallas" in com_inicio.comentario
+    assert com_inicio.comentario.startswith("Inicio:")
     assert mecanico2_nom in com_inicio.comentario
     assert "Revisión general en fosa" in com_inicio.comentario
 
@@ -73,8 +73,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_check1 = await taller_service.get_solicitud(db_session, solicitud.id)
     com_check = sol_check1.comentarios[-1]
     assert com_check.tipo == "RESOLUCION"
-    assert mecanico1_nom in com_check.comentario
-    assert "completó la reparación de la falla" in com_check.comentario
+    assert mecanico1_nom not in com_check.comentario
+    assert com_check.comentario.startswith("Reparó:")
     assert "Pastillas gastadas" in com_check.comentario or falla1_nom in com_check.comentario
 
     # 4. Reportar falta de repuesto en falla 2
@@ -85,8 +85,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_rep = await taller_service.get_solicitud(db_session, solicitud.id)
     com_rep = sol_rep.comentarios[-1]
     assert com_rep.tipo == "FALTA_REPUESTO"
-    assert mecanico1_nom in com_rep.comentario
-    assert "FALTA DE REPUESTO" in com_rep.comentario
+    assert mecanico1_nom not in com_rep.comentario
+    assert com_rep.comentario.startswith("Falta repuesto:")
     assert "Foco roto" in com_rep.comentario or falla2_nom in com_rep.comentario
     assert "Esperando pedido de foco" in com_rep.comentario
 
@@ -97,7 +97,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_rep_ok = await taller_service.get_solicitud(db_session, solicitud.id)
     com_rep_ok = sol_rep_ok.comentarios[-1]
     assert com_rep_ok.tipo == "REPUESTO_DISPONIBLE"
-    assert "REPUESTO DISPONIBLE" in com_rep_ok.comentario
+    assert com_rep_ok.comentario.startswith("Repuesto disponible:")
 
     # 6. Autoasignar falla 2 con colaborador
     dto_auto = AutoasignarFallasDTO(
@@ -109,7 +109,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     com_auto = sol_auto.comentarios[-1]
     assert com_auto.tipo == "ASIGNACION"
     assert mecanico1_nom in com_auto.comentario
-    assert "inició trabajo en las fallas" in com_auto.comentario
+    assert com_auto.comentario.startswith("Inicio:")
     assert mecanico2_nom in com_auto.comentario
 
     # 7. Supervisora asigna falla 1 a Mecánico 2
@@ -121,8 +121,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_sup = await taller_service.asignar_fallas_supervisora(db_session, solicitud.id, dto_sup, supervisor_id)
     com_sup = sol_sup.comentarios[-1]
     assert com_sup.tipo == "ASIGNACION"
-    assert supervisor_nom in com_sup.comentario
-    assert "asignó las fallas" in com_sup.comentario
+    assert supervisor_nom not in com_sup.comentario
+    assert com_sup.comentario.startswith("Asignación:")
     assert mecanico2_nom in com_sup.comentario
 
     # 8. Terminar avance en equipo
@@ -130,7 +130,7 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_avance = await taller_service.terminar_avance(db_session, solicitud.id, dto_avance, mecanico1_id)
     com_avance = sol_avance.comentarios[-1]
     assert com_avance.tipo == "ENTREGA_TURNO"
-    assert "finalizó avance grupal" in com_avance.comentario
+    assert com_avance.comentario.startswith("Avance:")
     assert "Corte de turno mediodía" in com_avance.comentario
 
     # 9. Resolver falla 2 y completar pauta preventiva
@@ -155,8 +155,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_final = await taller_service.finalizar_solicitud(db_session, solicitud.id, mecanico2_id, dto_fin)
     com_cierre = sol_final.comentarios[-1]
     assert com_cierre.tipo == "CIERRE"
-    assert mecanico2_nom in com_cierre.comentario
-    assert "finalizó los trabajos de la OT y liberó el bus" in com_cierre.comentario
+    assert mecanico2_nom not in com_cierre.comentario
+    assert com_cierre.comentario.startswith("Cierre: bus liberado")
     assert "Trabajos de frenos y luces 100% terminados" in com_cierre.comentario
 
     # 11. VERIFICACIÓN CRÍTICA: Ningún comentario en la OT debe tener patrones de IDs numéricos técnicos

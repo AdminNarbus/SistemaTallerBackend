@@ -90,6 +90,7 @@ class CheckFallaDTO(BaseModel):
     mecanico_resolvio_id: Optional[int] = Field(None, description="Alias para compatibilidad")
     usuario_id: Optional[int] = None
     comentario: Optional[str] = None
+    fecha_cambio_estado: Optional[datetime] = None
 
     @property
     def effective_mecanico_id(self) -> Optional[int]:
@@ -145,6 +146,7 @@ class FallaEventoDTO(BaseModel):
     estado_nuevo: Optional[str] = None
     comentario: Optional[str] = None
     fecha_evento: datetime
+    fecha_registro: Optional[datetime] = None
     mecanicos_resolvieron: List[MecanicoResumenDTO] = []
 
 
@@ -161,6 +163,8 @@ class DetalleUpdateDTO(BaseModel):
     mecanicos_resolvieron: List[MecanicoResumenDTO] = []
     comentario_repuesto: Optional[str] = None
     fecha_resolucion: Optional[datetime] = None
+    fecha_cambio_estado: Optional[datetime] = None
+    fecha_registro: Optional[datetime] = None
 
 
 class SolicitudDetalleDTO(BaseModel):
@@ -189,6 +193,7 @@ class SolicitudDetalleDTO(BaseModel):
     comentario_repuesto: Optional[str] = None
     fecha_creacion: datetime
     fecha_resolucion: Optional[datetime] = None
+    fecha_cambio_estado: Optional[datetime] = None
     mecanicos_asignados: List[MecanicoAsignadoDTO] = []
     historial_asignaciones: List[AsignacionFallaDTO] = []
     historial_eventos: List[FallaEventoDTO] = []

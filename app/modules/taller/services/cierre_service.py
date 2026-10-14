@@ -30,6 +30,7 @@ from app.modules.taller.utils import (
     validar_pauta_preventiva_cierre,
 )
 from app.modules.taller.services.mappers import orm_to_solicitud_dto
+from app.modules.taller.services.bitacora_textos import agregar_texto, formatear_cambio_estado
 from app.modules.taller.services.estadias_helper import (
     asegurar_ingreso_taller_y_estadia,
     attach_comentario_safe,
@@ -462,11 +463,9 @@ class CierreService:
         solicitud.estado = nuevo_estado
         solicitud.fecha_actualizacion = now
 
-        base_texto = f"Supervisora {sup_nom} cambió el estado de {estado_anterior} a {nuevo_estado}"
-        if dto.comentario and dto.comentario.strip():
-            texto_bitacora = f"{base_texto}. Motivo: {dto.comentario.strip()}"
-        else:
-            texto_bitacora = f"{base_texto}."
+        texto_bitacora = agregar_texto(
+            formatear_cambio_estado(estado_anterior, nuevo_estado), dto.comentario
+        )
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,

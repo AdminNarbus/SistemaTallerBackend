@@ -1,8 +1,109 @@
 import pytest
+import uuid
 from datetime import datetime, timedelta, timezone
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("estado", ["RESUELTA", "INCOMPLETA", "PENDIENTE"])
+@pytest.mark.parametrize("formato", ["json", "multipart"])
+async def test_supervision_fecha_cambio_estado_json_y_multipart(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, estado, formato
+):
+    mecanico = seed_test_data["mecanico1"]
+    falla = seed_test_data["falla2"]
+    solicitud_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": f"BUS-FECHA-{uuid.uuid4().hex[:10]}",
+            "descripcion_general": "Prueba de fecha de estado",
+            "detalles": [{"categoria_id": falla.categoria_id, "descripcion_personalizada": "Prueba"}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert solicitud_res.status_code == 201
+    solicitud = solicitud_res.json()
+    detalle_id = solicitud["detalles"][0]["id"]
+    fecha_elegida = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=10)
+    iso = fecha_elegida.isoformat()
+    payload = {"estado": estado, "mecanico_id": mecanico.id, "fecha_cambio_estado": iso}
+    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver"
+
+    if formato == "json":
+        response = await client.patch(url, json=payload, headers=auth_headers_supervisor)
+    else:
+        response = await client.patch(
+            url,
+            data={key: str(value) for key, value in payload.items()},
+            files={"fotos": ("evidencia.jpg", b"foto", "image/jpeg")},
+            headers=auth_headers_supervisor,
+        )
+
+    assert response.status_code == 200, response.text
+    actualizado = response.json()
+    assert datetime.fromisoformat(actualizado["fecha_cambio_estado"].replace("Z", "+00:00")) == fecha_elegida
+    fecha_registro_respuesta = datetime.fromisoformat(actualizado["fecha_registro"].replace("Z", "+00:00"))
+    assert fecha_registro_respuesta < fecha_elegida
+    if estado == "RESUELTA":
+        assert datetime.fromisoformat(actualizado["fecha_resolucion"].replace("Z", "+00:00")) == fecha_elegida
+    else:
+        assert actualizado["fecha_resolucion"] is None
+
+    detalle_res = await client.get(
+        f"/api/v1/supervision/solicitudes/{solicitud['id']}", headers=auth_headers_supervisor
+    )
+    detalle = detalle_res.json()["detalles"][0]
+    assert datetime.fromisoformat(detalle["fecha_cambio_estado"].replace("Z", "+00:00")) == fecha_elegida
+    ultimo_evento = detalle["historial_eventos"][-1]
+    assert datetime.fromisoformat(ultimo_evento["fecha_evento"].replace("Z", "+00:00")) == fecha_elegida
+    comentario_estado = next(
+        comentario for comentario in detalle_res.json()["comentarios"]
+        if comentario["tipo"] in {"RESOLUCION", "AVANCE", "REAPERTURA"}
+        and comentario.get("fecha_evento") is not None
+    )
+    assert datetime.fromisoformat(comentario_estado["fecha_evento"].replace("Z", "+00:00")) == fecha_elegida
+    fecha_registro = datetime.fromisoformat(comentario_estado["fecha_registro"].replace("Z", "+00:00"))
+    assert fecha_registro < fecha_elegida
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("formato", ["json", "multipart"])
+async def test_supervision_fecha_cambio_estado_omitida_usa_hora_servidor(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, formato
+):
+    mecanico = seed_test_data["mecanico1"]
+    falla = seed_test_data["falla2"]
+    solicitud_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": f"BUS-SIN-FECHA-{uuid.uuid4().hex[:8]}",
+            "descripcion_general": "Prueba fecha por defecto",
+            "detalles": [{"categoria_id": falla.categoria_id, "descripcion_personalizada": "Prueba"}],
+        },
+        headers=auth_headers_conductor,
+    )
+    solicitud = solicitud_res.json()
+    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{solicitud['detalles'][0]['id']}/resolver"
+    antes = datetime.now(timezone.utc)
+    if formato == "json":
+        response = await client.patch(
+            url,
+            json={"estado": "RESUELTA", "mecanico_id": mecanico.id},
+            headers=auth_headers_supervisor,
+        )
+    else:
+        response = await client.patch(
+            url,
+            data={"estado": "RESUELTA", "mecanico_id": str(mecanico.id)},
+            files={"fotos": ("evidencia.jpg", b"foto", "image/jpeg")},
+            headers=auth_headers_supervisor,
+        )
+    despues = datetime.now(timezone.utc)
+    assert response.status_code == 200, response.text
+    fecha_aplicada = datetime.fromisoformat(response.json()["fecha_cambio_estado"].replace("Z", "+00:00"))
+    assert antes <= fecha_aplicada <= despues
 
 
 @pytest.mark.asyncio
@@ -307,7 +408,7 @@ async def test_supervision_agregar_falla_y_detalle_ot(
 
     # Verificar que en la bitácora conste el registro de la supervisora
     comentarios = sol_actualizada["comentarios"]
-    assert any("Supervisora" in c["comentario"] and "Rotor deformado" in c["comentario"] for c in comentarios)
+    assert any(c["comentario"].startswith("Nueva falla:") and "Rotor deformado" in c["comentario"] for c in comentarios)
 
 
 @pytest.mark.asyncio
@@ -403,7 +504,7 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     assert ot_data["detalles"][0]["mecanico_resolvio_id"] == mecanico1.id
     # Bitácora contiene la autoría de la supervisora y el mecánico
     comentarios = ot_data["comentarios"]
-    assert any("Supervisora" in c["comentario"] and mecanico1.nombre_completo in c["comentario"] for c in comentarios)
+    assert any(" reparó: " in c["comentario"] and mecanico1.nombre_completo in c["comentario"] for c in comentarios)
 
     # 5. Supervisora reabre la avería si se requiere nueva revisión
     res_reabrir = await client.patch(

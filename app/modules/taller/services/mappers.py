@@ -430,6 +430,7 @@ def orm_to_solicitud_dto(
                     estado_nuevo=evento.estado_nuevo,
                     comentario=evento.comentario,
                     fecha_evento=evento.fecha_evento,
+                    fecha_registro=getattr(evento, "fecha_registro", None),
                     mecanicos_resolvieron=resolutores,
                 )
             )
@@ -456,6 +457,7 @@ def orm_to_solicitud_dto(
                 comentario_repuesto=getattr(det, "comentario_repuesto", None),
                 fecha_creacion=det.fecha_creacion,
                 fecha_resolucion=det.fecha_resolucion,
+                fecha_cambio_estado=getattr(det, "fecha_cambio_estado", None),
                 mecanicos_asignados=mecanicos_asignados,
                 historial_asignaciones=historial_asignaciones,
                 historial_eventos=historial_eventos,
@@ -548,6 +550,7 @@ def orm_to_solicitud_dto(
                 tipo=com.tipo,
                 comentario=com.comentario,
                 fecha_registro=com.fecha_registro,
+                fecha_evento=getattr(com, "fecha_evento", None),
                 adjuntos=[
                     {
                         "id": ev.id,
@@ -565,6 +568,7 @@ def orm_to_solicitud_dto(
                 ],
             )
         )
+    comentarios_dtos.sort(key=lambda comentario: (comentario.fecha_registro, comentario.id))
 
     pauta_dtos = []
     pauta_val = _get_rel(sol, "pauta_respuestas") or []

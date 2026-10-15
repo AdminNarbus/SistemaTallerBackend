@@ -27,7 +27,6 @@ class TallerSolicitudDetalle(Base):
         UniqueConstraint("id", "solicitud_id", name="uq_detalles_id_solicitud"),
         CheckConstraint("estado IN ('PENDIENTE','INCOMPLETA','RESUELTA')", name="ck_detalles_estado"),
         CheckConstraint("resuelto = (estado = 'RESUELTA')", name="ck_detalles_resuelto_estado"),
-        CheckConstraint("fecha_resolucion IS NULL OR fecha_resolucion >= fecha_creacion", name="ck_detalles_fechas"),
         {"extend_existing": True},
     )
 

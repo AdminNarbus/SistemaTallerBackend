@@ -107,6 +107,56 @@ async def test_supervision_fecha_cambio_estado_omitida_usa_hora_servidor(
 
 
 @pytest.mark.asyncio
+async def test_supervision_resolucion_historica_anterior_a_creacion_ot(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    mecanico = seed_test_data["mecanico1"]
+    falla = seed_test_data["falla2"]
+    solicitud_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": f"BUS-RES-HIST-{uuid.uuid4().hex[:8]}",
+            "descripcion_general": "Prueba de resolución anterior a la creación de OT",
+            "detalles": [{"categoria_id": falla.categoria_id, "descripcion_personalizada": "Prueba"}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert solicitud_res.status_code == 201, solicitud_res.text
+    solicitud = solicitud_res.json()
+    detalle_id = solicitud["detalles"][0]["id"]
+    fecha_creacion_ot = datetime.fromisoformat(solicitud["fecha_creacion"].replace("Z", "+00:00"))
+    fecha_resolucion = fecha_creacion_ot - timedelta(days=1)
+    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver"
+
+    response = await client.patch(
+        url,
+        json={
+            "estado": "RESUELTA",
+            "mecanico_id": mecanico.id,
+            "fecha_cambio_estado": fecha_resolucion.isoformat(),
+        },
+        headers=auth_headers_supervisor,
+    )
+
+    assert response.status_code == 200, response.text
+    actualizado = response.json()
+    assert actualizado["resuelto"] is True
+    assert datetime.fromisoformat(actualizado["fecha_resolucion"].replace("Z", "+00:00")) == fecha_resolucion
+
+    detalle_res = await client.get(
+        f"/api/v1/supervision/solicitudes/{solicitud['id']}",
+        headers=auth_headers_supervisor,
+    )
+    assert detalle_res.status_code == 200, detalle_res.text
+    historial = detalle_res.json()["detalles"][0]["historial_eventos"]
+    reportada = [evento for evento in historial if evento["tipo_evento"] == "REPORTADA"]
+    resueltas = [evento for evento in historial if evento["tipo_evento"] == "RESUELTA"]
+    assert len(reportada) == 1
+    assert len(resueltas) == 1
+    assert datetime.fromisoformat(resueltas[0]["fecha_evento"].replace("Z", "+00:00")) == fecha_resolucion
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("estado", ["PENDIENTE", "EN_REPARACION", "LIBERADO", "FINALIZADO"])
 async def test_auditoria_envia_antiguedad_ot_y_ficha_tiempo_real(
     client, db_session, auth_headers_supervisor, seed_test_data, estado

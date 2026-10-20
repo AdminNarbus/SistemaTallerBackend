@@ -254,8 +254,13 @@ class ResultadoFallaService:
                 raise BusinessRuleException("La reapertura no admite autores")
             return []
         ids = dto.effective_mecanicos_ids
-        if rol in ("SUPERVISOR", "ADMIN") and dto.mecanicos_ids is None:
+        if rol == "SUPERVISOR" and dto.mecanicos_ids is None:
             raise BusinessRuleException("Supervisión debe indicar mecanicos_ids explícitamente")
+        if rol == "ADMIN" and dto.mecanicos_ids is None:
+            if asignaciones:
+                ids = list(dict.fromkeys(a.mecanico_id for a in asignaciones))
+            elif not ids:
+                raise BusinessRuleException("Supervisión debe indicar mecanicos_ids explícitamente")
         if rol == "MECANICO":
             equipo = list(dict.fromkeys(a.mecanico_id for a in asignaciones))
             if ids and set(ids) != set(equipo):
@@ -266,7 +271,7 @@ class ResultadoFallaService:
         usuarios = []
         for mecanico_id in ids:
             usuario = await taller_repository.get_usuario_by_id(db, mecanico_id)
-            if usuario is None or not usuario.is_active or usuario.rol != "MECANICO":
+            if usuario is None or not usuario.is_active or usuario.rol not in ("MECANICO", "ADMIN"):
                 raise BusinessRuleException(f"El usuario {mecanico_id} no es un mecánico activo")
             usuarios.append(usuario)
         return usuarios

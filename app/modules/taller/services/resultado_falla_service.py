@@ -148,11 +148,15 @@ class ResultadoFallaService:
         if rol not in ("MECANICO", "SUPERVISOR", "ADMIN"):
             raise PermissionException("Rol no autorizado para registrar resultados")
 
-        autores = await self._resolver_autores(db, dto, rol, actor_id, asignaciones, target)
         taller = None
         colaboradores = []
         if target != "PENDIENTE":
             taller, colaboradores = await self._talleres_resultado(db, dto.taller_id, dto.talleres_colaboradores_ids)
+
+        autores = await self._resolver_autores(
+            db, dto, rol, actor_id, asignaciones, target, taller, colaboradores
+        )
+        if target != "PENDIENTE":
             if not autores and taller.tipo != "EXTERNO" and all(t.tipo != "EXTERNO" for t in colaboradores):
                 raise BusinessRuleException("Debe declarar autores o incluir un taller externo")
 
@@ -248,17 +252,27 @@ class ResultadoFallaService:
             raise ConflictException("operacion_id ya fue usado con otro actor, recurso o contenido")
         return DetalleUpdateDTO.model_validate(operacion.respuesta)
 
-    async def _resolver_autores(self, db, dto, rol, actor_id, asignaciones, estado):
+    async def _resolver_autores(
+        self, db, dto, rol, actor_id, asignaciones, estado, taller=None, colaboradores=None
+    ):
         if estado == "PENDIENTE":
             if dto.mecanicos_ids:
                 raise BusinessRuleException("La reapertura no admite autores")
             return []
         ids = dto.effective_mecanicos_ids
+        es_externo = taller is not None and (
+            taller.tipo == "EXTERNO" or any(t.tipo == "EXTERNO" for t in (colaboradores or []))
+        )
         if rol == "SUPERVISOR" and dto.mecanicos_ids is None:
-            raise BusinessRuleException("Supervisión debe indicar mecanicos_ids explícitamente")
+            if es_externo:
+                ids = []
+            else:
+                raise BusinessRuleException("Supervisión debe indicar mecanicos_ids explícitamente")
         if rol == "ADMIN" and dto.mecanicos_ids is None:
             if asignaciones:
                 ids = list(dict.fromkeys(a.mecanico_id for a in asignaciones))
+            elif es_externo:
+                ids = []
             elif not ids:
                 raise BusinessRuleException("Supervisión debe indicar mecanicos_ids explícitamente")
         if rol == "MECANICO":

@@ -254,3 +254,28 @@ async def test_admin_asignado_puede_ser_autor_y_resolutor(db_session, seed_test_
     assert admin.id in autores_ids
     assert mecanico.id in autores_ids
 
+
+@pytest.mark.asyncio
+async def test_supervisor_termina_falla_taller_externo_omitiendo_mecanicos_ids(db_session, seed_test_data):
+    solicitud, detalle_id = await _crear_solicitud(
+        db_session, seed_test_data["conductor"], seed_test_data["falla1"], "EXT-OMIT"
+    )
+    _, externo = await _crear_talleres(db_session)
+    esperado = await db_session.scalar(select(TallerFallaEvento.id).where(
+        TallerFallaEvento.detalle_id == detalle_id
+    ).order_by(TallerFallaEvento.id.desc()).limit(1))
+
+    # El supervisor envía taller externo sin mecanicos_ids (None)
+    dto = CheckFallaDTO(
+        operacion_id=uuid4(), evento_esperado_id=esperado, estado=EstadoFalla.RESUELTA,
+        taller_id=externo.id,
+    )
+    result = await resultado_falla_service.registrar(
+        db_session, solicitud.id, detalle_id, seed_test_data["supervisor"].id,
+        seed_test_data["supervisor"].nombre_completo, "SUPERVISOR", dto,
+    )
+    assert result.resuelto is True
+    assert result.mecanicos_resolvieron == []
+    assert result.ubicacion.taller_responsable.tipo == "EXTERNO"
+
+

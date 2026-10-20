@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 128,
+  "id": "AV-0128",
+  "timestamp": "2026-10-20T19:08:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-LOC",
+    "name": "Talleres y Ciudades por Resultado de Falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Flexibilización de resolución con taller externo sin mecánicos: se evalúa el tipo de taller antes de autores permitiendo que supervisión u administración finalicen averías externas tanto enviando mecanicos_ids vacíos como omitiendo el parámetro.",
+  "scope": {
+    "planned": [
+      "Permitir a supervisión y administración registrar resoluciones en talleres externos sin mecánicos enviando mecanicos_ids=[] u omitiéndolo (None)",
+      "Mantener la exigencia de autores cuando el taller seleccionado sea INTERNO",
+      "Validar el flujo mediante pruebas automatizadas"
+    ],
+    "completed": [
+      "Inversión del orden de resolución en registrar para resolver taller/colaboradores antes de autores",
+      "Soporte de es_externo en _resolver_autores para admitir dto.mecanicos_ids is None sin lanzar excepción",
+      "Añadido test test_supervisor_termina_falla_taller_externo_omitiendo_mecanicos_ids con resultado exitoso"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/resultado_falla_service.py",
+      "action": "modified",
+      "summary": "Se resuelve taller antes de autores en registrar y se pasa es_externo a _resolver_autores para permitir que supervisión/admin omitan mecanicos_ids en talleres externos."
+    },
+    {
+      "path": "tests/unit/test_taller_ubicacion_resultados.py",
+      "action": "modified",
+      "summary": "Se añadió test unitario verificando la resolución de fallas por parte de supervisión con taller externo y mecanicos_ids omitido."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-086",
+      "title": "Resolución previa de taller y admisión de mecanicos_ids omitido en talleres externos",
+      "rationale": "En contratos frontend, omitir un campo o enviarlo como null/vacío es una variación común. Al resolver la entidad Taller antes de validar la autoría, el servicio identifica con certeza si la reparación es externa. Si es externa, la ausencia de mecánicos es semánticamente correcta y no requiere forzar un array vacío mecanicos_ids: [], mejorando la ergonomía de la API.",
+      "consequences": "Supervisión puede registrar resultados en talleres externos sin mecánicos tanto enviando array vacío como omitiendo el campo; en talleres internos se sigue exigiendo la lista de autores."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit/test_taller_ubicacion_resultados.py -v",
+      "result": "passed",
+      "evidence": "5 passed in 6.35s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar cambios en develop y main con GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feat/taller-externo-autores-flexibles",
+    "commit": "pending",
+    "dirty": false
+  },
+  "notes": [
+    "Asegura compatibilidad total con talleres externos y sin mecánicos asignados."
+  ]
+}

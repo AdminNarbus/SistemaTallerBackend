@@ -21,6 +21,7 @@ from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEs
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
 from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
+from app.modules.taller.models.taller_ubicacion import TallerResultadoUbicacion
 from app.modules.taller.constants import DEFAULT_PAGE_SKIP, DEFAULT_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -316,6 +317,7 @@ class TallerRepository:
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.reportado_por),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.eventos).selectinload(TallerFallaEvento.mecanicos_resolutores),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.eventos).selectinload(TallerFallaEvento.ubicaciones_taller).selectinload(TallerResultadoUbicacion.colaboradores),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
@@ -413,6 +415,20 @@ class TallerRepository:
                                 'fecha_reporte', d.fecha_reporte,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
+                                    WHEN d.resuelto = true AND EXISTS (
+                                        SELECT 1 FROM taller_falla_eventos evx
+                                        WHERE evx.id = (SELECT ev2.id FROM taller_falla_eventos ev2
+                                            WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
+                                            ORDER BY ev2.id DESC LIMIT 1)
+                                          AND evx.estado_nuevo = d.estado
+                                    ) THEN (
+                                        SELECT string_agg(em.mecanico_nombre_snapshot, ', ' ORDER BY em.id)
+                                        FROM taller_falla_eventos ev
+                                        JOIN taller_falla_evento_mecanicos em ON em.evento_id = ev.id
+                                        WHERE ev.id = (SELECT ev2.id FROM taller_falla_eventos ev2
+                                            WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
+                                            ORDER BY ev2.id DESC LIMIT 1)
+                                    )
                                     WHEN d.resuelto = true THEN COALESCE((
                                         SELECT string_agg(TRIM(CONCAT(um.nombre, ' ', COALESCE(um.apellido, ''))), ', ')
                                         FROM taller_asignacion_fallas a
@@ -422,6 +438,22 @@ class TallerRepository:
                                     ELSE NULL
                                 END,
                                 'mecanicos_resolvieron', CASE
+                                    WHEN d.resuelto = true AND EXISTS (
+                                        SELECT 1 FROM taller_falla_eventos evx
+                                        WHERE evx.id = (SELECT ev2.id FROM taller_falla_eventos ev2
+                                            WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
+                                            ORDER BY ev2.id DESC LIMIT 1)
+                                          AND evx.estado_nuevo = d.estado
+                                    ) THEN COALESCE((
+                                        SELECT json_agg(json_build_object(
+                                            'id', em.mecanico_id, 'nombre', em.mecanico_nombre_snapshot
+                                        ) ORDER BY em.id)
+                                        FROM taller_falla_eventos ev
+                                        JOIN taller_falla_evento_mecanicos em ON em.evento_id = ev.id
+                                        WHERE ev.id = (SELECT ev2.id FROM taller_falla_eventos ev2
+                                            WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
+                                            ORDER BY ev2.id DESC LIMIT 1)
+                                    ), '[]'::json)
                                     WHEN d.resuelto = true THEN COALESCE((
                                         SELECT json_agg(
                                             json_build_object(
@@ -440,6 +472,22 @@ class TallerRepository:
                                 'fecha_creacion', d.fecha_creacion,
                                 'fecha_resolucion', d.fecha_resolucion,
                                 'fecha_cambio_estado', d.fecha_cambio_estado,
+                                'evento_estado_vigente_id', (
+                                    SELECT ev.id FROM taller_falla_eventos ev
+                                    WHERE ev.detalle_id = d.id ORDER BY ev.id DESC LIMIT 1
+                                ),
+                                'mecanicos_avance', COALESCE((
+                                    SELECT json_agg(json_build_object(
+                                        'id', em.mecanico_id, 'nombre', em.mecanico_nombre_snapshot
+                                    ) ORDER BY em.id)
+                                    FROM taller_falla_eventos ev
+                                    JOIN taller_falla_evento_mecanicos em ON em.evento_id = ev.id
+                                    WHERE ev.id = (
+                                        SELECT ev2.id FROM taller_falla_eventos ev2
+                                        WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'INCOMPLETA'
+                                        ORDER BY ev2.id DESC LIMIT 1
+                                    ) AND d.estado = 'INCOMPLETA'
+                                ), '[]'::json),
                                 'mecanicos_asignados', COALESCE((
                                     SELECT json_agg(
                                         json_build_object(
@@ -488,7 +536,55 @@ class TallerRepository:
                                             'estado_nuevo', ev.estado_nuevo,
                                             'comentario', ev.comentario,
                                             'fecha_evento', ev.fecha_evento,
-                                            'mecanicos_resolvieron', COALESCE(resolutores.mecanicos_json, '[]'::json)
+                                            'fecha_registro', ev.fecha_registro,
+                                            'mecanicos_resolvieron', COALESCE(resolutores.mecanicos_json, '[]'::json),
+                                            'taller_ubicacion', (
+                                                SELECT json_build_object(
+                                                    'id', ub.id,
+                                                    'version', ub.version,
+                                                    'taller_responsable', json_build_object(
+                                                        'id', ub.taller_id, 'nombre', ub.taller_nombre_snapshot,
+                                                        'ciudad', ub.ciudad_nombre_snapshot, 'tipo', ub.taller_tipo_snapshot
+                                                    ),
+                                                    'talleres_colaboradores', COALESCE((
+                                                        SELECT json_agg(json_build_object(
+                                                            'id', uc.taller_id, 'nombre', uc.taller_nombre_snapshot,
+                                                            'ciudad', uc.ciudad_nombre_snapshot, 'tipo', uc.taller_tipo_snapshot
+                                                        ) ORDER BY uc.id)
+                                                        FROM taller_resultado_colaboradores uc WHERE uc.ubicacion_id = ub.id
+                                                    ), '[]'::json),
+                                                    'registrado_por_id', ub.actor_id,
+                                                    'registrado_por', ub.actor_nombre_snapshot,
+                                                    'registrado_en', ub.registrado_en,
+                                                    'operacion_id', ub.operacion_id,
+                                                    'motivo', ub.motivo
+                                                )
+                                                FROM taller_resultado_ubicaciones ub
+                                                WHERE ub.evento_id = ev.id ORDER BY ub.version DESC LIMIT 1
+                                            ),
+                                            'historial_ubicaciones', COALESCE((
+                                                SELECT json_agg(json_build_object(
+                                                    'id', ub.id,
+                                                    'version', ub.version,
+                                                    'taller_responsable', json_build_object(
+                                                        'id', ub.taller_id, 'nombre', ub.taller_nombre_snapshot,
+                                                        'ciudad', ub.ciudad_nombre_snapshot, 'tipo', ub.taller_tipo_snapshot
+                                                    ),
+                                                    'talleres_colaboradores', COALESCE((
+                                                        SELECT json_agg(json_build_object(
+                                                            'id', uc.taller_id, 'nombre', uc.taller_nombre_snapshot,
+                                                            'ciudad', uc.ciudad_nombre_snapshot, 'tipo', uc.taller_tipo_snapshot
+                                                        ) ORDER BY uc.id)
+                                                        FROM taller_resultado_colaboradores uc WHERE uc.ubicacion_id = ub.id
+                                                    ), '[]'::json),
+                                                    'registrado_por_id', ub.actor_id,
+                                                    'registrado_por', ub.actor_nombre_snapshot,
+                                                    'registrado_en', ub.registrado_en,
+                                                    'operacion_id', ub.operacion_id,
+                                                    'motivo', ub.motivo
+                                                ) ORDER BY ub.version)
+                                                FROM taller_resultado_ubicaciones ub WHERE ub.evento_id = ev.id
+                                            ), '[]'::json)
                                         ) ORDER BY ev.fecha_evento ASC, ev.id ASC
                                     )
                                     FROM taller_falla_eventos ev
@@ -713,6 +809,8 @@ class TallerRepository:
                 joinedload(TallerSolicitud.mecanico_cierre),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.falla).joinedload(FallaTaller.categoria),
                 selectinload(TallerSolicitud.detalles).joinedload(TallerSolicitudDetalle.mecanico_resolvio),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.eventos).selectinload(TallerFallaEvento.mecanicos_resolutores),
+                selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.eventos).selectinload(TallerFallaEvento.ubicaciones_taller).selectinload(TallerResultadoUbicacion.colaboradores),
                 selectinload(TallerSolicitud.detalles).selectinload(TallerSolicitudDetalle.asignaciones).joinedload(TallerAsignacionFalla.mecanico),
                 selectinload(TallerSolicitud.mecanicos).joinedload(TallerSolicitudMecanico.mecanico),
                 selectinload(TallerSolicitud.estadias),

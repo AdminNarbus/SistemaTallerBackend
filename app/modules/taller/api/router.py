@@ -6,10 +6,12 @@ from app.modules.taller.api.pauta_router import router as pauta_router
 from app.modules.taller.api.cuadrilla_router import router as cuadrilla_router
 from app.modules.taller.api.averias_router import router as averias_router
 from app.modules.taller.api.cierre_router import router as cierre_router
+from app.modules.taller.api.taller_ubicacion_router import router as taller_ubicacion_router
 
 router = APIRouter(prefix="/taller", tags=["Taller"])
 
 # Inclusión de sub-routers organizados por responsabilidad única (SRP)
+router.include_router(taller_ubicacion_router)
 router.include_router(catalogo_router)
 router.include_router(solicitud_router)
 router.include_router(pauta_router)

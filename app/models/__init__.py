@@ -17,6 +17,7 @@ from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
 from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
+from app.modules.taller.models.taller_ubicacion import Ciudad, Taller, OperacionResultado, TallerResultadoUbicacion, TallerResultadoColaborador
 from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 from app.modules.taller.models import historical_snapshots  # register insert hooks
 
@@ -42,4 +43,9 @@ __all__ = [
     "TallerFallaEvento",
     "TallerFallaEventoMecanico",
     "ReporteNeumatico",
+    "Ciudad",
+    "Taller",
+    "OperacionResultado",
+    "TallerResultadoUbicacion",
+    "TallerResultadoColaborador",
 ]

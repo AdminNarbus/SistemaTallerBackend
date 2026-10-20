@@ -269,6 +269,10 @@ class SupervisionService:
         mecanico_nombre: Optional[str] = None,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        ciudad_id: Optional[int] = None,
+        taller_id: Optional[int] = None,
+        colaborador_id: Optional[int] = None,
+        ambito: Optional[str] = None,
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[SolicitudResumenDTO]:
@@ -290,6 +294,10 @@ class SupervisionService:
             mecanico_nombre=mecanico_nombre,
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
+            ciudad_id=ciudad_id,
+            taller_id=taller_id,
+            colaborador_id=colaborador_id,
+            ambito=ambito,
             skip=skip,
             limit=limit,
         )
@@ -303,6 +311,10 @@ class SupervisionService:
         mecanico_nombre: Optional[str] = None,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        ciudad_id: Optional[int] = None,
+        taller_id: Optional[int] = None,
+        colaborador_id: Optional[int] = None,
+        ambito: Optional[str] = None,
     ) -> int:
         """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
         return await self.repo.count_auditoria(
@@ -312,6 +324,10 @@ class SupervisionService:
             mecanico_nombre=mecanico_nombre,
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
+            ciudad_id=ciudad_id,
+            taller_id=taller_id,
+            colaborador_id=colaborador_id,
+            ambito=ambito,
         )
 
     async def get_resumen_taller(self, db: AsyncSession) -> ResumenTallerDTO:

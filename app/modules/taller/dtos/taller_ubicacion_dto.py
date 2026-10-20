@@ -71,7 +71,7 @@ class TallerSnapshotDTO(BaseModel):
 
 
 class UbicacionEventoDTO(BaseModel):
-    id: int
+    id: Optional[int] = None
     version: Optional[int] = None
     taller_responsable: TallerSnapshotDTO
     talleres_colaboradores: list[TallerSnapshotDTO] = []

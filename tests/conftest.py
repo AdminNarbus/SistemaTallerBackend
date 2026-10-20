@@ -39,7 +39,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     clear_taller_repository_caches()
 
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    async_session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
+    )
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -66,10 +66,9 @@ class ResultadoFallaService:
         if len(talleres) != len(ids):
             raise NotFoundException("Uno o más talleres no existen")
         por_id = {t.id: t for t in talleres}
-        nueva = self._guardar_ubicacion(db, evento_id, (latest.version + 1) if latest else 1,
+        nueva = await self._guardar_ubicacion(db, evento_id, (latest.version + 1) if latest else 1,
             por_id[dto.taller_id], [por_id[i] for i in dto.talleres_colaboradores_ids],
             actor_id, actor_nombre, str(dto.operacion_id), dto.motivo)
-        await db.flush()
         salida = self._ubicacion_dto(nueva)
         db.add(OperacionResultado(operacion_id=str(dto.operacion_id), actor_id=actor_id,
             accion="UBICACION", detalle_id=detalle_id, huella=huella,
@@ -184,7 +183,7 @@ class ResultadoFallaService:
         await db.flush()
         ubicacion = None
         if taller is not None:
-            ubicacion = self._guardar_ubicacion(db, evento.id, 1, taller, colaboradores,
+            ubicacion = await self._guardar_ubicacion(db, evento.id, 1, taller, colaboradores,
                 actor_id, actor_nombre or actor.nombre_completo, str(dto.operacion_id), None)
 
         nombre_falla = describir_detalle_averia(detalle)
@@ -303,7 +302,7 @@ class ResultadoFallaService:
                 asignacion.mecanico = autor
                 db.add(asignacion)
 
-    def _guardar_ubicacion(self, db, evento_id, version, taller, colaboradores, actor_id, actor_nombre, operacion_id, motivo):
+    async def _guardar_ubicacion(self, db, evento_id, version, taller, colaboradores, actor_id, actor_nombre, operacion_id, motivo):
         ubicacion = TallerResultadoUbicacion(
             evento_id=evento_id, version=version, taller_id=taller.id,
             taller_nombre_snapshot=taller.nombre, taller_tipo_snapshot=taller.tipo,
@@ -316,6 +315,7 @@ class ResultadoFallaService:
                 ciudad_nombre_snapshot=colaborador.ciudad.nombre,
             ) for colaborador in colaboradores]
         db.add(ubicacion)
+        await db.flush()
         return ubicacion
 
     def _ubicacion_dto(self, ubicacion):

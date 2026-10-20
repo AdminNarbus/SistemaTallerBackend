@@ -22,6 +22,29 @@ from app.modules.taller.utils import (
     calcular_horas_en_taller,
     calcular_telemetria_estadias,
 )
+from app.modules.taller.dtos.taller_ubicacion_dto import UbicacionEventoDTO, TallerSnapshotDTO
+
+
+def _ubicacion_evento_dto(ubicacion):
+    if ubicacion is None:
+        return None
+    return UbicacionEventoDTO(
+        id=ubicacion.id,
+        version=getattr(ubicacion, "version", None),
+        taller_responsable=TallerSnapshotDTO(
+            id=ubicacion.taller_id, nombre=ubicacion.taller_nombre_snapshot,
+            ciudad=ubicacion.ciudad_nombre_snapshot, tipo=ubicacion.taller_tipo_snapshot,
+        ),
+        talleres_colaboradores=[TallerSnapshotDTO(
+            id=col.taller_id, nombre=col.taller_nombre_snapshot,
+            ciudad=col.ciudad_nombre_snapshot, tipo=col.taller_tipo_snapshot,
+        ) for col in ubicacion.colaboradores],
+        registrado_por=ubicacion.actor_nombre_snapshot,
+        registrado_por_id=getattr(ubicacion, "actor_id", None),
+        registrado_en=ubicacion.registrado_en.isoformat() if ubicacion.registrado_en else None,
+        operacion_id=getattr(ubicacion, "operacion_id", None),
+        motivo=ubicacion.motivo,
+    )
 
 
 def parse_evidencias_dtos(
@@ -68,6 +91,35 @@ def dict_to_solicitud_dto(
     detalles_raw = r.get("detalles_json") or []
     if isinstance(detalles_raw, str):
         detalles_raw = json.loads(detalles_raw)
+    for detalle in detalles_raw:
+        if not isinstance(detalle, dict):
+            continue
+        eventos = sorted(detalle.get("historial_eventos") or [], key=lambda evento: evento.get("id") or 0)
+        evento_resultado = next((evento for evento in reversed(eventos)
+            if evento.get("tipo_evento") in ("RESUELTA", "INCOMPLETA", "REABIERTA")), None)
+        vigente = evento_resultado if evento_resultado and evento_resultado.get("estado_nuevo") == detalle.get("estado") else None
+        detalle["evento_estado_vigente_id"] = max(
+            (evento.get("id") or 0 for evento in eventos), default=0
+        ) or None
+        detalle["ubicacion"] = vigente.get("taller_ubicacion") if vigente else None
+        detalle["ubicacion_vigente_id"] = (
+            detalle["ubicacion"].get("id") if isinstance(detalle["ubicacion"], dict) else None
+        )
+        if vigente:
+            detalle["fecha_cambio_estado"] = vigente.get("fecha_evento")
+            detalle["fecha_resolucion"] = (
+                vigente.get("fecha_evento") if vigente.get("estado_nuevo") == "RESUELTA" else None
+            )
+        autores = vigente.get("mecanicos_resolvieron") or [] if vigente else []
+        detalle["mecanicos_avance"] = autores if vigente and vigente.get("estado_nuevo") == "INCOMPLETA" else []
+        if vigente and vigente.get("estado_nuevo") == "RESUELTA":
+            detalle["mecanicos_resolvieron"] = autores
+            detalle["mecanico_resolvio_nombre"] = ", ".join(
+                autor.get("nombre", "") for autor in autores if autor.get("nombre")
+            ) or None
+        elif detalle.get("estado") != "RESUELTA":
+            detalle["mecanicos_resolvieron"] = []
+            detalle["mecanico_resolvio_nombre"] = None
     mecanicos_raw = r.get("mecanicos_json") or []
     if isinstance(mecanicos_raw, str):
         mecanicos_raw = json.loads(mecanicos_raw)
@@ -345,6 +397,11 @@ def orm_to_solicitud_dto(
                         mec_resolvio_nombre = u_m.nombre_completo
                         break
 
+        eventos_falla = sorted(_get_rel(det, "eventos") or [], key=lambda item: item.id)
+        evento_resultado = next((evento for evento in reversed(eventos_falla)
+            if evento.tipo_evento in ("RESUELTA", "INCOMPLETA", "REABIERTA")), None)
+        resultado_actual = evento_resultado is not None and evento_resultado.estado_nuevo == det.estado
+
         mecanicos_asignados = []
         historial_asignaciones = []
         mecanicos_resolvieron = []
@@ -397,7 +454,15 @@ def orm_to_solicitud_dto(
                 )
 
         if det.resuelto:
-            if not mecanicos_resolvieron and det.mecanico_resolvio_id:
+            if resultado_actual:
+                mecanicos_resolvieron = [
+                    MecanicoResumenDTO(
+                        id=getattr(item, "mecanico_id", None) or 0,
+                        nombre=getattr(item, "mecanico_nombre_snapshot", "No registrado"),
+                    )
+                    for item in (_get_rel(evento_resultado, "mecanicos_resolutores") or [])
+                ]
+            elif not mecanicos_resolvieron and det.mecanico_resolvio_id:
                 u_res = _get_rel(det, "mecanico_resolvio")
                 nom_res = u_res.nombre_completo if u_res else (mec_resolvio_nombre or f"Mecánico #{det.mecanico_resolvio_id}")
                 mecanicos_resolvieron.append(
@@ -411,7 +476,7 @@ def orm_to_solicitud_dto(
             mecanicos_resolvieron = []
 
         historial_eventos = []
-        for evento in _get_rel(det, "eventos") or []:
+        for evento in eventos_falla:
             resolutores = []
             for evento_mecanico in _get_rel(evento, "mecanicos_resolutores") or []:
                 resolutores.append(
@@ -432,8 +497,31 @@ def orm_to_solicitud_dto(
                     fecha_evento=evento.fecha_evento,
                     fecha_registro=getattr(evento, "fecha_registro", None),
                     mecanicos_resolvieron=resolutores,
+                    taller_ubicacion=_ubicacion_evento_dto(
+                        max(_get_rel(evento, "ubicaciones_taller") or [], key=lambda item: item.version, default=None)
+                    ),
+                    historial_ubicaciones=[
+                        _ubicacion_evento_dto(item)
+                        for item in sorted(_get_rel(evento, "ubicaciones_taller") or [], key=lambda item: item.version)
+                    ],
                 )
             )
+
+        ubicacion_actual = None
+        if resultado_actual:
+            ubicacion_actual = max(_get_rel(evento_resultado, "ubicaciones_taller") or [],
+                                   key=lambda item: item.version, default=None)
+        ubicacion_dto = _ubicacion_evento_dto(ubicacion_actual)
+        evento_vigente = max(eventos_falla, key=lambda item: item.id, default=None)
+        mecanicos_avance = []
+        if evento_resultado and evento_resultado.estado_nuevo == "INCOMPLETA" and det.estado == "INCOMPLETA":
+            mecanicos_avance = [
+                MecanicoResumenDTO(
+                    id=getattr(item, "mecanico_id", None) or 0,
+                    nombre=getattr(item, "mecanico_nombre_snapshot", "No registrado"),
+                )
+                for item in (_get_rel(evento_resultado, "mecanicos_resolutores") or [])
+            ]
 
         detalles_dtos.append(
             SolicitudDetalleDTO(
@@ -456,11 +544,16 @@ def orm_to_solicitud_dto(
                 falta_repuesto=getattr(det, "falta_repuesto", False) or False,
                 comentario_repuesto=getattr(det, "comentario_repuesto", None),
                 fecha_creacion=det.fecha_creacion,
-                fecha_resolucion=det.fecha_resolucion,
-                fecha_cambio_estado=getattr(det, "fecha_cambio_estado", None),
+                fecha_resolucion=(evento_resultado.fecha_evento if resultado_actual and det.estado == "RESUELTA" else det.fecha_resolucion),
+                fecha_cambio_estado=(evento_resultado.fecha_evento if resultado_actual else getattr(det, "fecha_cambio_estado", None)),
                 mecanicos_asignados=mecanicos_asignados,
                 historial_asignaciones=historial_asignaciones,
                 historial_eventos=historial_eventos,
+                ubicacion=ubicacion_dto,
+                talleres_colaboradores=ubicacion_dto.talleres_colaboradores if ubicacion_dto else [],
+                ubicacion_vigente_id=ubicacion_dto.id if ubicacion_dto else None,
+                evento_estado_vigente_id=evento_vigente.id if evento_vigente else None,
+                mecanicos_avance=mecanicos_avance,
             )
         )
 

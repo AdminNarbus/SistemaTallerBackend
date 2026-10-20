@@ -48,7 +48,7 @@ async def test_historial_conserva_cierres_reapertura_y_paginacion(
 
 @pytest.mark.asyncio
 async def test_transiciones_cuadrilla_cierre_batch_y_anexar_fallas(
-    client, auth_headers_conductor, auth_headers_mecanico1, auth_headers_supervisor,
+    client, auth_headers_conductor, auth_headers_mecanico1, auth_headers_supervisor, seed_test_data, taller_resultado,
 ):
     ot = await crear_ot(client, auth_headers_conductor, detalles=[{'falla_id': 1}])
     url = f"/api/v1/taller/{ot['id']}"
@@ -64,15 +64,30 @@ async def test_transiciones_cuadrilla_cierre_batch_y_anexar_fallas(
     assert anexada['id'] == ot['id']
     actual = (await client.get(url + '/historial-estados', headers=auth_headers_supervisor)).json()
     assert actual == historial
-    # Resolver fallas y volver a cerrar utiliza el camino de UPDATE masivo.
+    estado_ot = (await client.get(url, headers=auth_headers_supervisor)).json()['estado']
+    if estado_ot == 'FINALIZADO':
+        abierta = await client.patch(url + '/estado', headers=auth_headers_supervisor,
+                                     json={'estado': 'PENDIENTE', 'comentario': 'Reapertura para nuevo resultado'})
+        assert abierta.status_code == 200, abierta.text
+    tomada = await client.post(url + '/tomar', headers=auth_headers_mecanico1, json={})
+    assert tomada.status_code == 200, tomada.text
+    asignada = await client.post(
+        url + '/autoasignar', headers=auth_headers_mecanico1,
+        json={'detalles_ids': [detalle['id'] for detalle in anexada['detalles']]},
+    )
+    assert asignada.status_code == 200, asignada.text
+    # Registrar resultados con una ubicación y cerrar la OT por el flujo normal.
     for detalle in anexada['detalles']:
+        payload = await taller_resultado['payload'](
+            ot['id'], detalle['id'], 'RESUELTA', [seed_test_data['mecanico1'].id]
+        )
         res = await client.patch(url + f"/detalles/{detalle['id']}/check", headers=auth_headers_mecanico1,
-                                 json={'estado': 'RESUELTA'})
+                                 json=payload)
         assert res.status_code == 200, res.text
     res = await client.post(url + '/finalizar', headers=auth_headers_mecanico1, json={})
     assert res.status_code == 200, res.text
     actual = (await client.get(url + '/historial-estados', headers=auth_headers_supervisor)).json()
-    assert actual[-1]['estado_anterior'] == 'LIBERADO'
+    assert actual[-1]['estado_anterior'] == 'EN_REPARACION'
     assert actual[-1]['estado_nuevo'] == 'FINALIZADO'
 
 

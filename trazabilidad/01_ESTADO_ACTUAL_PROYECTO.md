@@ -1,5 +1,14 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Talleres y ciudades por resultado de falla (AV-0125 - COMPLETADO)
+
+- Implementación desde `develop` para registrar ciudad, taller responsable y talleres colaboradores en cada resultado de falla.
+- Catálogos de ciudad y taller, ubicación versionada en cada evento de resultado y corrección histórica supervisada; contrato backend en [Talleres y ciudades](07_TALLERES_CIUDADES.md) y guía de integración en [Guía frontend](GUIA_FRONTEND_TALLERES_CIUDADES.md).
+- Reglas conectadas a `/check` y `/resolver`: UUID de idempotencia, evento esperado para concurrencia, autores de resultados, reemplazo de equipo al declarar autores y reglas de repetición por rol.
+- Revisiones Alembic `028_permitir_resolucion_historica_falla`, `029_talleres_resultados` y `030_ciudades_comunas_chile` (precarga 346 comunas CUT oficial SUBDERE).
+- Validación local: 285 pruebas aprobadas en SQLite y tests de integración/E2E, `compileall`, OpenAPI (68 rutas).
+- Estado: Completado y listo para sincronizar a develop y main bajo GitFlow.
+
 ## Historial de estados de OT (AV-0118)
 
 - Nueva tabla inmutable `taller_solicitud_estado_eventos`, revisión `024_historial_estados_ot`, con FK `RESTRICT` y pertenencia del comentario a la misma OT.

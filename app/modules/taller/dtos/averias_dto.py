@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.dtos.catalogo_dto import FallaTallerDTO
+from app.modules.taller.dtos.taller_ubicacion_dto import UbicacionEventoDTO, TallerSnapshotDTO
 
 
 class MecanicoAsignadoDTO(BaseModel):
@@ -90,7 +92,11 @@ class CheckFallaDTO(BaseModel):
     mecanico_resolvio_id: Optional[int] = Field(None, description="Alias para compatibilidad")
     usuario_id: Optional[int] = None
     comentario: Optional[str] = None
-    fecha_cambio_estado: Optional[datetime] = None
+    fecha_cambio_estado: Optional[AwareDatetime] = None
+    operacion_id: Optional[UUID] = None
+    evento_esperado_id: Optional[int] = None
+    taller_id: Optional[int] = Field(None, gt=0)
+    talleres_colaboradores_ids: List[int] = Field(default_factory=list)
 
     @property
     def effective_mecanico_id(self) -> Optional[int]:
@@ -148,6 +154,8 @@ class FallaEventoDTO(BaseModel):
     fecha_evento: datetime
     fecha_registro: Optional[datetime] = None
     mecanicos_resolvieron: List[MecanicoResumenDTO] = []
+    taller_ubicacion: Optional[UbicacionEventoDTO] = None
+    historial_ubicaciones: List[UbicacionEventoDTO] = Field(default_factory=list)
 
 
 class DetalleUpdateDTO(BaseModel):
@@ -165,6 +173,11 @@ class DetalleUpdateDTO(BaseModel):
     fecha_resolucion: Optional[datetime] = None
     fecha_cambio_estado: Optional[datetime] = None
     fecha_registro: Optional[datetime] = None
+    evento_estado_vigente_id: Optional[int] = None
+    ubicacion: Optional[UbicacionEventoDTO] = None
+    mecanicos_avance: List[MecanicoResumenDTO] = Field(default_factory=list)
+    operacion_id: Optional[str] = None
+    evento_id: Optional[int] = None
 
 
 class SolicitudDetalleDTO(BaseModel):
@@ -197,6 +210,11 @@ class SolicitudDetalleDTO(BaseModel):
     mecanicos_asignados: List[MecanicoAsignadoDTO] = []
     historial_asignaciones: List[AsignacionFallaDTO] = []
     historial_eventos: List[FallaEventoDTO] = []
+    ubicacion: Optional[UbicacionEventoDTO] = None
+    talleres_colaboradores: List[TallerSnapshotDTO] = Field(default_factory=list)
+    ubicacion_vigente_id: Optional[int] = None
+    evento_estado_vigente_id: Optional[int] = None
+    mecanicos_avance: List[MecanicoResumenDTO] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         nombre_limpio = (

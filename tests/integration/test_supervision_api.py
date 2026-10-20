@@ -6,11 +6,16 @@ from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 
 
+def _parse_utc(value):
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("estado", ["RESUELTA", "INCOMPLETA", "PENDIENTE"])
 @pytest.mark.parametrize("formato", ["json", "multipart"])
 async def test_supervision_fecha_cambio_estado_json_y_multipart(
-    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, estado, formato
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, estado, formato, taller_resultado
 ):
     mecanico = seed_test_data["mecanico1"]
     falla = seed_test_data["falla2"]
@@ -26,28 +31,34 @@ async def test_supervision_fecha_cambio_estado_json_y_multipart(
     assert solicitud_res.status_code == 201
     solicitud = solicitud_res.json()
     detalle_id = solicitud["detalles"][0]["id"]
-    fecha_elegida = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=10)
+    fecha_elegida = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=10)
     iso = fecha_elegida.isoformat()
-    payload = {"estado": estado, "mecanico_id": mecanico.id, "fecha_cambio_estado": iso}
+    payload = await taller_resultado["payload"](
+        solicitud["id"], detalle_id, estado,
+        [mecanico.id] if estado != "PENDIENTE" else None,
+        fecha_cambio_estado=iso,
+    )
     url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver"
 
     if formato == "json":
         response = await client.patch(url, json=payload, headers=auth_headers_supervisor)
     else:
+        form_data = {key: [str(item) for item in value] if isinstance(value, list) else str(value)
+                     for key, value in payload.items()}
         response = await client.patch(
             url,
-            data={key: str(value) for key, value in payload.items()},
+            data=form_data,
             files={"fotos": ("evidencia.jpg", b"foto", "image/jpeg")},
             headers=auth_headers_supervisor,
         )
 
     assert response.status_code == 200, response.text
     actualizado = response.json()
-    assert datetime.fromisoformat(actualizado["fecha_cambio_estado"].replace("Z", "+00:00")) == fecha_elegida
-    fecha_registro_respuesta = datetime.fromisoformat(actualizado["fecha_registro"].replace("Z", "+00:00"))
-    assert fecha_registro_respuesta < fecha_elegida
+    assert _parse_utc(actualizado["fecha_cambio_estado"]) == fecha_elegida
+    fecha_registro_respuesta = _parse_utc(actualizado["fecha_registro"])
+    assert fecha_registro_respuesta > fecha_elegida
     if estado == "RESUELTA":
-        assert datetime.fromisoformat(actualizado["fecha_resolucion"].replace("Z", "+00:00")) == fecha_elegida
+        assert _parse_utc(actualizado["fecha_resolucion"]) == fecha_elegida
     else:
         assert actualizado["fecha_resolucion"] is None
 
@@ -55,23 +66,23 @@ async def test_supervision_fecha_cambio_estado_json_y_multipart(
         f"/api/v1/supervision/solicitudes/{solicitud['id']}", headers=auth_headers_supervisor
     )
     detalle = detalle_res.json()["detalles"][0]
-    assert datetime.fromisoformat(detalle["fecha_cambio_estado"].replace("Z", "+00:00")) == fecha_elegida
+    assert _parse_utc(detalle["fecha_cambio_estado"]) == fecha_elegida
     ultimo_evento = detalle["historial_eventos"][-1]
-    assert datetime.fromisoformat(ultimo_evento["fecha_evento"].replace("Z", "+00:00")) == fecha_elegida
+    assert _parse_utc(ultimo_evento["fecha_evento"]) == fecha_elegida
     comentario_estado = next(
         comentario for comentario in detalle_res.json()["comentarios"]
         if comentario["tipo"] in {"RESOLUCION", "AVANCE", "REAPERTURA"}
         and comentario.get("fecha_evento") is not None
     )
-    assert datetime.fromisoformat(comentario_estado["fecha_evento"].replace("Z", "+00:00")) == fecha_elegida
-    fecha_registro = datetime.fromisoformat(comentario_estado["fecha_registro"].replace("Z", "+00:00"))
-    assert fecha_registro < fecha_elegida
+    assert _parse_utc(comentario_estado["fecha_evento"]) == fecha_elegida
+    fecha_registro = _parse_utc(comentario_estado["fecha_registro"])
+    assert fecha_registro > fecha_elegida
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("formato", ["json", "multipart"])
 async def test_supervision_fecha_cambio_estado_omitida_usa_hora_servidor(
-    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, formato
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, formato, taller_resultado
 ):
     mecanico = seed_test_data["mecanico1"]
     falla = seed_test_data["falla2"]
@@ -85,18 +96,22 @@ async def test_supervision_fecha_cambio_estado_omitida_usa_hora_servidor(
         headers=auth_headers_conductor,
     )
     solicitud = solicitud_res.json()
-    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{solicitud['detalles'][0]['id']}/resolver"
+    detalle_id = solicitud["detalles"][0]["id"]
+    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver"
     antes = datetime.now(timezone.utc)
+    payload = await taller_resultado["payload"](solicitud["id"], detalle_id, "RESUELTA", [mecanico.id])
     if formato == "json":
         response = await client.patch(
             url,
-            json={"estado": "RESUELTA", "mecanico_id": mecanico.id},
+            json=payload,
             headers=auth_headers_supervisor,
         )
     else:
+        form_data = {key: [str(item) for item in value] if isinstance(value, list) else str(value)
+                     for key, value in payload.items()}
         response = await client.patch(
             url,
-            data={"estado": "RESUELTA", "mecanico_id": str(mecanico.id)},
+            data=form_data,
             files={"fotos": ("evidencia.jpg", b"foto", "image/jpeg")},
             headers=auth_headers_supervisor,
         )
@@ -104,6 +119,98 @@ async def test_supervision_fecha_cambio_estado_omitida_usa_hora_servidor(
     assert response.status_code == 200, response.text
     fecha_aplicada = datetime.fromisoformat(response.json()["fecha_cambio_estado"].replace("Z", "+00:00"))
     assert antes <= fecha_aplicada <= despues
+
+
+@pytest.mark.asyncio
+async def test_supervision_resolucion_historica_anterior_a_creacion_ot(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, taller_resultado
+):
+    mecanico = seed_test_data["mecanico1"]
+    solicitud_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": f"BUS-RES-HIST-{uuid.uuid4().hex[:8]}",
+            "detalles": [{"falla_id": seed_test_data["falla1"].id}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert solicitud_res.status_code == 201, solicitud_res.text
+    solicitud = solicitud_res.json()
+    detalle_id = solicitud["detalles"][0]["id"]
+    fecha_creacion_ot = _parse_utc(solicitud["fecha_creacion"])
+    fecha_resolucion = fecha_creacion_ot - timedelta(days=1)
+    url = f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver"
+
+    payload = await taller_resultado["payload"](
+        solicitud["id"], detalle_id, "RESUELTA", [mecanico.id],
+        fecha_cambio_estado=fecha_resolucion.isoformat(),
+    )
+
+    response = await client.patch(
+        url,
+        json=payload,
+        headers=auth_headers_supervisor,
+    )
+
+    assert response.status_code == 200, response.text
+    actualizado = response.json()
+    assert actualizado["resuelto"] is True
+    assert _parse_utc(actualizado["fecha_resolucion"]) == fecha_resolucion
+
+    detalle_res = await client.get(
+        f"/api/v1/supervision/solicitudes/{solicitud['id']}",
+        headers=auth_headers_supervisor,
+    )
+    assert detalle_res.status_code == 200, detalle_res.text
+    historial = detalle_res.json()["detalles"][0]["historial_eventos"]
+    reportada = [evento for evento in historial if evento["tipo_evento"] == "REPORTADA"]
+    resueltas = [evento for evento in historial if evento["tipo_evento"] == "RESUELTA"]
+    assert len(reportada) == 1
+    assert len(resueltas) == 1
+    assert _parse_utc(resueltas[0]["fecha_evento"]) == fecha_resolucion
+
+
+
+@pytest.mark.asyncio
+async def test_multipart_resultado_acepta_talleres_colaboradores_repetidos(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, taller_resultado
+):
+    solicitud_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": f"BUS-MULTIPART-{uuid.uuid4().hex[:8]}",
+            "detalles": [{"falla_id": seed_test_data["falla1"].id}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert solicitud_res.status_code == 201, solicitud_res.text
+    solicitud = solicitud_res.json()
+    detalle_id = solicitud["detalles"][0]["id"]
+    ciudades = await client.get("/api/v1/taller/ciudades", headers=auth_headers_supervisor)
+    assert ciudades.status_code == 200, ciudades.text
+    colaborador = await client.post(
+        "/api/v1/taller/talleres",
+        json={"nombre": "Colaborador externo", "ciudad_id": ciudades.json()[0]["id"], "tipo": "EXTERNO"},
+        headers=auth_headers_supervisor,
+    )
+    assert colaborador.status_code == 201, colaborador.text
+    payload = await taller_resultado["payload"](
+        solicitud["id"], detalle_id, "RESUELTA", [seed_test_data["mecanico1"].id],
+        talleres_colaboradores_ids=[colaborador.json()["id"]],
+    )
+    form_data = {
+        key: [str(item) for item in value] if isinstance(value, list) else str(value)
+        for key, value in payload.items()
+    }
+    response = await client.patch(
+        f"/api/v1/supervision/solicitudes/{solicitud['id']}/detalles/{detalle_id}/resolver",
+        data=form_data,
+        files={"fotos": ("evidencia.jpg", b"foto", "image/jpeg")},
+        headers=auth_headers_supervisor,
+    )
+    assert response.status_code == 200, response.text
+    ubicacion = response.json()["ubicacion"]
+    assert [item["id"] for item in ubicacion["talleres_colaboradores"]] == [colaborador.json()["id"]]
 
 
 @pytest.mark.asyncio
@@ -448,7 +555,7 @@ async def test_supervision_agregar_falla_resuelta_con_mecanico(
 
 @pytest.mark.asyncio
 async def test_supervision_resolver_falla_indicando_mecanico_flujo(
-    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data, taller_resultado
 ):
     """Prueba completa para que la supervisora indique qué mecánico arregló una falla existente o la reabra."""
     mecanico1 = seed_test_data["mecanico1"]
@@ -471,23 +578,25 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     sol_id = sol_data["id"]
     detalle_id = sol_data["detalles"][0]["id"]
 
-    # 2. Supervisora intenta resolver sin indicar mecanico_id -> 422 BusinessRuleException
+    # 2. Supervisora intenta resolver sin mecanicos_ids explícito -> 422.
+    sin_autores = await taller_resultado["payload"](sol_id, detalle_id, "RESUELTA", None)
+    sin_autores.pop("mecanicos_ids")
     res_sin_mec = await client.patch(
         f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
-        json={"resuelto": True, "mecanico_id": None},
+        json=sin_autores,
         headers=auth_headers_supervisor,
     )
     assert res_sin_mec.status_code == 422
-    assert "Debe indicar al menos un mec" in res_sin_mec.json()["error"]["message"]
+    assert "mecanicos_ids explícitamente" in res_sin_mec.json()["error"]["message"]
 
     # 3. Supervisora resuelve la falla indicando qué mecánico la arregló
+    payload_resolver = await taller_resultado["payload"](
+        sol_id, detalle_id, "RESUELTA", [mecanico1.id],
+        comentario="Se lubricó el vástago y se calibró la presión",
+    )
     res_resolver = await client.patch(
         f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
-        json={
-            "resuelto": True,
-            "mecanico_id": mecanico1.id,
-            "comentario": "Se lubricó el vástago y se calibró la presión",
-        },
+        json=payload_resolver,
         headers=auth_headers_supervisor,
     )
     assert res_resolver.status_code == 200
@@ -507,12 +616,12 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     assert any(" reparó: " in c["comentario"] and mecanico1.nombre_completo in c["comentario"] for c in comentarios)
 
     # 5. Supervisora reabre la avería si se requiere nueva revisión
+    payload_reabrir = await taller_resultado["payload"](
+        sol_id, detalle_id, "PENDIENTE", comentario="Persiste leve pérdida de aire en prueba de ruta",
+    )
     res_reabrir = await client.patch(
         f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/resolver",
-        json={
-            "resuelto": False,
-            "comentario": "Persiste leve pérdida de aire en prueba de ruta",
-        },
+        json=payload_reabrir,
         headers=auth_headers_supervisor,
     )
     assert res_reabrir.status_code == 200
@@ -520,29 +629,33 @@ async def test_supervision_resolver_falla_indicando_mecanico_flujo(
     assert det_reabierto["resuelto"] is False
     assert det_reabierto["mecanico_resolvio_id"] is None
 
-    # 6. Probar endpoint de mantención /detalles/{id}/check invocado por supervisora con query params
+    # 6. Probar alias /check en mantención con el contrato de resultado.
+    payload_mant_check = await taller_resultado["payload"](sol_id, detalle_id, "RESUELTA", [mecanico1.id])
     res_mant_check = await client.patch(
-        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check?resuelto=true&mecanico_id={mecanico1.id}",
+        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check",
+        json=payload_mant_check,
         headers=auth_headers_supervisor,
     )
     assert res_mant_check.status_code == 200
     assert res_mant_check.json()["resuelto"] is True
     assert res_mant_check.json()["mecanico_resolvio_id"] == mecanico1.id
 
-    # 7. Probar endpoint de mantención /detalles/{id}/check enviando Body JSON puro (sin query params)
+    # 7. Body JSON en la ruta de mantención.
+    payload_mant_body = await taller_resultado["payload"](sol_id, detalle_id, "RESUELTA", [mecanico1.id])
     res_mant_body = await client.patch(
         f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check",
-        json={"resuelto": True, "mecanico_id": mecanico1.id},
+        json=payload_mant_body,
         headers=auth_headers_supervisor,
     )
     assert res_mant_body.status_code == 200
     assert res_mant_body.json()["resuelto"] is True
     assert res_mant_body.json()["mecanico_resolvio_id"] == mecanico1.id
 
-    # 8. Probar alias /check en módulo de supervisión con campo alternativo 'mecanico_resolvio_id'
+    # 8. Probar el alias /check del módulo de supervisión.
+    payload_sup_check = await taller_resultado["payload"](sol_id, detalle_id, "RESUELTA", [mecanico1.id])
     res_sup_check = await client.patch(
         f"/api/v1/supervision/solicitudes/{sol_id}/detalles/{detalle_id}/check",
-        json={"resuelto": True, "mecanico_resolvio_id": mecanico1.id},
+        json=payload_sup_check,
         headers=auth_headers_supervisor,
     )
     assert res_sup_check.status_code == 200

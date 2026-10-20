@@ -1,6 +1,7 @@
 import asyncio
 import os
 import pytest
+from uuid import uuid4
 from typing import AsyncGenerator
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -181,3 +182,35 @@ def auth_headers_mecanico2(seed_test_data):
 def auth_headers_supervisor(seed_test_data):
     token = create_access_token(subject=4)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def taller_resultado(client: AsyncClient, auth_headers_supervisor, seed_test_data):
+    """Crea catálogo efímero y payload de resultado con snapshot de evento vigente."""
+    ciudad = await client.post(
+        "/api/v1/taller/ciudades", headers=auth_headers_supervisor,
+        json={"codigo": "TEST", "nombre": "Ciudad de prueba"},
+    )
+    assert ciudad.status_code == 201, ciudad.text
+    taller = await client.post(
+        "/api/v1/taller/talleres", headers=auth_headers_supervisor,
+        json={"nombre": "Taller de prueba", "ciudad_id": ciudad.json()["id"], "tipo": "INTERNO"},
+    )
+    assert taller.status_code == 201, taller.text
+
+    async def payload(solicitud_id, detalle_id, estado, mecanicos_ids=None, **extra):
+        ficha = await client.get(f"/api/v1/taller/{solicitud_id}", headers=auth_headers_supervisor)
+        assert ficha.status_code == 200, ficha.text
+        detalle = next(item for item in ficha.json()["detalles"] if item["id"] == detalle_id)
+        body = {
+            "operacion_id": str(uuid4()),
+            "evento_esperado_id": detalle.get("evento_estado_vigente_id"),
+            "estado": estado,
+            **extra,
+        }
+        if estado in ("RESUELTA", "INCOMPLETA"):
+            body["mecanicos_ids"] = mecanicos_ids if mecanicos_ids is not None else [seed_test_data["mecanico1"].id]
+            body["taller_id"] = taller.json()["id"]
+        return body
+
+    return {"taller_id": taller.json()["id"], "payload": payload}

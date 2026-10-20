@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 127,
+  "id": "AV-0127",
+  "timestamp": "2026-10-20T18:35:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-LOC",
+    "name": "Talleres y Ciudades por Resultado de Falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Soporte para usuarios con rol ADMIN como autores válidos en resolución de fallas y resolución basada en asignaciones activas sin requerir mecanicos_ids explícito cuando el admin opera como mecánico.",
+  "scope": {
+    "planned": [
+      "Permitir que usuarios con rol ADMIN con asignaciones activas sean reconocidos como autores válidos sin detonar 422",
+      "Evitar que un mecánico sea bloqueado al resolver una falla en la que un usuario ADMIN participó o se autoasignó",
+      "Permitir al rol ADMIN resolver fallas asignadas desde la interfaz de taller sin forzar mecanicos_ids"
+    ],
+    "completed": [
+      "Validación de rol en _resolver_autores ampliada a ('MECANICO', 'ADMIN')",
+      "Resolución por asignaciones activas para ADMIN cuando opera en endpoints de taller sin mecanicos_ids explícito",
+      "Suite de pruebas unitarias extendida con test_admin_asignado_puede_ser_autor_y_resolutor"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/resultado_falla_service.py",
+      "action": "modified",
+      "summary": "Se amplió la verificación de autores activos para incluir roles ('MECANICO', 'ADMIN') y se permitió que ADMIN herede el equipo asignado cuando dto.mecanicos_ids es None."
+    },
+    {
+      "path": "tests/unit/test_taller_ubicacion_resultados.py",
+      "action": "modified",
+      "summary": "Se añadió test unitario validando que la participación conjunta de un usuario ADMIN y un MECANICO en una falla resuelva exitosamente."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-085",
+      "title": "Inclusión de rol ADMIN en verificación de autores de mantención",
+      "rationale": "Los endpoints de taller utilizan la dependencia require_mecanico_or_admin, permitiendo que administradores del sistema se autoasignen o intervengan en fallas de taller. Si el servicio de resultados de fallas exigía estrictamente rol=='MECANICO' al recopilar los autores del equipo, cualquier falla con asignación de un admin quedaba bloqueada para todos los mecánicos. Permitir ('MECANICO', 'ADMIN') preserva la consistencia de permisos globales y destraba el flujo operativo sin abrir la puerta a roles no técnicos como CONDUCTOR.",
+      "consequences": "Tanto administradores como mecánicos pueden resolver fallas donde el administrador formó parte del equipo asignado, manteniendo la integridad referencial y las auditorías de autoría."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit/test_taller_ubicacion_resultados.py -v",
+      "result": "passed",
+      "evidence": "4 passed in 4.98s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar fix en ramas develop y main mediante GitFlow y proceder con push coordinado.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "fix/admin-autor-resolucion",
+    "commit": "pending",
+    "dirty": false
+  },
+  "notes": [
+    "Resuelve el error 422 BUSINESS_RULE_VIOLATION: El usuario 1 no es un mecánico activo en PATCH /api/v1/taller/{id}/detalles/{id}/check."
+  ]
+}

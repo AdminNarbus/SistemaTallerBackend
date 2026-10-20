@@ -203,3 +203,54 @@ async def test_resultado_externo_sin_autores_y_correccion_inmutable(db_session, 
     evento = next(item for item in detalle.historial_eventos if item.id == result.evento_id)
     assert detalle.ubicacion_vigente_id == correction.id
     assert [item.version for item in evento.historial_ubicaciones] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_admin_asignado_puede_ser_autor_y_resolutor(db_session, seed_test_data):
+    from app.modules.auth.models.usuario import Usuario
+    from app.core.security import get_password_hash
+
+    conductor = seed_test_data["conductor"]
+    mecanico = seed_test_data["mecanico1"]
+    admin = Usuario(
+        nombre="Admin", apellido="Sistema", username="admin-unit@narbus.cl",
+        password_hash=get_password_hash("password123"), rol_id=4, is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+
+    solicitud, detalle_id = await _crear_solicitud(db_session, conductor, seed_test_data["falla1"], "ADMIN-AUTOR")
+    taller, _ = await _crear_talleres(db_session)
+
+    # El admin y el mecánico están asignados conjuntamente a la falla
+    db_session.add_all([
+        TallerAsignacionFalla(solicitud_id=solicitud.id, detalle_id=detalle_id, mecanico_id=admin.id,
+                             asignado_por_id=admin.id, origen="AUTOASIGNACION", is_activo=True),
+        TallerAsignacionFalla(solicitud_id=solicitud.id, detalle_id=detalle_id, mecanico_id=mecanico.id,
+                             asignado_por_id=admin.id, origen="AUTOASIGNACION", is_activo=True),
+    ])
+    await db_session.flush()
+
+    esperado = await db_session.scalar(select(TallerFallaEvento.id).where(
+        TallerFallaEvento.detalle_id == detalle_id
+    ).order_by(TallerFallaEvento.id.desc()).limit(1))
+
+    dto = CheckFallaDTO(
+        operacion_id=uuid4(),
+        evento_esperado_id=esperado,
+        estado=EstadoFalla.RESUELTA,
+        taller_id=taller.id,
+    )
+
+    # El mecánico marca la falla resuelta (el equipo incluye al admin)
+    result = await resultado_falla_service.registrar(
+        db_session, solicitud.id, detalle_id, mecanico.id,
+        mecanico.nombre_completo, "MECANICO", dto,
+    )
+
+    assert result.resuelto is True
+    assert result.ubicacion.id is not None
+    autores_ids = [m.id for m in result.mecanicos_resolvieron]
+    assert admin.id in autores_ids
+    assert mecanico.id in autores_ids
+

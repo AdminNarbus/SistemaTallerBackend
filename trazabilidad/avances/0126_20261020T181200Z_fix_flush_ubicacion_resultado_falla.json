@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 126,
+  "id": "AV-0126",
+  "timestamp": "2026-10-20T18:12:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLER-LOC",
+    "name": "Talleres y Ciudades por Resultado de Falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corrección de persistencia y serialización en el registro de resultados de falla: se asegura flush asíncrono de la entidad TallerResultadoUbicacion previo a la construcción del DTO de respuesta y se flexibiliza defensivamente el campo id en UbicacionEventoDTO.",
+  "scope": {
+    "planned": [
+      "Resolver ValidationError en UbicacionEventoDTO al resolver o cambiar estado de falla",
+      "Garantizar que ubicacion.id esté poblado antes de invocar _ubicacion_dto en sesiones con autoflush=False",
+      "Replicar autoflush=False en el entorno de pruebas para evitar falsos positivos"
+    ],
+    "completed": [
+      "Conversión de _guardar_ubicacion a async con await db.flush() inmediato tras db.add(ubicacion)",
+      "Uso de await self._guardar_ubicacion en registrar y corregir_ubicacion",
+      "Definición defensiva de id: Optional[int] = None en UbicacionEventoDTO",
+      "Configuración de autoflush=False en async_sessionmaker de tests/conftest.py"
+    ],
+    "pending": [],
+    "outOfScope": []
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/resultado_falla_service.py",
+      "action": "modified",
+      "summary": "Se convirtió _guardar_ubicacion a asíncrono con await db.flush() para garantizar la asignación del id autoincremental antes de mapear el DTO de respuesta."
+    },
+    {
+      "path": "app/modules/taller/dtos/taller_ubicacion_dto.py",
+      "action": "modified",
+      "summary": "Se flexibilizó el campo id en UbicacionEventoDTO a Optional[int] = None como programación defensiva."
+    },
+    {
+      "path": "tests/conftest.py",
+      "action": "modified",
+      "summary": "Se añadió autoflush=False a async_sessionmaker para reflejar con fidelidad la configuración de producción de app/core/database.py."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-084",
+      "title": "Flush asíncrono en _guardar_ubicacion y autoflush=False en conftest",
+      "rationale": "En app/core/database.py, autoflush está desactivado por rendimiento. Al persistir TallerResultadoUbicacion antes de commit, la entidad no poseía id hasta el commit posterior, lo que provocaba que UbicacionEventoDTO fallara su validación de tipo entero. Al forzar flush en el método de guardado y reflejar autoflush=False en la suite de pruebas, se asegura la coherencia del modelo tanto en tests como en producción.",
+      "consequences": "Las mutaciones de resolución y corrección de ubicación retornan siempre el id entero de la ubicación persistida sin errores 500 y la suite de pruebas previene regresiones en operaciones sin flush explícito."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit/test_taller_ubicacion_resultados.py -v",
+      "result": "passed",
+      "evidence": "3 passed in 4.05s con autoflush=False"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar fix en ramas develop y main mediante GitFlow y notificar al usuario.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "fix/flush-ubicacion-resultado",
+    "commit": "pending",
+    "dirty": false
+  },
+  "notes": [
+    "Error resuelto en endpoints PATCH /api/v1/supervision/solicitudes/{id}/detalles/{id}/resolver y PATCH /api/v1/taller/{id}/detalles/{id}/check."
+  ]
+}

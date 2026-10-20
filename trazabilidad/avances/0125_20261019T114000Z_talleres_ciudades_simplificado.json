@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 125,
+  "id": "AV-0125",
+  "timestamp": "2026-10-20T16:56:00-03:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TALLERES-CIUDADES-SIMPLE",
+    "name": "Talleres y ciudades por resultado de falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación finalizada para registrar ciudad, taller responsable y talleres colaboradores en cada resultado de falla, con correcciones históricas anotadas, sin ciclos de intervención por taller.",
+  "scope": {
+    "planned": [
+      "Validar la migración y cadena completa sobre PostgreSQL desechable y ejecutar alembic check",
+      "Coordinar el contrato con el cliente antes del despliegue"
+    ],
+    "completed": [
+      "Crear modelos y migración nueva 029_talleres_resultados desde 028_resolucion_historica_falla para ciudades, talleres, ubicaciones versionadas, colaboradores y recibos idempotentes",
+      "Añadir catálogo de ciudades y talleres con permisos de lectura/escritura",
+      "Conectar el registro de resultados y correcciones históricas con transacciones, UUID idempotente y evento esperado",
+      "Aplicar reglas de autores y reemplazo del equipo actual conservando asignaciones históricas",
+      "Añadir filtros de auditoría por ciudad, taller, colaborador y alcance actual/histórico/todos",
+      "Actualizar regresiones de integración y E2E al contrato nuevo",
+      "Corregir orden del router para que GET /ciudades no sea capturado por una ruta dinámica",
+      "Alinear el parser multipart para reconstruir listas repetidas de mecánicos y talleres colaboradores",
+      "Crear guía frontend de propósito, permisos, endpoints, payloads, respuestas, reintentos y errores",
+      "Añadir revisión Alembic 030 para precargar las 346 comunas chilenas con códigos CUT oficiales",
+      "Documentar el contrato nuevo en trazabilidad/07_TALLERES_CIUDADES.md",
+      "Añadir pruebas para cambio A,B a B,C, reintento idempotente, resultado externo sin autores, corrección versionada, filtros de auditoría, permiso supervisor y rechazo de expectativa obsoleta"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Migrar las revisiones 029–034 ni transportar el antiguo avance",
+      "Incluir el trabajo WhatsApp en esta rama",
+      "Modificar datos de bases de aplicación o desplegar"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Registro inmutable y versionado de ubicaciones por evento de falla",
+      "rationale": "Permite registrar en qué taller y ciudad se resolvió cada falla sin crear ciclos complejos de turnos por taller ni alterar la entidad base de la OT.",
+      "consequences": "Preserva la trazabilidad completa, evita duplicidad de órdenes y desacopla la ubicación física de las asignaciones de mecánicos."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Idempotencia transaccional mediante UUID y huella SHA-256",
+      "rationale": "Evita duplicación de eventos de falla y bitácora ante reintentos de red inestables o reintentos automáticos del cliente móvil/web.",
+      "consequences": "Respuestas instantáneas y seguras sin mutaciones colaterales en la base de datos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Control de concurrencia optimista vía evento_esperado_id",
+      "rationale": "Garantiza que el usuario opere sobre la versión vigente de la falla evitando sobreescrituras en caliente si otro usuario modificó la falla.",
+      "consequences": "Retorno de 409 ConflictException inmediato si el estado de la falla cambió."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest --ignore=tests/_tmp_integrity_neon_20261006",
+      "result": "passed",
+      "evidence": "285 pruebas aprobadas (unitarias, integración, E2E y migraciones de comunas CUT)"
+    },
+    {
+      "command": "pytest tests/unit/test_taller_ubicacion_resultados.py tests/migrations/test_ciudades_chile_seed_data.py -v",
+      "result": "passed",
+      "evidence": "4 pruebas focalizadas aprobadas en 2.36s"
+    },
+    {
+      "command": "python -m compileall app/ tests/ alembic/",
+      "result": "passed",
+      "evidence": "Compilación 100% limpia sin errores de sintaxis"
+    },
+    {
+      "command": "python -c 'from app.main import app; print(len(app.openapi()[\"paths\"]))'",
+      "result": "passed",
+      "evidence": "68 rutas registradas e importadas correctamente en OpenAPI"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar rama feat/talleres-ciudades-simple a develop y sincronizar release a main en coordinación con el Frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feat/talleres-ciudades-simple"
+  },
+  "risks": [
+    "El cliente debe enviar operacion_id, evento_esperado_id y taller_id en los resultados nuevos al desplegar en producción"
+  ]
+}

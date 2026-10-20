@@ -19,6 +19,7 @@ from app.modules.taller.dtos import (
     DetalleUpdateDTO,
 )
 from app.modules.taller.api.request_parsers import parse_json_or_multipart
+from app.modules.taller.constants import EstadoFalla
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
     DEFAULT_PAGE_LIMIT,
@@ -32,6 +33,7 @@ from app.modules.supervision.dtos import (
     SolicitudAuditoriaDTO,
 )
 from app.modules.supervision.services import supervision_service
+from app.modules.taller.services.averias_service import averias_service
 
 
 logger = logging.getLogger(__name__)
@@ -116,6 +118,10 @@ async def get_auditoria_buses_taller(
     fecha_modificacion_hasta: Optional[datetime] = Query(None, description="Fecha/hora máxima de última modificación (ISO 8601)"),
     fecha_desde: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_desde"),
     fecha_hasta: Optional[datetime] = Query(None, description="Alias de fecha_modificacion_hasta"),
+    ciudad_id: Optional[int] = Query(None, gt=0, description="Filtrar por ciudad acreditada en un evento"),
+    taller_id: Optional[int] = Query(None, gt=0, description="Filtrar por taller responsable"),
+    colaborador_id: Optional[int] = Query(None, gt=0, description="Filtrar por taller colaborador"),
+    ambito: Optional[str] = Query(None, pattern="^(ACTUAL|HISTORICO|TODOS)$", description="Alcance de ubicación auditada"),
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de registros a omitir para paginación"),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Límite máximo de solicitudes a retornar (default: 20)"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
@@ -138,6 +144,10 @@ async def get_auditoria_buses_taller(
         mecanico_nombre=mecanico_nombre,
         fecha_desde=f_desde,
         fecha_hasta=f_hasta,
+        ciudad_id=ciudad_id,
+        taller_id=taller_id,
+        colaborador_id=colaborador_id,
+        ambito=ambito,
     )
     response.headers["X-Total-Count"] = str(total)
     logger.info(
@@ -159,6 +169,10 @@ async def get_auditoria_buses_taller(
         mecanico_nombre=mecanico_nombre,
         fecha_desde=f_desde,
         fecha_hasta=f_hasta,
+        ciudad_id=ciudad_id,
+        taller_id=taller_id,
+        colaborador_id=colaborador_id,
+        ambito=ambito,
         skip=skip,
         limit=limit,
     )
@@ -347,6 +361,8 @@ async def resolver_falla_supervision(
     final_dto = dto
     if resuelto is not None and dto.resuelto is None:
         final_dto.resuelto = resuelto
+    if final_dto.estado is None and final_dto.resuelto is not None:
+        final_dto.estado = EstadoFalla.RESUELTA if final_dto.resuelto else EstadoFalla.PENDIENTE
     if mecanico_id is not None and not final_dto.effective_mecanico_id:
         final_dto.mecanico_id = mecanico_id
 
@@ -358,14 +374,10 @@ async def resolver_falla_supervision(
         final_dto.resuelto,
         final_dto.effective_mecanico_id,
     )
-    return await supervision_service.resolver_falla(
-        db,
-        solicitud_id=id,
-        detalle_id=detalle_id,
-        dto=final_dto,
-        supervisor_id=current_user.id,
-        supervisor_nombre=current_user.nombre_completo,
-        fotos=fotos,
+    return await averias_service.check_detalle(
+        db, solicitud_id=id, detalle_id=detalle_id, mecanico_id=current_user.id,
+        mecanico_nombre=current_user.nombre_completo, dto=final_dto,
+        actor_rol=current_user.rol, fotos=fotos,
     )
 
 

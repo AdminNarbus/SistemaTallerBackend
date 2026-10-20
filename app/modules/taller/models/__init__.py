@@ -10,6 +10,7 @@ from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolici
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
 from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
+from app.modules.taller.models.taller_ubicacion import Ciudad, Taller, OperacionResultado, TallerResultadoUbicacion, TallerResultadoColaborador
 
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 
@@ -28,5 +29,10 @@ __all__ = [
     "TallerFallaEvento",
     "TallerFallaEventoMecanico",
     "TallerSolicitudEstadia",
+    "Ciudad",
+    "Taller",
+    "OperacionResultado",
+    "TallerResultadoUbicacion",
+    "TallerResultadoColaborador",
 ]
 

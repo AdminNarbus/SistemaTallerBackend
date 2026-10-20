@@ -10,6 +10,7 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     seed_test_data,
     auth_headers_conductor,
     auth_headers_mecanico1,
+    taller_resultado,
 ):
     """
     Verifica de punta a punta:
@@ -48,6 +49,13 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     sol_id = data_sol["id"]
     det1_id = data_sol["detalles"][0]["id"]
     det2_id = data_sol["detalles"][1]["id"]
+    tomada = await client.post(f"/api/v1/taller/{sol_id}/tomar", headers=auth_headers_mecanico1, json={})
+    assert tomada.status_code == 200, tomada.text
+    asignacion = await client.post(
+        f"/api/v1/taller/{sol_id}/autoasignar", headers=auth_headers_mecanico1,
+        json={"detalles_ids": [det1_id]},
+    )
+    assert asignacion.status_code == 200, asignacion.text
 
     # 2. Mecánico reporta falta de repuesto en Falla 2 — responde DetalleUpdateDTO (Nivel 3)
     res_repuesto = await client.patch(
@@ -62,8 +70,10 @@ async def test_flujo_fase4_pauta_repuestos_y_liberacion(
     assert data_rep["comentario_repuesto"] == "Se requiere kit de empaquetaduras y rodamiento"
 
     # Mecánico resuelve Falla 1 — responde DetalleUpdateDTO (Nivel 3)
+    resultado = await taller_resultado["payload"](sol_id, det1_id, "RESUELTA", [seed_test_data["mecanico1"].id])
     res_check1 = await client.patch(
-        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check",
+        json=resultado,
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200

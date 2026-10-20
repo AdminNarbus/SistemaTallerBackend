@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 import logging
 from typing import Dict, List, Optional, Tuple
-from sqlalchemy import select, or_, and_, func, text, union_all, case, literal, cast, Integer, String, Numeric
+from sqlalchemy import select, or_, and_, not_, func, text, union_all, case, literal, cast, Integer, String, Numeric
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload, aliased
 
@@ -12,6 +12,8 @@ from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDe
 from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
+from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
+from app.modules.taller.models.taller_ubicacion import TallerResultadoUbicacion, TallerResultadoColaborador
 from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
 from app.modules.taller.models.falla_taller import FallaTaller
 from app.modules.taller.models.categoria_falla import CategoriaFalla
@@ -41,6 +43,62 @@ from app.modules.supervision.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _filtro_ubicacion_auditoria(ciudad_id=None, taller_id=None, colaborador_id=None, ambito=None):
+    if not any((ciudad_id, taller_id, colaborador_id, ambito)):
+        return None
+    ubicacion = aliased(TallerResultadoUbicacion)
+    evento = aliased(TallerFallaEvento)
+    detalle = aliased(TallerSolicitudDetalle)
+    ubicacion_actual = aliased(TallerResultadoUbicacion)
+    evento_actual = aliased(TallerFallaEvento)
+    ultimo_evento = aliased(TallerFallaEvento)
+
+    ultima_version = (
+        select(func.max(ubicacion_actual.version))
+        .where(ubicacion_actual.evento_id == evento.id)
+        .correlate(evento)
+        .scalar_subquery()
+    )
+    ultimo_resultado_id = (
+        select(func.max(ultimo_evento.id))
+        .where(
+            ultimo_evento.detalle_id == detalle.id,
+            ultimo_evento.tipo_evento.in_(("RESUELTA", "INCOMPLETA", "REABIERTA")),
+        )
+        .correlate(detalle)
+        .scalar_subquery()
+    )
+    es_actual = and_(
+        evento.id == ultimo_resultado_id,
+        evento.estado_nuevo == detalle.estado,
+        ubicacion.version == ultima_version,
+    )
+    stmt = (
+        select(1)
+        .select_from(ubicacion)
+        .join(evento, evento.id == ubicacion.evento_id)
+        .join(detalle, detalle.id == evento.detalle_id)
+        .where(detalle.solicitud_id == TallerSolicitud.id)
+    )
+    if ciudad_id is not None:
+        stmt = stmt.where(ubicacion.ciudad_id_snapshot == ciudad_id)
+    if taller_id is not None:
+        stmt = stmt.where(ubicacion.taller_id == taller_id)
+    if colaborador_id is not None:
+        colaborador = aliased(TallerResultadoColaborador)
+        stmt = stmt.where(
+            select(1).select_from(colaborador)
+            .where(colaborador.ubicacion_id == ubicacion.id, colaborador.taller_id == colaborador_id)
+            .exists()
+        )
+    alcance = (ambito or "TODOS").strip().upper()
+    if alcance == "ACTUAL":
+        stmt = stmt.where(es_actual)
+    elif alcance == "HISTORICO":
+        stmt = stmt.where(not_(es_actual))
+    return stmt.exists()
 
 
 class SupervisionRepository:
@@ -519,6 +577,10 @@ class SupervisionRepository:
         mecanico_nombre: Optional[str] = None,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        ciudad_id: Optional[int] = None,
+        taller_id: Optional[int] = None,
+        colaborador_id: Optional[int] = None,
+        ambito: Optional[str] = None,
         skip: int = DEFAULT_PAGE_SKIP,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> List[dict] | List[TallerSolicitud]:
@@ -537,7 +599,9 @@ class SupervisionRepository:
             skip,
             limit,
         )
-        if db.bind and db.bind.dialect.name == "postgresql":
+        if db.bind and db.bind.dialect.name == "postgresql" and not any(
+            (ciudad_id, taller_id, colaborador_id, ambito)
+        ):
             sql = text("""
                 WITH base_filtered AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
@@ -800,6 +864,10 @@ class SupervisionRepository:
             )
             stmt = stmt.where(or_(sub_mec.exists(), sub_res.exists(), sub_af.exists()))
 
+        filtro_ubicacion = _filtro_ubicacion_auditoria(ciudad_id, taller_id, colaborador_id, ambito)
+        if filtro_ubicacion is not None:
+            stmt = stmt.where(filtro_ubicacion)
+
         if skip:
             stmt = stmt.offset(skip)
         if limit:
@@ -818,9 +886,15 @@ class SupervisionRepository:
         mecanico_nombre: Optional[str] = None,
         fecha_desde: Optional[datetime] = None,
         fecha_hasta: Optional[datetime] = None,
+        ciudad_id: Optional[int] = None,
+        taller_id: Optional[int] = None,
+        colaborador_id: Optional[int] = None,
+        ambito: Optional[str] = None,
     ) -> int:
         """Retorna el conteo total de solicitudes bajo los filtros de auditoría."""
-        if db.bind and db.bind.dialect.name == "postgresql":
+        if db.bind and db.bind.dialect.name == "postgresql" and not any(
+            (ciudad_id, taller_id, colaborador_id, ambito)
+        ):
             sql = text("""
                 SELECT COUNT(*)::int
                 FROM taller_solicitudes s
@@ -915,6 +989,10 @@ class SupervisionRepository:
                 )
             )
             stmt = stmt.where(or_(sub_mec.exists(), sub_res.exists(), sub_af.exists()))
+
+        filtro_ubicacion = _filtro_ubicacion_auditoria(ciudad_id, taller_id, colaborador_id, ambito)
+        if filtro_ubicacion is not None:
+            stmt = stmt.where(filtro_ubicacion)
 
         res = await db.execute(stmt)
         return res.scalar() or 0

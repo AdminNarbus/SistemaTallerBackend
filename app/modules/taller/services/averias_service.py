@@ -13,6 +13,7 @@ from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDe
 from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.taller.dtos import (
     AgregarFallaDTO,
+    CheckFallaDTO,
     DetalleUpdateDTO,
     MecanicoResumenDTO,
     ReportarRepuestoDTO,
@@ -350,8 +351,16 @@ class AveriasService:
         motivo_incompleto: Optional[str] = None,
         comentario: Optional[str] = None,
         fotos: Optional[List[UploadFile]] = None,
+        dto: Optional[CheckFallaDTO] = None,
+        actor_rol: Optional[str] = None,
     ) -> DetalleUpdateDTO:
         """Actualiza el estado de una falla (PENDIENTE, INCOMPLETA, RESUELTA) retornando un DTO atómico."""
+        if dto is not None:
+            from app.modules.taller.services.resultado_falla_service import resultado_falla_service
+            return await resultado_falla_service.registrar(
+                db, solicitud_id, detalle_id, mecanico_id, mecanico_nombre,
+                actor_rol or "MECANICO", dto, fotos,
+            )
         target_estado: EstadoFalla
         if estado is not None:
             target_estado = estado

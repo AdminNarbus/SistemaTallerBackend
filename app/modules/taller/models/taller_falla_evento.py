@@ -57,3 +57,7 @@ class TallerFallaEvento(Base):
         passive_deletes="all",
         lazy="selectin",
     )
+    ubicaciones_taller = relationship(
+        "TallerResultadoUbicacion", order_by="TallerResultadoUbicacion.version",
+        lazy="selectin", passive_deletes="all",
+    )

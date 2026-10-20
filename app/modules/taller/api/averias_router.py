@@ -74,6 +74,12 @@ async def check_detalle(
     """Marca una falla; acepta JSON legado o multipart con fotos opcionales."""
     dto, fotos = await parse_json_or_multipart(request, CheckFallaDTO)
     estado_final, motivo_final, resuelto_final, resolutor_id = _resolver_check_params(dto, resuelto, mecanico_id)
+    if dto.estado is None and resuelto_final is not None:
+        dto.estado = EstadoFalla.RESUELTA if resuelto_final else EstadoFalla.PENDIENTE
+    if dto.motivo_incompleto is None:
+        dto.motivo_incompleto = motivo_final
+    if not dto.effective_mecanico_id and resolutor_id is not None:
+        dto.mecanico_id = resolutor_id
 
     logger.info(
         "[MANTENCION] Check falla en sol_id=%s | det_id=%s | estado=%s | resuelto=%s | actor_id=%s | resolutor_id=%s",
@@ -96,6 +102,8 @@ async def check_detalle(
         motivo_incompleto=motivo_final,
         comentario=dto.comentario,
         fotos=fotos,
+        dto=dto,
+        actor_rol=current_user.rol,
     )
 
 

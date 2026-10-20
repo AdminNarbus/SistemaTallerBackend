@@ -84,7 +84,7 @@ async def test_reportes_del_mismo_bus_se_consolidan_y_preservan_reportante(
 
 @pytest.mark.asyncio
 async def test_historial_falla_conserva_todos_los_ciclos_de_resolucion(
-    client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data
+    client, auth_headers_conductor, auth_headers_supervisor, seed_test_data, taller_resultado
 ):
     creada = await client.post(
         "/api/v1/taller/solicitudes",
@@ -99,16 +99,21 @@ async def test_historial_falla_conserva_todos_los_ciclos_de_resolucion(
     detalle_id = solicitud["detalles"][0]["id"]
 
     for estado in ("RESUELTA", "PENDIENTE", "RESUELTA"):
+        payload = await taller_resultado["payload"](
+            solicitud["id"], detalle_id, estado,
+            mecanicos_ids=[seed_test_data["mecanico1"].id] if estado != "PENDIENTE" else None,
+            comentario=f"Cambio a {estado}",
+        )
         cambio = await client.patch(
             f"/api/v1/taller/{solicitud['id']}/detalles/{detalle_id}/check",
-            json={"estado": estado, "comentario": f"Cambio a {estado}"},
-            headers=auth_headers_mecanico1,
+            json=payload,
+            headers=auth_headers_supervisor,
         )
         assert cambio.status_code == 200
 
     consulta = await client.get(
         f"/api/v1/taller/{solicitud['id']}",
-        headers=auth_headers_mecanico1,
+        headers=auth_headers_supervisor,
     )
     assert consulta.status_code == 200
     historial = consulta.json()["detalles"][0]["historial_eventos"]

@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 
 
@@ -68,14 +70,28 @@ async def test_estado_falla_texto_breve_con_nota_directa(
         json={"mecanicos_ids": [m.id for m in mecanicos], "detalles_ids": [detalle_id]},
     )
     assert asignado.status_code == 200
+    ficha_inicial = await client.get(f"/api/v1/taller/{id_ot}", headers=auth_headers_supervisor)
+    detalle_inicial = next(d for d in ficha_inicial.json()["detalles"] if d["id"] == detalle_id)
+    ciudad = await client.post("/api/v1/taller/ciudades", headers=auth_headers_supervisor,
+        json={"codigo": "SCL", "nombre": "Santiago"})
+    assert ciudad.status_code == 201, ciudad.text
+    taller = await client.post("/api/v1/taller/talleres", headers=auth_headers_supervisor,
+        json={"nombre": "Taller de prueba", "ciudad_id": ciudad.json()["id"], "tipo": "INTERNO"})
+    assert taller.status_code == 201, taller.text
 
     # Act: registrar estado y una nota distinta del motivo de incompletitud.
     response = await client.patch(
         f"/api/v1/{modulo}/{id_ot}/detalles/{detalle_id}/check",
         headers=auth_headers_supervisor,
         json={
+            "operacion_id": str(uuid4()),
+            "evento_esperado_id": detalle_inicial["evento_estado_vigente_id"],
             "estado": estado, "motivo_incompleto": "Falta prueba de ruta",
             "comentario": "Viendo en fosa",
+            **({} if estado == "PENDIENTE" else {
+                "mecanicos_ids": [m.id for m in mecanicos],
+                "taller_id": taller.json()["id"],
+            }),
         },
     )
     assert response.status_code == 200, response.text

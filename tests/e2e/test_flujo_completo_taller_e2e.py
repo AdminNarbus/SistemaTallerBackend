@@ -9,6 +9,7 @@ async def test_flujo_completo_taller_e2e(
     auth_headers_mecanico2,
     auth_headers_supervisor,
     seed_test_data,
+    taller_resultado,
 ):
     """
     PRUEBA DE SISTEMA / END-TO-END (E2E):
@@ -63,12 +64,22 @@ async def test_flujo_completo_taller_e2e(
     sol_en_rep = res_tomar.json()
     assert sol_en_rep["estado"] == "EN_REPARACION"
     assert len(sol_en_rep["mecanicos"]) == 2
+    res_asignar1 = await client.post(
+        f"/api/v1/taller/{sol_id}/autoasignar",
+        json={"detalles_ids": [det1_id]},
+        headers=auth_headers_mecanico1,
+    )
+    assert res_asignar1.status_code == 200, res_asignar1.text
 
     # -------------------------------------------------------------------------
     # PASO 4: Mecánico 1 resuelve la primera falla (det1) y agrega comentario
     # -------------------------------------------------------------------------
+    payload1 = await taller_resultado["payload"](
+        sol_id, det1_id, "RESUELTA", [mecanico1_id]
+    )
     res_check1 = await client.patch(
-        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det1_id}/check",
+        json=payload1,
         headers=auth_headers_mecanico1,
     )
     assert res_check1.status_code == 200
@@ -103,12 +114,22 @@ async def test_flujo_completo_taller_e2e(
     )
     assert res_tomar2.status_code == 200
     assert res_tomar2.json()["estado"] == "EN_REPARACION"
+    res_asignar2 = await client.post(
+        f"/api/v1/taller/{sol_id}/autoasignar",
+        json={"detalles_ids": [det2_id]},
+        headers=auth_headers_mecanico2,
+    )
+    assert res_asignar2.status_code == 200, res_asignar2.text
 
     # -------------------------------------------------------------------------
     # PASO 7: Mecánico 2 resuelve la segunda falla (det2) y finaliza la orden
     # -------------------------------------------------------------------------
+    payload2 = await taller_resultado["payload"](
+        sol_id, det2_id, "RESUELTA", [mecanico2_id]
+    )
     res_check2 = await client.patch(
-        f"/api/v1/taller/{sol_id}/detalles/{det2_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{det2_id}/check",
+        json=payload2,
         headers=auth_headers_mecanico2,
     )
     assert res_check2.status_code == 200

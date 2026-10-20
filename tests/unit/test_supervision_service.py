@@ -323,6 +323,10 @@ async def test_supervision_service_get_auditoria_aislado():
         mecanico_nombre="Juan",
         fecha_desde=None,
         fecha_hasta=None,
+        ciudad_id=None,
+        taller_id=None,
+        colaborador_id=None,
+        ambito=None,
         skip=0,
         limit=10,
     )

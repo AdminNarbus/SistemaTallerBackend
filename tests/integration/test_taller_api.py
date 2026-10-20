@@ -4,7 +4,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_bitacora_adjuntos_y_cambio_falla_multipart(
-    client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data
+    client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data, taller_resultado
 ):
     """Las fotos quedan ligadas al evento de bitácora que las originó."""
     create_res = await client.post(
@@ -42,17 +42,25 @@ async def test_bitacora_adjuntos_y_cambio_falla_multipart(
     assert comentario.json()["comentario"] == ""
     assert len(comentario.json()["adjuntos"]) == 2
 
+    tomada = await client.post(f"/api/v1/taller/{solicitud_id}/tomar", json={}, headers=auth_headers_mecanico1)
+    assert tomada.status_code == 200, tomada.text
+    asignacion = await client.post(
+        f"/api/v1/taller/{solicitud_id}/autoasignar", headers=auth_headers_mecanico1,
+        json={"detalles_ids": [detalle_id]},
+    )
+    assert asignacion.status_code == 200, asignacion.text
+    resultado = await taller_resultado["payload"](
+        solicitud_id, detalle_id, "INCOMPLETA", [seed_test_data["mecanico1"].id],
+        motivo_incompleto="Se requiere una pieza especial", comentario="Se dejó evidencia visual",
+    )
+
     cambio = await client.patch(
         f"/api/v1/taller/{solicitud_id}/detalles/{detalle_id}/check",
-        data={
-            "estado": "INCOMPLETA",
-            "motivo_incompleto": "Se requiere una pieza especial",
-            "comentario": "Se dejó evidencia visual",
-        },
+        data=resultado,
         files={"fotos": ("falla_incompleta.jpg", io.BytesIO(fake_jpg), "image/jpeg")},
         headers=auth_headers_mecanico1,
     )
-    assert cambio.status_code == 200
+    assert cambio.status_code == 200, cambio.text
     assert cambio.json()["estado"] == "INCOMPLETA"
 
     detalle_res = await client.get(
@@ -85,7 +93,7 @@ async def test_get_catalogos_mantencion(client, auth_headers_mecanico1, seed_tes
 
 
 @pytest.mark.asyncio
-async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data):
+async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data, taller_resultado):
     """Prueba la interacción HTTP completa en el módulo de mantención."""
     falla_id = seed_test_data["falla1"].id
     mecanico2_id = seed_test_data["mecanico2"].id
@@ -119,6 +127,11 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     )
     assert tomar_res.status_code == 200
     assert tomar_res.json()["estado"] == "EN_REPARACION"
+    asignar_falla = await client.post(
+        f"/api/v1/taller/{sol_id}/autoasignar", headers=auth_headers_mecanico1,
+        json={"detalles_ids": [detalle_id], "colaboradores_ids": [mecanico2_id]},
+    )
+    assert asignar_falla.status_code == 200, asignar_falla.text
 
     # 4. Mecánico 1 revisa 'mis-trabajos'
     mis_trabajos_res = await client.get("/api/v1/taller/mis-trabajos", headers=auth_headers_mecanico1)
@@ -126,8 +139,12 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     assert any(m["id"] == sol_id for m in mis_trabajos_res.json())
 
     # 5. Check de falla resuelta — responde DetalleUpdateDTO (Nivel 3)
+    resultado = await taller_resultado["payload"](
+        sol_id, detalle_id, "RESUELTA", [seed_test_data["mecanico1"].id, mecanico2_id]
+    )
     check_res = await client.patch(
-        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check?resuelto=true",
+        f"/api/v1/taller/{sol_id}/detalles/{detalle_id}/check",
+        json=resultado,
         headers=auth_headers_mecanico1,
     )
     assert check_res.status_code == 200

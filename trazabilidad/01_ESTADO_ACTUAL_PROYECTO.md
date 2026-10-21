@@ -1,5 +1,12 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Depuración de Fallas e Imágenes por Supervisión (AV-0130 - COMPLETADO)
+
+- **Eliminación de fallas con 1 clic:** Supervisión puede eliminar fallas duplicadas o erróneas en OTs abiertas (`DELETE /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`). Desasocia evidencias enlazadas a la falla, elimina en cascada segura asignaciones y eventos de resolución, desactiva la presencia del mecánico si ya no le restan averías activas, y registra automáticamente en la bitácora inmutable: `"Se elimina falla '{falla}' por duplicidad"` (`tipo="SUPERVISION"`).
+- **Eliminación de imágenes iniciales con 1 clic:** Supervisión puede eliminar fotos erróneas del formulario del chofer (`DELETE /api/v1/supervision/solicitudes/{id}/evidencias/{evidencia_id}`). Borra el archivo físico en el storage provider (GCS / Local), borra el registro relacional, recalcula y ajusta la foto de portada de la OT si coincidía con la eliminada, y registra en bitácora inmutable: `"Se elimina una imagen de la orden de trabajo"`. Bloquea terminantemente la eliminación de evidencias asociadas a comentarios o resoluciones de averías.
+- **Edición y corrección de averías con justificación:** Supervisión puede editar la descripción/categoría/falla de una avería (`PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}` con `EditarFallaDTO`). Exige justificación obligatoria y la estampa en la bitácora inmutable: `"Avería #{detalle_id} modificada: de '{texto_anterior}' a '{texto_nuevo}'. Justificación: {justificacion}"`.
+- **Validación y calidad:** Suite de 6 pruebas unitarias (`test_supervision_depuracion_fallas_y_fotos.py`) y suite de regresión completa aprobadas al 100% (63/63 tests).
+
 ## Talleres y ciudades por resultado de falla (AV-0125 - COMPLETADO)
 
 - Implementación desde `develop` para registrar ciudad, taller responsable y talleres colaboradores en cada resultado de falla.

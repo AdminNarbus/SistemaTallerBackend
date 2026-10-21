@@ -82,6 +82,9 @@
 - `GET /buses/taller`: Paginación y auditoría detallada de buses en taller con filtros por estado (`estado`) y búsqueda (`q`).
 - `GET /auditoria/buses-taller`: Auditoría analítica consolidada de trazabilidad histórica.
 - `PATCH /solicitudes/{id}/estado`: Cambio manual de estado de OT con justificación y bitácora inmutable.
+- `DELETE /solicitudes/{id}/detalles/{detalle_id}`: Eliminación de falla duplicada o errónea con 1 clic. Desasocia evidencias enlazadas a la falla, elimina en cascada segura asignaciones y eventos de resolución, desactiva la presencia del mecánico si ya no le restan averías activas, y registra automáticamente en la bitácora inmutable: `"Se elimina falla '{falla}' por duplicidad"`. Bloquea si la falla ya fue resuelta o si la OT está finalizada.
+- `PATCH /solicitudes/{id}/detalles/{detalle_id}`: Modificación del texto/descripción de una avería (`EditarFallaDTO`). Exige justificación obligatoria y la registra en bitácora inmutable: `"Avería #{detalle_id} modificada: de '{texto_anterior}' a '{texto_nuevo}'. Justificación: {justificacion}"`.
+- `DELETE /solicitudes/{id}/evidencias/{evidencia_id}`: Eliminación de fotografía inicial del chofer con 1 clic. Elimina archivo en storage provider y registro en BD, reasigna foto de portada de OT si correspondía a la imagen eliminada, y registra comentario de bitácora `"Se elimina una imagen de la orden de trabajo"`. Bloquea imágenes de bitácora o resolución de fallas.
 - `POST /buses`: Creación y alta de nuevo bus en el sistema (ruta delegada de conveniencia).
 - `PATCH /buses/{id}/dar-de-baja`: Retiro de circulación / baja lógica de bus con auditoría (ruta delegada).
 

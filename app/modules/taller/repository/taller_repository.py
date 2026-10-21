@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
-from sqlalchemy import select, update, and_, or_, text, func
+from sqlalchemy import select, update, delete, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.orm import selectinload, joinedload, noload
@@ -1651,6 +1651,107 @@ class TallerRepository:
 
     def add_pauta_respuesta(self, db: AsyncSession, pauta_entry: TallerSolicitudPauta) -> None:
         db.add(pauta_entry)
+
+    async def delete_detalle_con_dependencias(
+        self, db: AsyncSession, solicitud_id: int, detalle_id: int
+    ) -> None:
+        """
+        Elimina atómicamente un detalle de falla y todas sus dependencias en orden referencial estricto:
+        colaboradores -> ubicaciones -> eventos_mecanicos -> eventos -> asignaciones -> desvincula evidencias -> detalle.
+        """
+        from app.modules.taller.models.taller_ubicacion import (
+            OperacionResultado,
+            TallerResultadoColaborador,
+            TallerResultadoUbicacion,
+        )
+
+        if db.bind and db.bind.dialect.name == "postgresql":
+            await db.execute(text("SET LOCAL narbus.permitir_depuracion = 'on'"))
+
+        # 1. Obtener los IDs de eventos asociados al detalle
+        stmt_ev = select(TallerFallaEvento.id).where(TallerFallaEvento.detalle_id == detalle_id)
+        res_ev = await db.execute(stmt_ev)
+        evento_ids = list(res_ev.scalars().all())
+
+        if evento_ids:
+            # 1.1 Ubicaciones de los eventos
+            stmt_ub = select(TallerResultadoUbicacion.id).where(
+                TallerResultadoUbicacion.evento_id.in_(evento_ids)
+            )
+            res_ub = await db.execute(stmt_ub)
+            ubicacion_ids = list(res_ub.scalars().all())
+            if ubicacion_ids:
+                await db.execute(
+                    delete(TallerResultadoColaborador).where(
+                        TallerResultadoColaborador.ubicacion_id.in_(ubicacion_ids)
+                    )
+                )
+                await db.execute(
+                    delete(TallerResultadoUbicacion).where(
+                        TallerResultadoUbicacion.id.in_(ubicacion_ids)
+                    )
+                )
+
+            # 1.2 Mecánicos resolutores de eventos
+            await db.execute(
+                delete(TallerFallaEventoMecanico).where(
+                    TallerFallaEventoMecanico.evento_id.in_(evento_ids)
+                )
+            )
+
+            # 1.3 Eventos de falla
+            await db.execute(
+                delete(TallerFallaEvento).where(TallerFallaEvento.id.in_(evento_ids))
+            )
+
+        # 2. Operaciones idempotentes asociadas al detalle
+        await db.execute(
+            delete(OperacionResultado).where(OperacionResultado.detalle_id == detalle_id)
+        )
+
+        # 3. Asignaciones de falla
+        await db.execute(
+            delete(TallerAsignacionFalla).where(
+                and_(
+                    TallerAsignacionFalla.detalle_id == detalle_id,
+                    TallerAsignacionFalla.solicitud_id == solicitud_id,
+                )
+            )
+        )
+
+        # 4. Desvincular evidencias fotográficas que apunten al detalle
+        await db.execute(
+            update(TallerSolicitudEvidencia)
+            .where(
+                and_(
+                    TallerSolicitudEvidencia.detalle_id == detalle_id,
+                    TallerSolicitudEvidencia.solicitud_id == solicitud_id,
+                )
+            )
+            .values(detalle_id=None)
+        )
+
+        # 5. Eliminar el detalle
+        await db.execute(
+            delete(TallerSolicitudDetalle).where(
+                and_(
+                    TallerSolicitudDetalle.id == detalle_id,
+                    TallerSolicitudDetalle.solicitud_id == solicitud_id,
+                )
+            )
+        )
+
+    async def get_evidencia_by_id(
+        self, db: AsyncSession, evidencia_id: int
+    ) -> Optional[TallerSolicitudEvidencia]:
+        """Obtiene una evidencia fotográfica por su ID."""
+        return await db.get(TallerSolicitudEvidencia, evidencia_id)
+
+    async def delete_evidencia(
+        self, db: AsyncSession, evidencia: TallerSolicitudEvidencia
+    ) -> None:
+        """Elimina físicamente el registro de evidencia de la base de datos."""
+        await db.delete(evidencia)
 
     async def desactivar_mecanicos_activos(
         self, db: AsyncSession, solicitud_id: int, fecha_desasignacion: datetime, flush: bool = False

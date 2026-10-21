@@ -15,6 +15,7 @@ from app.modules.taller.dtos import (
     SolicitudDTO,
     SolicitudResumenDTO,
     AgregarFallaDTO,
+    EditarFallaDTO,
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
 )
@@ -379,5 +380,93 @@ async def resolver_falla_supervision(
         mecanico_nombre=current_user.nombre_completo, dto=final_dto,
         actor_rol=current_user.rol, fotos=fotos,
     )
+
+
+@router.delete(
+    "/solicitudes/{id}/detalles/{detalle_id}",
+    response_model=SolicitudDTO,
+    summary="Eliminar falla de una OT por duplicidad o error",
+    description="Permite a la supervisora o administradores eliminar completamente una avería duplicada o errónea de la OT con un solo clic, registrando automáticamente el evento en la bitácora inmutable.",
+)
+async def eliminar_falla_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    detalle_id: int = Path(..., description="ID numérico del detalle de falla", ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    """Elimina completamente la avería duplicada y registra el aviso automático en la bitácora."""
+    logger.info(
+        "[SUPERVISION] Supervisora %s eliminando falla detalle_id=%s en solicitud_id=%s",
+        current_user.id,
+        detalle_id,
+        id,
+    )
+    return await supervision_service.eliminar_falla(
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+    )
+
+
+@router.patch(
+    "/solicitudes/{id}/detalles/{detalle_id}",
+    response_model=SolicitudDTO,
+    summary="Modificar texto de una falla con justificación obligatoria",
+    description="Permite a la supervisora corregir el texto o descripción de una avería justificando obligatoriamente el motivo del cambio en la bitácora inmutable.",
+)
+async def editar_falla_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    detalle_id: int = Path(..., description="ID numérico del detalle de falla", ge=1),
+    dto: EditarFallaDTO = Body(...),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    """Modifica la descripción de una avería requiriendo justificación obligatoria."""
+    logger.info(
+        "[SUPERVISION] Supervisora %s modificando texto de falla detalle_id=%s en solicitud_id=%s | justificacion='%s'",
+        current_user.id,
+        detalle_id,
+        id,
+        dto.justificacion,
+    )
+    return await supervision_service.editar_falla(
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        dto=dto,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+    )
+
+
+@router.delete(
+    "/solicitudes/{id}/evidencias/{evidencia_id}",
+    response_model=SolicitudDTO,
+    summary="Eliminar imagen inicial de la OT",
+    description="Permite a la supervisora o administradores eliminar una imagen errónea subida desde el formulario inicial del chofer con un solo clic. No permite eliminar fotos de la bitácora ni de resolución.",
+)
+async def eliminar_evidencia_supervision(
+    id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
+    evidencia_id: int = Path(..., description="ID numérico de la evidencia fotográfica", ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    """Elimina la imagen inicial del formulario del chofer y registra el aviso automático en la bitácora."""
+    logger.info(
+        "[SUPERVISION] Supervisora %s eliminando evidencia_id=%s en solicitud_id=%s",
+        current_user.id,
+        evidencia_id,
+        id,
+    )
+    return await supervision_service.eliminar_evidencia_inicial(
+        db,
+        solicitud_id=id,
+        evidencia_id=evidencia_id,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+    )
+
 
 

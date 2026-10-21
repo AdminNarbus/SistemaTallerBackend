@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 129,
+  "id": "AV-0129",
+  "timestamp": "2026-10-21T13:50:36.594893Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-FOTO-BUS406",
+    "name": "Retirada de imagen adjuntada por error",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Retirada en Neon la imagen de la orden del bus 406 (ID interno 69), por solicitud expresa del usuario. Foto principal vacía y evidencia 29 eliminada; resto de la orden conservado.",
+  "scope": {
+    "planned": [
+      "Retirar la imagen errónea de la orden identificada por el usuario como 406"
+    ],
+    "completed": [
+      "Identificación: en taller no existe OT con PK 406; la única orden del bus 406 es la OT 69, con una sola foto",
+      "Respaldo local de cabecera y referencia de imagen antes de modificar",
+      "Una transacción acotada al ID 69 y evidencia 29; actualización de fecha_actualizacion",
+      "Verificación independiente posterior al commit: foto_url NULL y cero evidencias de esa OT"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Borrado físico del objeto en almacenamiento",
+      "Cambios de esquema, aplicación, otras OTs o historia de reparación"
+    ]
+  },
+  "changes": [
+    {
+      "path": "Neon/taller/taller_solicitudes/69",
+      "action": "modified",
+      "summary": "foto_url NULL y fecha_actualizacion renovada; demás campos idénticos."
+    },
+    {
+      "path": "Neon/taller/taller_solicitud_evidencias/29",
+      "action": "deleted",
+      "summary": "Referencia de la única imagen de la OT 69."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0129-001",
+      "title": "Identificación por bus 406",
+      "rationale": "La inspección de Neon comprobó que 406 es el número de bus de una única orden con imagen, cuyo ID interno es 69; no existe OT con PK 406.",
+      "consequences": "Cambio restringido por ID, número de bus, hash de imagen, ID de evidencia y versión previamente inspeccionados."
+    },
+    {
+      "id": "DEC-0129-002",
+      "title": "Retirar ambas referencias en la base solicitada",
+      "rationale": "La misma imagen figuraba en foto_url y como evidencia independiente, sin relación con detalle o comentario.",
+      "consequences": "Se eliminó la referencia duplicada dentro de una única transacción, sin borrar archivos de almacenamiento ni alterar comentarios, detalles u otras órdenes."
+    },
+    {
+      "id": "DEC-0129-003",
+      "title": "Operación remota autorizada expresamente",
+      "rationale": "El usuario pidió específicamente retirar esta imagen de la BD de Neon, como excepción al entorno local habitual.",
+      "consequences": "Solo se escribió la corrección autorizada; los demás destinos inspeccionados fueron de solo lectura."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Transacción SQLAlchemy con SELECT FOR UPDATE y expectativas de identidad/versión/hash",
+      "result": "passed",
+      "evidence": "Una cabecera modificada y una evidencia eliminada. Todos los demás campos, detalles y comentarios conservaron sus valores."
+    },
+    {
+      "command": "SELECT desde conexión independiente después del commit",
+      "result": "passed",
+      "evidence": "OT 69, bus 406: foto_url NULL y evidencias=0."
+    }
+  ],
+  "backup": {
+    "path": "backups\\neon_taller_ot69_bus406_imagen_antes_20261021T134936Z.json",
+    "sha256": "380981e9e31032c071892424b3e910af6dab66a9e300f3d69fc43a2b8ae3bf5f"
+  },
+  "blockers": [],
+  "nextStep": "Ninguno; corrección de datos confirmada.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "main",
+    "commit": "63af5e3dd71d60f543c96d84c8709f812aa849f6",
+    "dirty": true
+  },
+  "notes": [
+    "No se cambiaron archivos de la aplicación ni se ejecutaron migraciones, despliegues o commits.",
+    "La fotografía no se descargó; el respaldo local conserva solamente las referencias y la cabecera originales."
+  ]
+}

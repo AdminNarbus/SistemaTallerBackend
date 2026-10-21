@@ -59,6 +59,7 @@ $RECYCLE.BIN/
 # Logs & Temporary Files
 *.log
 backups/
+.tmp/export_neon_csv.py
 scripts/eliminar_ot_especifica_neon.py
 scripts/eliminar_falla_filtros_aire_neon.py
 scripts/vincular_ricardo_ot21_neon.py

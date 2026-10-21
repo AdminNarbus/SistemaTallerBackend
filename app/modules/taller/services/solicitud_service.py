@@ -5,7 +5,7 @@ from typing import Any, List, Optional, Tuple
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.core.storage.storage_service import storage_service, StorageService
 from app.modules.taller.constants import (
     DEFAULT_PAGE_LIMIT,
@@ -42,6 +42,7 @@ from app.modules.taller.services.mappers import (
     orm_to_solicitud_resumen_dto,
 )
 from app.core.realtime.events import RealtimeEvent, publish_event_soon
+from app.modules.taller.services.estadias_helper import attach_comentario_safe
 from app.modules.taller.services.trazabilidad_fallas import registrar_evento_falla
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
@@ -560,6 +561,96 @@ class SolicitudService:
             version=result.fecha_actualizacion,
         ))
         return result
+
+    async def eliminar_evidencia_inicial(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        evidencia_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """
+        Elimina una fotografía/evidencia inicial del formulario del chofer con un solo clic.
+        Bloquea la eliminación si pertenece a un comentario de bitácora o resolución de falla.
+        Registra la acción automáticamente en la bitácora inmutable.
+        """
+        logger.info(
+            "[SUPERVISION] Eliminando imagen inicial de OT | solicitud_id=%s | evidencia_id=%s | supervisor_id=%s",
+            solicitud_id,
+            evidencia_id,
+            supervisor_id,
+        )
+        solicitud = await self.repo.get_solicitud_by_id(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        evidencia = await self.repo.get_evidencia_by_id(db, evidencia_id)
+        if not evidencia or evidencia.solicitud_id != solicitud_id:
+            raise NotFoundException("Fotografía no encontrada en esta solicitud de taller")
+
+        if evidencia.comentario_id is not None:
+            raise BusinessRuleException(
+                "No está permitido eliminar fotografías asociadas a la bitácora o comentarios"
+            )
+        if evidencia.detalle_id is not None:
+            raise BusinessRuleException(
+                "No está permitido eliminar fotografías asociadas a la resolución de averías"
+            )
+
+        now = datetime.now(timezone.utc)
+
+        # 1. Borrar archivo físico del storage provider (GCS / local)
+        try:
+            await self.storage.delete_file(evidencia.url)
+        except Exception as e:
+            logger.warning("[SUPERVISION] No se pudo borrar archivo físico de evidencia '%s': %s", evidencia.url, e)
+
+        # 2. Borrar registro en base de datos
+        await self.repo.delete_evidencia(db, evidencia)
+
+        # 3. Actualizar memoria de evidencias
+        if hasattr(solicitud, "evidencias") and solicitud.evidencias:
+            solicitud.evidencias = [e for e in solicitud.evidencias if e.id != evidencia_id]
+
+        # 4. Ajustar portada (foto_url) si apuntaba a la imagen eliminada
+        if solicitud.foto_url == evidencia.url:
+            otra_ev = next(
+                (e for e in (solicitud.evidencias or []) if e.comentario_id is None and e.detalle_id is None),
+                None,
+            )
+            solicitud.foto_url = otra_ev.url if otra_ev else None
+            db.add(solicitud)
+
+        # 5. Registrar en bitácora inmutable
+        sup_nom = supervisor_nombre or "Supervisor"
+        comentario_texto = "Se elimina una imagen de la orden de trabajo"
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud_id,
+            usuario_id=supervisor_id,
+            tipo="SUPERVISION",
+            comentario=comentario_texto,
+            fecha_registro=now,
+            fecha_evento=now,
+        )
+        self.repo.add_comentario(db, comentario_entry)
+        await self.repo.flush(db)
+        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=sup_nom)
+
+        solicitud.fecha_actualizacion = now
+        dto_resultado = orm_to_solicitud_dto(solicitud, storage=self.storage)
+
+        await db.commit()
+
+        publish_event_soon(RealtimeEvent(
+            resource_type="work_order",
+            resource_id=solicitud.id,
+            action="updated",
+            actor_id=supervisor_id,
+            version=solicitud.fecha_actualizacion,
+        ))
+
+        return dto_resultado
 
 
 solicitud_service = SolicitudService()

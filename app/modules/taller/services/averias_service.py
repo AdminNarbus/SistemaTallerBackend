@@ -15,6 +15,7 @@ from app.modules.taller.dtos import (
     AgregarFallaDTO,
     CheckFallaDTO,
     DetalleUpdateDTO,
+    EditarFallaDTO,
     MecanicoResumenDTO,
     ReportarRepuestoDTO,
     ResolverFallaSupervisoraDTO,
@@ -24,7 +25,10 @@ from app.modules.taller.repository.taller_repository import (
     TallerRepository,
     taller_repository,
 )
-from app.modules.taller.utils import describir_detalle_averia
+from app.modules.taller.utils import (
+    calcular_duracion_minutos,
+    describir_detalle_averia,
+)
 from app.modules.taller.services.mappers import orm_to_solicitud_dto
 from app.modules.taller.services.bitacora_textos import agregar_texto, formatear_reparacion
 from app.modules.taller.services.estadias_helper import (
@@ -890,6 +894,174 @@ class AveriasService:
             fecha_cambio_estado=detalle_target.fecha_cambio_estado,
             fecha_registro=now,
         )
+
+    async def eliminar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """
+        Elimina completamente una falla de la OT por duplicidad o error de ingreso con un solo clic.
+        Registra la acción automáticamente en la bitácora inmutable.
+        """
+        logger.info(
+            "[SUPERVISION] Eliminando falla duplicada/errónea | solicitud_id=%s | detalle_id=%s | supervisor_id=%s",
+            solicitud_id,
+            detalle_id,
+            supervisor_id,
+        )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if solicitud.estado == EstadoSolicitud.FINALIZADO.value:
+            raise BusinessRuleException(
+                "No se pueden eliminar fallas de una orden que ya ha sido finalizada"
+            )
+
+        detalle = next((d for d in (solicitud.detalles or []) if d.id == detalle_id), None)
+        if not detalle:
+            raise NotFoundException("Avería no encontrada en esta solicitud de taller")
+
+        if detalle.resuelto:
+            raise BusinessRuleException(
+                "No se puede eliminar una falla que ya ha sido marcada como resuelta. Debe reabrirla previamente si desea descartarla."
+            )
+
+        falla_nom = (
+            detalle.descripcion_personalizada
+            or (detalle.falla.nombre if getattr(detalle, "falla", None) else None)
+            or f"Avería #{detalle.id}"
+        )
+
+        now = datetime.now(timezone.utc)
+
+        # 1. Eliminar dependencias y detalle en cascada atómica en BD
+        await self.repo.delete_detalle_con_dependencias(db, solicitud_id, detalle_id)
+
+        # 2. Actualizar estado en memoria de la solicitud
+        solicitud.detalles = [d for d in (solicitud.detalles or []) if d.id != detalle_id]
+
+        if hasattr(solicitud, "asignaciones_fallas") and solicitud.asignaciones_fallas:
+            solicitud.asignaciones_fallas = [
+                a for a in solicitud.asignaciones_fallas if a.detalle_id != detalle_id
+            ]
+
+        # 3. Si algún mecánico asignado ya no tiene fallas activas, desactivar su presencia
+        asigs_restantes = getattr(solicitud, "asignaciones_fallas", []) or []
+        mecanicos_con_fallas = {
+            a.mecanico_id for a in asigs_restantes if getattr(a, "is_activo", False)
+        }
+        for sm in (getattr(solicitud, "mecanicos", []) or []):
+            if getattr(sm, "is_activo", False) and sm.mecanico_id not in mecanicos_con_fallas:
+                sm.is_activo = False
+                sm.fecha_desasignacion = now
+                if sm.fecha_asignacion:
+                    sm.duracion_minutos = calcular_duracion_minutos(sm.fecha_asignacion, now)
+                db.add(sm)
+
+        # 4. Registrar en la bitácora inmutable
+        sup_nom = supervisor_nombre or "Supervisor"
+        comentario_texto = f"Se elimina falla '{falla_nom}' por duplicidad"
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud_id,
+            usuario_id=supervisor_id,
+            tipo="SUPERVISION",
+            comentario=comentario_texto,
+            fecha_registro=now,
+            fecha_evento=now,
+        )
+        self.repo.add_comentario(db, comentario_entry)
+        await self.repo.flush(db)
+        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=sup_nom)
+
+        # 5. Tocar fecha de actualización
+        solicitud.fecha_actualizacion = now
+
+        dto_resultado = orm_to_solicitud_dto(solicitud)
+        await db.commit()
+        return dto_resultado
+
+    async def editar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        dto: EditarFallaDTO,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """
+        Modifica el texto o descripción de una avería requiriendo justificación obligatoria.
+        Registra la justificación en la bitácora inmutable.
+        """
+        logger.info(
+            "[SUPERVISION] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | supervisor_id=%s",
+            solicitud_id,
+            detalle_id,
+            supervisor_id,
+        )
+        await self.repo.lock_solicitud_estado(db, solicitud_id)
+        solicitud = await self.repo.get_solicitud_con_detalles(db, solicitud_id)
+        if not solicitud:
+            raise NotFoundException("Solicitud de taller no encontrada")
+
+        if solicitud.estado == EstadoSolicitud.FINALIZADO.value:
+            raise BusinessRuleException(
+                "No se puede modificar una avería de una orden finalizada"
+            )
+
+        detalle = next((d for d in (solicitud.detalles or []) if d.id == detalle_id), None)
+        if not detalle:
+            raise NotFoundException("Avería no encontrada en esta solicitud de taller")
+
+        texto_anterior = (
+            detalle.descripcion_personalizada
+            or (detalle.falla.nombre if getattr(detalle, "falla", None) else None)
+            or f"Avería #{detalle.id}"
+        )
+        texto_nuevo = dto.descripcion_personalizada.strip()
+        justificacion = dto.justificacion.strip()
+
+        now = datetime.now(timezone.utc)
+
+        # Actualizar datos de la avería
+        detalle.descripcion_personalizada = texto_nuevo
+        if dto.falla_id:
+            f_obj = await self.repo.get_falla_by_id(db, dto.falla_id)
+            if f_obj:
+                detalle.falla_id = f_obj.id
+                detalle.falla = f_obj
+                detalle.falla_nombre_snapshot = f_obj.nombre
+                if getattr(f_obj, "categoria", None):
+                    detalle.categoria_nombre_snapshot = f_obj.categoria.nombre
+        db.add(detalle)
+
+        # Registrar en la bitácora inmutable
+        sup_nom = supervisor_nombre or "Supervisor"
+        comentario_texto = (
+            f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'. Justificación: {justificacion}"
+        )
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud_id,
+            usuario_id=supervisor_id,
+            tipo="SUPERVISION",
+            comentario=comentario_texto,
+            fecha_registro=now,
+            fecha_evento=now,
+        )
+        self.repo.add_comentario(db, comentario_entry)
+        await self.repo.flush(db)
+        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=sup_nom)
+
+        solicitud.fecha_actualizacion = now
+        dto_resultado = orm_to_solicitud_dto(solicitud)
+        await db.commit()
+        return dto_resultado
 
 
 averias_service = AveriasService()

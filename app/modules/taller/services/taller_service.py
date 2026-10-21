@@ -18,6 +18,7 @@ from app.modules.taller.dtos import (
     ComentarioAddedDTO,
     ComentarioCreateDTO,
     DetalleUpdateDTO,
+    EditarFallaDTO,
     FallaTallerDTO,
     FinalizarSolicitudDTO,
     LiberarSolicitudDTO,
@@ -444,6 +445,56 @@ class TallerService:
             fotos=fotos,
         )
         return result
+
+    async def eliminar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        return await self.averias_srv.eliminar_falla(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
+    async def editar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        dto: EditarFallaDTO,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        return await self.averias_srv.editar_falla(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            dto=dto,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
+    async def eliminar_evidencia_inicial(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        evidencia_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        return await self.solicitud_srv.eliminar_evidencia_inicial(
+            db,
+            solicitud_id=solicitud_id,
+            evidencia_id=evidencia_id,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
 
     # --- Cierre / Finalización / Bitácora ---
 

@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 130,
+  "id": "AV-0130",
+  "timestamp": "2026-10-21T14:58:00.000000Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MANT-11",
+    "name": "Depuración de fallas e imágenes por supervisión",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación de endpoints y servicios para supervisión que permiten eliminar fallas duplicadas en 1 clic, eliminar fotos iniciales erróneas del chofer en 1 clic y editar texto de averías con justificación obligatoria, registrando automáticamente auditoría inmutable en la bitácora de la OT.",
+  "scope": {
+    "planned": [
+      "Eliminar falla duplicada o errónea en 1 clic con mensaje en bitácora: 'Se elimina falla {falla} por duplicidad'",
+      "Eliminar imagen errónea del formulario del chofer en 1 clic con mensaje en bitácora: 'Se elimina una imagen de la orden de trabajo'",
+      "Modificar texto o descripción de falla con justificación obligatoria en bitácora: 'Avería #{id} modificada: de {anterior} a {nuevo}. Justificación: {justificacion}'",
+      "Proteger imágenes de bitácora y resoluciones de averías contra eliminación accidental",
+      "Ajustar dinámicamente la foto de portada (foto_url) si se elimina la imagen principal",
+      "Pruebas unitarias de cobertura completa AAA"
+    ],
+    "completed": [
+      "DTO EditarFallaDTO creado y exportado con validación de campos obligatorios",
+      "Método delete_detalle_con_dependencias en TallerRepository con orden de cascada segura para dependencias",
+      "Métodos get_evidencia_by_id y delete_evidencia en TallerRepository",
+      "Método eliminar_falla en AveriasService y delegación en TallerService y SupervisionService",
+      "Método editar_falla en AveriasService con registro de justificación en bitácora inmutable",
+      "Método eliminar_evidencia_inicial en SolicitudService con borrado en storage provider, ajuste de foto_url y bitácora",
+      "Endpoints DELETE /solicitudes/{id}/detalles/{detalle_id}, PATCH /solicitudes/{id}/detalles/{detalle_id} y DELETE /solicitudes/{id}/evidencias/{evidencia_id} en router de supervisión",
+      "6 pruebas unitarias completas pasando al 100% en test_supervision_depuracion_fallas_y_fotos.py y 0 regresiones en suites existentes"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Eliminación de imágenes asociadas a comentarios o resoluciones de fallas",
+      "Eliminación de fallas ya resueltas (requiere reapertura previa)",
+      "Modificaciones o eliminaciones sobre OTs en estado FINALIZADO"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Definición del DTO EditarFallaDTO para edición de fallas con justificación."
+    },
+    {
+      "path": "app/modules/taller/dtos/__init__.py",
+      "action": "modified",
+      "summary": "Exportación de EditarFallaDTO en el módulo de DTOs."
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Implementación de delete_detalle_con_dependencias, get_evidencia_by_id y delete_evidencia."
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Implementación de lógica de negocio para eliminar_falla y editar_falla con bitácora inmutable."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Implementación de eliminar_evidencia_inicial con borrado físico en storage, ajuste de foto_url y bitácora."
+    },
+    {
+      "path": "app/modules/taller/services/taller_service.py",
+      "action": "modified",
+      "summary": "Exposición de métodos fachada para eliminar_falla, editar_falla y eliminar_evidencia_inicial."
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Orquestación en capa de supervisión delegando a taller_service."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Endpoints REST DELETE /solicitudes/{id}/detalles/{detalle_id}, PATCH /solicitudes/{id}/detalles/{detalle_id} y DELETE /solicitudes/{id}/evidencias/{evidencia_id}."
+    },
+    {
+      "path": "tests/unit/test_supervision_depuracion_fallas_y_fotos.py",
+      "action": "created",
+      "summary": "6 pruebas unitarias que cubren los flujos de éxito y validaciones de negocio."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Actualización de trazabilidad con el hito AV-0130."
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Documentación de nuevos contratos REST del módulo de supervisión."
+    },
+    {
+      "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md",
+      "action": "modified",
+      "summary": "Incorporación y completitud de la Fase 11 (MANT-11)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Uso de TallerSolicitudComentario con tipo='SUPERVISION' para bitácora automática",
+      "rationale": "La tabla taller_falla_eventos tiene una restricción CHECK que limita los tipos de evento a ('REPORTADA','RESUELTA','REABIERTA','INCOMPLETA','FALTA_REPUESTO_ACTIVADA','FALTA_REPUESTO_RETIRADA'). Registrar las acciones en TallerSolicitudComentario con tipo='SUPERVISION' es compatible con la restricción de comentarios y visibiliza la auditoría cronológica en la bitácora de la OT sin alterar el esquema relacional.",
+      "consequences": "Permite registrar las acciones de depuración de manera inmutable y transparente en el historial de la OT sin requerir migraciones de base de datos."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Cascada manual y desasociación en lugar de borrado en cascada descontrolado",
+      "rationale": "Un borrado en cascada no controlado podría eliminar evidencias del chofer o corromper asignaciones. Se desasocian primero las evidencias vinculadas a la falla (detalle_id = None) preservando los archivos, y se eliminan ordenadamente colaboradores, ubicaciones, eventos y asignaciones antes de eliminar el detalle.",
+      "consequences": "Garantiza integridad referencial estricta y evita errores de Foreign Key en PostgreSQL y SQLite."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Reasignación dinámica de foto_url de portada al eliminar una evidencia",
+      "rationale": "Si el supervisor elimina una imagen borrosa o errónea que correspondía a la foto principal de la OT (foto_url), dejarla apuntando a una URL inexistente provocaría enlaces rotos en la interfaz. Se busca la siguiente evidencia inicial disponible y se actualiza foto_url, o se establece en NULL si ya no quedan evidencias.",
+      "consequences": "Experiencia de usuario consistente y ausencia de imágenes rotas en el dashboard y listados de OTs."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_supervision_depuracion_fallas_y_fotos.py --show-capture=no -v",
+      "result": "passed",
+      "evidence": "6 passed in 2.81s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_supervision_service.py --show-capture=no -v",
+      "result": "passed",
+      "evidence": "21 passed in 3.07s"
+    },
+    {
+      "command": "venv\\Scripts\\pytest tests/unit/test_taller_service.py --show-capture=no -q",
+      "result": "passed",
+      "evidence": "36 passed in 7.84s"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integración en Frontend (ProtoNeumaticos) en el modal de detalle de falla de supervisión y gestión de evidencias.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/depuracion-fallas-imagenes-supervision",
+    "commit": "fefde48",
+    "dirty": false
+  },
+  "notes": [
+    "Todos los endpoints retornan el SolicitudDTO actualizado en memoria tras commit sin recargas pesadas.",
+    "Se respeta Clean Architecture en 4 capas y principios SOLID."
+  ]
+}

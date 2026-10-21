@@ -82,6 +82,30 @@ class AgregarFallaDTO(BaseModel):
         return self.mecanico_asignado_id or (self.mecanico_id if not self.resuelto else None)
 
 
+class EditarFallaDTO(BaseModel):
+    """Payload para que un supervisor o administrador modifique la descripción de una avería con justificación obligatoria."""
+    descripcion_personalizada: str = Field(
+        ...,
+        min_length=2,
+        max_length=1000,
+        description="Nuevo texto o descripción corregida de la avería",
+    )
+    justificacion: str = Field(
+        ...,
+        min_length=3,
+        max_length=1000,
+        description="Justificación obligatoria del motivo del cambio",
+    )
+    falla_id: Optional[int] = Field(
+        None,
+        description="ID de catálogo opcional si además se reclasifica la falla",
+    )
+    categoria_id: Optional[int] = Field(
+        None,
+        description="ID de categoría opcional si además se reclasifica",
+    )
+
+
 class CheckFallaDTO(BaseModel):
     """Payload para marcar la resolución o estado de una avería desde taller o supervisión."""
     estado: Optional[EstadoFalla] = None

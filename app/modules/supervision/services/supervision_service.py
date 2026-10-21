@@ -17,6 +17,7 @@ from app.modules.taller.dtos import (
     SolicitudDTO,
     SolicitudResumenDTO,
     AgregarFallaDTO,
+    EditarFallaDTO,
     ResolverFallaSupervisoraDTO,
     DetalleUpdateDTO,
 )
@@ -450,6 +451,77 @@ class SupervisionService:
         """Permite a la supervisora obtener el detalle completo de una OT."""
         logger.info("[SUPERVISION_SERVICE] Consultando solicitud_id=%s", solicitud_id)
         return await self.mantencion.get_solicitud(db, solicitud_id=solicitud_id)
+
+    async def eliminar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """Permite a la supervisora eliminar completamente una avería duplicada o errónea de la OT."""
+        logger.info(
+            "[SUPERVISION_SERVICE] Supervisora %s eliminando falla detalle_id=%s en solicitud_id=%s",
+            supervisor_id,
+            detalle_id,
+            solicitud_id,
+        )
+        return await self.mantencion.eliminar_falla(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
+    async def editar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        detalle_id: int,
+        dto: EditarFallaDTO,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """Permite a la supervisora corregir la descripción de una avería con justificación obligatoria."""
+        logger.info(
+            "[SUPERVISION_SERVICE] Supervisora %s modificando texto de falla detalle_id=%s en solicitud_id=%s",
+            supervisor_id,
+            detalle_id,
+            solicitud_id,
+        )
+        return await self.mantencion.editar_falla(
+            db,
+            solicitud_id=solicitud_id,
+            detalle_id=detalle_id,
+            dto=dto,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
+
+    async def eliminar_evidencia_inicial(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        evidencia_id: int,
+        supervisor_id: int,
+        supervisor_nombre: Optional[str] = None,
+    ) -> SolicitudDTO:
+        """Permite a la supervisora eliminar una fotografía inicial del chofer."""
+        logger.info(
+            "[SUPERVISION_SERVICE] Supervisora %s eliminando evidencia_id=%s en solicitud_id=%s",
+            supervisor_id,
+            evidencia_id,
+            solicitud_id,
+        )
+        return await self.mantencion.eliminar_evidencia_inicial(
+            db,
+            solicitud_id=solicitud_id,
+            evidencia_id=evidencia_id,
+            supervisor_id=supervisor_id,
+            supervisor_nombre=supervisor_nombre,
+        )
 
 
 supervision_service = SupervisionService()

@@ -63,4 +63,14 @@
 - [x] Cobertura de pruebas completa en `tests/unit/test_pendientes_en_reparacion.py` (3 tests unitarios y de integración de endpoint REST).
 - [x] Suite completa de pruebas automatizadas ejecutada y aprobada (203/203 tests verdes).
 
+## Fase 11: Depuración de Fallas e Imágenes por Supervisión (MANT-11)
+- [x] DTO `EditarFallaDTO` para modificación controlada de averías con justificación obligatoria.
+- [x] Repositorio atómico `delete_detalle_con_dependencias` con orden de cascada segura (colaboradores -> ubicaciones -> eventos mecánicos -> eventos falla -> asignaciones -> desasociación evidencias -> detalle).
+- [x] Endpoint `DELETE /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`: eliminación en 1 clic de falla duplicada con bitácora inmutable `"Se elimina falla '{falla}' por duplicidad"`, desasociando evidencias y desactivando presencias de mecánicos sin fallas activas.
+- [x] Endpoint `PATCH /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`: edición con justificación obligatoria estampada en bitácora inmutable `"Avería #{detalle_id} modificada: de '{ant}' a '{nuevo}'. Justificación: {just}"`.
+- [x] Endpoint `DELETE /api/v1/supervision/solicitudes/{id}/evidencias/{evidencia_id}`: borrado físico y relacional de fotos iniciales del chofer con 1 clic, reajuste automático de foto de portada (`foto_url`) y bitácora `"Se elimina una imagen de la orden de trabajo"`.
+- [x] Protección de evidencias de bitácora y resoluciones de averías contra eliminación no permitida.
+- [x] Cobertura completa de 6 tests unitarios en `tests/unit/test_supervision_depuracion_fallas_y_fotos.py` (100% aprobados).
+
+
 

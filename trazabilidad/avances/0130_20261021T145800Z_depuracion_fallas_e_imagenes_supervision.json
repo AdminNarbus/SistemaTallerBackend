@@ -95,6 +95,11 @@
       "summary": "Documentación de nuevos contratos REST del módulo de supervisión."
     },
     {
+      "path": "alembic/versions/031_permitir_depuracion_supervision.py",
+      "action": "created",
+      "summary": "Migración Alembic para habilitar depuración controlada con flag de sesión en triggers inmutables."
+    },
+    {
       "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md",
       "action": "modified",
       "summary": "Incorporación y completitud de la Fase 11 (MANT-11)."
@@ -118,6 +123,12 @@
       "title": "Reasignación dinámica de foto_url de portada al eliminar una evidencia",
       "rationale": "Si el supervisor elimina una imagen borrosa o errónea que correspondía a la foto principal de la OT (foto_url), dejarla apuntando a una URL inexistente provocaría enlaces rotos en la interfaz. Se busca la siguiente evidencia inicial disponible y se actualiza foto_url, o se establece en NULL si ya no quedan evidencias.",
       "consequences": "Experiencia de usuario consistente y ausencia de imágenes rotas en el dashboard y listados de OTs."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Variable de sesión transaccional SET LOCAL narbus.permitir_depuracion para triggers inmutables",
+      "rationale": "Los triggers de auditoría inmutable tr_eventos_inmutables y trg_resultado_ubicacion_inmutable en PostgreSQL/Neon bloquean de forma incondicional el DELETE lanzando error 23514. Mediante la migración 031 se actualizan las funciones para evaluar current_setting('narbus.permitir_depuracion', true) = 'on'. Esto permite la eliminación en cascada de eventos al depurar una falla duplicada exclusivamente dentro de esa transacción, manteniendo 100% la inmutabilidad ante cualquier otra operación.",
+      "consequences": "Eliminación exitosa en base de datos PostgreSQL real preservando las restricciones de integridad y auditoría."
     }
   ],
   "verification": [

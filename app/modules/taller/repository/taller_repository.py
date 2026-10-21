@@ -1659,7 +1659,14 @@ class TallerRepository:
         Elimina atómicamente un detalle de falla y todas sus dependencias en orden referencial estricto:
         colaboradores -> ubicaciones -> eventos_mecanicos -> eventos -> asignaciones -> desvincula evidencias -> detalle.
         """
-        from app.modules.taller.models.taller_ubicacion import TallerResultadoColaborador
+        from app.modules.taller.models.taller_ubicacion import (
+            OperacionResultado,
+            TallerResultadoColaborador,
+            TallerResultadoUbicacion,
+        )
+
+        if db.bind and db.bind.dialect.name == "postgresql":
+            await db.execute(text("SET LOCAL narbus.permitir_depuracion = 'on'"))
 
         # 1. Obtener los IDs de eventos asociados al detalle
         stmt_ev = select(TallerFallaEvento.id).where(TallerFallaEvento.detalle_id == detalle_id)
@@ -1697,7 +1704,12 @@ class TallerRepository:
                 delete(TallerFallaEvento).where(TallerFallaEvento.id.in_(evento_ids))
             )
 
-        # 2. Asignaciones de falla
+        # 2. Operaciones idempotentes asociadas al detalle
+        await db.execute(
+            delete(OperacionResultado).where(OperacionResultado.detalle_id == detalle_id)
+        )
+
+        # 3. Asignaciones de falla
         await db.execute(
             delete(TallerAsignacionFalla).where(
                 and_(
@@ -1707,7 +1719,7 @@ class TallerRepository:
             )
         )
 
-        # 3. Desvincular evidencias fotográficas que apunten al detalle
+        # 4. Desvincular evidencias fotográficas que apunten al detalle
         await db.execute(
             update(TallerSolicitudEvidencia)
             .where(
@@ -1719,7 +1731,7 @@ class TallerRepository:
             .values(detalle_id=None)
         )
 
-        # 4. Eliminar el detalle
+        # 5. Eliminar el detalle
         await db.execute(
             delete(TallerSolicitudDetalle).where(
                 and_(

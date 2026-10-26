@@ -167,6 +167,12 @@ class UserRepository:
         logger.info("[AUTH-REPO] Usuario desactivado en sesión (soft-delete) | id=%s | username='%s'", user.id, user.username)
         return user
 
+    async def activar(self, db: AsyncSession, user: Usuario) -> Usuario:
+        """Habilita nuevamente una cuenta conservando sus datos y credenciales."""
+        user.is_active = True
+        await db.flush()
+        return user
+
     async def actualizar_datos_personales(
         self,
         db: AsyncSession,

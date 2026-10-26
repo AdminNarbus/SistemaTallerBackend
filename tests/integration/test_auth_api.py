@@ -154,6 +154,62 @@ async def test_supervisor_actualiza_usuario_parcialmente(client, auth_headers_su
 
 
 @pytest.mark.asyncio
+async def test_rehabilitar_usuario_restaura_acceso(
+    client, auth_headers_supervisor, auth_headers_conductor, seed_test_data
+):
+    usuario_id = seed_test_data["conductor"].id
+    endpoint = f"/api/v1/auth/usuarios/{usuario_id}/habilitar"
+    credentials = {"username": "conductor@narbus.cl", "password": "password123"}
+
+    # Carga el perfil en caché antes de deshabilitar la cuenta.
+    perfil = await client.get("/api/v1/auth/me", headers=auth_headers_conductor)
+    assert perfil.status_code == 200
+    disabled = await client.delete(
+        f"/api/v1/auth/usuarios/{usuario_id}", headers=auth_headers_supervisor
+    )
+    assert disabled.status_code == 200
+    denied = await client.post("/api/v1/auth/login", json=credentials)
+    assert denied.status_code == 422
+    assert denied.json()["error"]["message"] == "El usuario se encuentra inactivo."
+
+    enabled = await client.patch(endpoint, headers=auth_headers_supervisor)
+    assert enabled.status_code == 200
+    assert enabled.json()["is_active"] is True
+    assert enabled.json()["id"] == usuario_id
+    assert enabled.json()["rol"] == "CONDUCTOR"
+
+    login = await client.post("/api/v1/auth/login", json=credentials)
+    assert login.status_code == 200
+    restored = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["is_active"] is True
+
+    repeated = await client.patch(endpoint, headers=auth_headers_supervisor)
+    assert repeated.status_code == 200
+    assert repeated.json()["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_habilitar_usuario_permisos_y_no_encontrado(
+    client, auth_headers_conductor, auth_headers_supervisor, seed_test_data
+):
+    endpoint = f"/api/v1/auth/usuarios/{seed_test_data['inactivo'].id}/habilitar"
+    anonymous = await client.patch(endpoint)
+    assert anonymous.status_code == 401
+    forbidden = await client.patch(endpoint, headers=auth_headers_conductor)
+    assert forbidden.status_code == 403
+    assert seed_test_data["inactivo"].is_active is False
+
+    not_found = await client.patch(
+        "/api/v1/auth/usuarios/99999/habilitar", headers=auth_headers_supervisor
+    )
+    assert not_found.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_edicion_usuario_permisos_y_validaciones(
     client, auth_headers_conductor, auth_headers_supervisor, seed_test_data
 ):

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 131,
+  "id": "AV-0131",
+  "timestamp": "2026-10-26T14:00:00Z",
+  "phase": "backend_taller",
+  "type": "completed",
+  "summary": "Rehabilitación de usuarios mediante PATCH administrativo, con invalidación de caché y evento realtime.",
+  "scope": {"completed": ["Endpoint, servicio, repositorio, pruebas de integración y contrato frontend"], "pending": [], "outOfScope": ["Frontend", "Cambios de esquema"]},
+  "decisions": [{"id": "DEC-001", "title": "Reutilizar is_active", "rationale": "La deshabilitación existente conserva la cuenta.", "consequences": "No requiere migraciones; mantiene rol y credenciales. Solo SUPERVISOR o ADMIN pueden habilitar."}],
+  "verification": [{"command": "python -m pytest tests/integration/test_auth_api.py tests/unit/test_auth_service.py -q", "result": "passed", "evidence": "22 passed, 2 advertencias de deprecación de Starlette."}],
+  "blockers": [],
+  "nextStep": "Integrar en develop, validar y promover mediante release a main.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/rehabilitar-usuarios", "commit": null, "dirty": true}
+}

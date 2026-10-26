@@ -241,3 +241,22 @@ async def deshabilitar_usuario(
     return await user_service.deshabilitar_usuario(
         db, usuario_id=usuario_id, current_user_id=current_user.id
     )
+
+
+@router.patch(
+    "/usuarios/{usuario_id}/habilitar",
+    response_model=UsuarioResponseDTO,
+    summary="Habilitar nuevamente un usuario (Solo SUPERVISOR o ADMIN)",
+)
+async def habilitar_usuario(
+    usuario_id: int,
+    db: AsyncSession = SessionDep,
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+) -> UsuarioResponseDTO:
+    """Establece is_active=True conservando el rol, los datos y las credenciales.
+
+    Si la cuenta ya está habilitada, devuelve igualmente el usuario activo.
+    """
+    return await user_service.habilitar_usuario(
+        db, usuario_id=usuario_id, current_user_id=current_user.id
+    )

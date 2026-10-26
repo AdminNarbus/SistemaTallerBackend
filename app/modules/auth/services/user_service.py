@@ -159,6 +159,27 @@ class UserService:
         await realtime_runtime.disconnect_user(usuario_id)
         return UsuarioResponseDTO.model_validate(user)
 
+    async def habilitar_usuario(
+        self, db: AsyncSession, usuario_id: int, current_user_id: int
+    ) -> UsuarioResponseDTO:
+        """Reactiva una cuenta previamente deshabilitada."""
+        user = await user_repository.get_by_id(db, user_id=usuario_id)
+        if not user:
+            raise NotFoundException("El usuario especificado no fue encontrado.")
+
+        await user_repository.activar(db, user)
+        await db.commit()
+        clear_user_cache(usuario_id)
+        publish_event_soon(RealtimeEvent(
+            resource_type="user", resource_id=usuario_id,
+            action="activated", actor_id=current_user_id,
+        ))
+        logger.info(
+            "[USER-SERVICE] Usuario habilitado | id=%s | solicitado_por=%s",
+            usuario_id, current_user_id,
+        )
+        return UsuarioResponseDTO.model_validate(user)
+
     async def actualizar_usuario(
         self,
         db: AsyncSession,

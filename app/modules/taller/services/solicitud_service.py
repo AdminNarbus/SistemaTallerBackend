@@ -374,7 +374,7 @@ class SolicitudService:
                 n_bus=n_bus or (dto.n_bus if dto.n_bus else str(bus_id)),
                 bus_id=bus_id,
                 usuario_creador_id=creador_id,
-                estado=EstadoSolicitud.PENDIENTE.value,
+                estado=EstadoSolicitud.PENDIENTE.value, es_ot=False,
                 descripcion_general=dto.descripcion_general,
                 foto_url=dto.foto_url,
                 fecha_creacion=now,

@@ -220,6 +220,7 @@ async def test_auditoria_envia_antiguedad_ot_y_ficha_tiempo_real(
 ):
     now = datetime.now(timezone.utc)
     solicitud = TallerSolicitud(
+        es_ot=True,
         n_bus="SUP-EDAD-001", estado=estado,
         usuario_creador_id=seed_test_data["conductor"].id,
         fecha_creacion=now - timedelta(hours=72),
@@ -338,6 +339,7 @@ async def test_supervision_cambiar_estado_solicitud_flujo(
     await db_session.flush()
 
     ot = TallerSolicitud(
+        es_ot=True,
         id=901,
         n_bus="705",
         usuario_creador_id=conductor.id,
@@ -535,6 +537,8 @@ async def test_supervision_agregar_falla_resuelta_con_mecanico(
     sol_id = create_res.json()["id"]
 
     # Supervisora agrega falla que ya fue solucionada por mecanico1
+    aprobada = await client.post(f"/api/v1/taller/{sol_id}/aprobar", json={}, headers=auth_headers_supervisor)
+    assert aprobada.status_code == 200, aprobada.text
     res_agrega = await client.post(
         f"/api/v1/supervision/solicitudes/{sol_id}/detalles",
         json={

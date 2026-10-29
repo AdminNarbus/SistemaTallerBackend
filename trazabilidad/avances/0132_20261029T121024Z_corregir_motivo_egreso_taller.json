@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 132,
+  "id": "AV-0132",
+  "timestamp": "2026-10-29T12:10:24.707476Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "FIX-EGRESO-MOTIVO",
+    "name": "Corregir longitud de motivo al egresar del taller",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corregido StringDataRightTruncationError al cerrar estadías desde Gestión de Flota: motivo_salida pasa de VARCHAR(50) a TEXT en modelo y migración 032, aplicada en dev_local.",
+  "scope": {
+    "planned": [
+      "Diagnosticar el fallo PATCH /api/v1/buses/51/en-taller",
+      "Preservar el motivo completo y verificar el egreso"
+    ],
+    "completed": [
+      "Modelo ORM Text",
+      "Migración 032 aplicada en PostgreSQL local",
+      "Regresión API con motivo original de 52 caracteres, texto Unicode de 1000 caracteres y motivo nulo",
+      "Ciclo upgrade/downgrade/upgrade en PostgreSQL temporal y rechazo de downgrade incompatible sin truncar datos"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend",
+      "Modificar el estado real del bus 51",
+      "Diferencias de esquema ajenas al motivo de salida"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/models/taller_solicitud_estadia.py",
+      "action": "modified",
+      "summary": "motivo_salida usa Text nullable, coherente con el motivo libre de la API"
+    },
+    {
+      "path": "alembic/versions/032_ampliar_motivo_salida_estadia.py",
+      "action": "created",
+      "summary": "Ampliación conservadora de VARCHAR(50) a TEXT; downgrade sin cast que trunque"
+    },
+    {
+      "path": "tests/integration/test_buses_api.py",
+      "action": "modified",
+      "summary": "Egreso preserva motivo, cierra estadía, acumula horas y mantiene el estado de la OT"
+    },
+    {
+      "path": "tests/migrations/test_motivo_salida_estadia.py",
+      "action": "created",
+      "summary": "Regresión real en PostgreSQL desechable para longitud Unicode, datos existentes y reversibilidad"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Guardar el motivo descriptivo como TEXT",
+      "rationale": "El DTO permite texto libre; el motivo reportado tiene 52 caracteres y excede VARCHAR(50). Recortar o convertirlo a un código perdería trazabilidad.",
+      "consequences": "Se preserva el contrato de la API y se necesita la migración 032; no cambian reglas operacionales."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Revertir sin pérdida silenciosa de datos",
+      "rationale": "Un cast explícito a VARCHAR(50) podría truncar motivos. La conversión implícita de PostgreSQL rechaza valores incompatibles.",
+      "consequences": "El downgrade funciona con motivos compatibles; si existen textos largos, falla conservando los datos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Limitar la migración al campo afectado",
+      "rationale": "alembic check detectó diferencias en taller_correcciones_visitas, uq_ciudades_codigo_normalizado y la restricción única de taller_resultado_ubicaciones, fuera de este cambio.",
+      "consequences": "Esas diferencias no se incorporaron a la migración correctiva y requieren revisión separada."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -u -m pytest tests/migrations/test_motivo_salida_estadia.py tests/integration/test_buses_api.py tests/unit/test_bus_service.py tests/unit/test_telemetria_ingreso_taller.py -q",
+      "result": "failed",
+      "evidence": "30 passed; la prueba PostgreSQL falló inicialmente por stdin CP1252 frente a UTF8 en psql de Windows. Se corrigió usando SQL ASCII y verificación UTF8 hexadecimal."
+    },
+    {
+      "command": "python -u -m pytest tests/migrations/test_motivo_salida_estadia.py -q",
+      "result": "passed",
+      "evidence": "1 passed in 6.95s; las otras 30 pruebas pasaron antes, total 31 pruebas verificadas."
+    },
+    {
+      "command": "python -u -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "dev_local: 031_depuracion_supervision -> 032_motivo_salida_estadia."
+    },
+    {
+      "command": "SELECT version_num FROM alembic_version; SELECT data_type FROM information_schema.columns WHERE table_name='taller_solicitud_estadias' AND column_name='motivo_salida'",
+      "result": "passed",
+      "evidence": "032_motivo_salida_estadia; text. Modelo ORM Text confirmado."
+    },
+    {
+      "command": "python -u -m alembic check",
+      "result": "failed",
+      "evidence": "Diferencias ajenas al cambio: tabla taller_correcciones_visitas, expresión del índice uq_ciudades_codigo_normalizado y nombre de constraint unique de taller_resultado_ubicaciones. Sin diferencias para motivo_salida."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Reintentar el egreso desde Gestión de Flota; revisar por separado las diferencias de esquema informadas por alembic check.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "b0b9ea084748bb278ca2be0f5c42cde645f93aad",
+    "dirty": true
+  },
+  "notes": [
+    "Sin commit ni despliegue remoto.",
+    "Las verificaciones se ejecutaron fuera del sandbox tras detectar restricciones de conexión y de initdb. Se detuvieron los procesos de verificación bloqueados del sandbox."
+  ]
+}

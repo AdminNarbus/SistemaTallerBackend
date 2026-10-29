@@ -79,6 +79,7 @@ async def test_fase1_models_and_schema_integrity(db_session: AsyncSession):
 
     # 4. Crear Solicitud y Detalle con soporte para repuestos
     solicitud = TallerSolicitud(
+        es_ot=True,
         n_bus=bus.n_bus,
         bus_id=bus.id,
         usuario_creador_id=supervisor.id,

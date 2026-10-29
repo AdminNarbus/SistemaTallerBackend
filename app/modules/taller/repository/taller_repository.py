@@ -345,7 +345,7 @@ class TallerRepository:
             sql = text("""
                 WITH filtered_solicitud AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
-                           s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
+                           s.estado, s.es_ot, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
@@ -702,7 +702,7 @@ class TallerRepository:
                     u.telefono as usuario_creador_telefono,
                     fs.mecanico_cierre_id,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
-                    fs.estado,
+                    fs.estado, fs.es_ot,
                     fs.descripcion_general,
                     fs.foto_url,
                     fs.motivo_incompleto_checklist,
@@ -890,7 +890,7 @@ class TallerRepository:
             sql = text("""
                 WITH solicitudes_coincidentes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
-                           s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
+                           s.estado, s.es_ot, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
@@ -1042,7 +1042,7 @@ class TallerRepository:
                     CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
                     fs.mecanico_cierre_id,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
-                    fs.estado,
+                    fs.estado, fs.es_ot,
                     fs.descripcion_general,
                     fs.foto_url,
                     fs.motivo_incompleto_checklist,
@@ -1163,7 +1163,7 @@ class TallerRepository:
             sql = text("""
                 WITH solicitudes_coincidentes AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
-                           s.estado, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
+                           s.estado, s.es_ot, s.descripcion_general, s.foto_url, s.motivo_incompleto_checklist,
                            s.motivo_cierre_parcial, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller, s.horas_demora_primer_ingreso, s.horas_taller_acumuladas
                     FROM taller_solicitudes s
@@ -1314,7 +1314,7 @@ class TallerRepository:
                     CONCAT(u.nombre, ' ', u.apellido) as usuario_creador_nombre,
                     fs.mecanico_cierre_id,
                     CASE WHEN mc.id IS NOT NULL THEN CONCAT(mc.nombre, ' ', mc.apellido) ELSE NULL END as mecanico_cierre_nombre,
-                    fs.estado,
+                    fs.estado, fs.es_ot,
                     fs.descripcion_general,
                     fs.foto_url,
                     fs.motivo_incompleto_checklist,
@@ -1941,7 +1941,7 @@ class TallerRepository:
         stmt = text("""
             SELECT 
                 s.id,
-                s.estado,
+                s.estado, s.es_ot,
                 s.bus_id,
                 s.fecha_creacion,
                 COALESCE(p.total_pauta, 0) AS total_pauta,
@@ -1988,6 +1988,7 @@ class TallerRepository:
             return {
                 "id": sol.id,
                 "estado": sol.estado,
+                "es_ot": sol.es_ot,
                 "bus_id": sol.bus_id,
                 "fecha_creacion": sol.fecha_creacion,
                 "total_pauta": tot_p,

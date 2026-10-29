@@ -23,6 +23,7 @@ async def test_list_pendientes_incluye_en_reparacion_y_excluye_reportado(
     # ARRANGE
     ahora = datetime.now(timezone.utc)
     sol_pendiente = TallerSolicitud(
+        es_ot=True,
         n_bus="101",
         usuario_creador_id=1,
         estado=EstadoSolicitud.PENDIENTE.value,
@@ -31,6 +32,7 @@ async def test_list_pendientes_incluye_en_reparacion_y_excluye_reportado(
         fecha_actualizacion=ahora,
     )
     sol_en_reparacion = TallerSolicitud(
+        es_ot=True,
         n_bus="102",
         usuario_creador_id=1,
         estado=EstadoSolicitud.EN_REPARACION.value,
@@ -39,14 +41,16 @@ async def test_list_pendientes_incluye_en_reparacion_y_excluye_reportado(
         fecha_actualizacion=ahora,
     )
     sol_reportado = TallerSolicitud(
+        es_ot=True,
         n_bus="103",
         usuario_creador_id=1,
-        estado=EstadoSolicitud.REPORTADO.value,
+        estado="REPORTADO",
         descripcion_general="Bus en estado legado reportado",
         fecha_creacion=ahora,
         fecha_actualizacion=ahora,
     )
     sol_liberado = TallerSolicitud(
+        es_ot=True,
         n_bus="104",
         usuario_creador_id=1,
         estado=EstadoSolicitud.LIBERADO.value,
@@ -55,6 +59,7 @@ async def test_list_pendientes_incluye_en_reparacion_y_excluye_reportado(
         fecha_actualizacion=ahora,
     )
     sol_finalizado = TallerSolicitud(
+        es_ot=True,
         n_bus="105",
         usuario_creador_id=1,
         estado=EstadoSolicitud.FINALIZADO.value,
@@ -113,6 +118,7 @@ async def test_list_pendientes_filtro_opcional_estado(
     # ARRANGE
     ahora = datetime.now(timezone.utc)
     sol1 = TallerSolicitud(
+        es_ot=True,
         n_bus="201",
         usuario_creador_id=1,
         estado=EstadoSolicitud.PENDIENTE.value,
@@ -121,6 +127,7 @@ async def test_list_pendientes_filtro_opcional_estado(
         fecha_actualizacion=ahora,
     )
     sol2 = TallerSolicitud(
+        es_ot=True,
         n_bus="202",
         usuario_creador_id=1,
         estado=EstadoSolicitud.EN_REPARACION.value,
@@ -157,6 +164,7 @@ async def test_endpoint_get_pendientes_mecanico(
     # ARRANGE
     ahora = datetime.now(timezone.utc)
     s1 = TallerSolicitud(
+        es_ot=True,
         n_bus="301",
         usuario_creador_id=1,
         estado=EstadoSolicitud.PENDIENTE.value,
@@ -165,6 +173,7 @@ async def test_endpoint_get_pendientes_mecanico(
         fecha_actualizacion=ahora,
     )
     s2 = TallerSolicitud(
+        es_ot=True,
         n_bus="302",
         usuario_creador_id=1,
         estado=EstadoSolicitud.EN_REPARACION.value,
@@ -173,9 +182,10 @@ async def test_endpoint_get_pendientes_mecanico(
         fecha_actualizacion=ahora,
     )
     s3 = TallerSolicitud(
+        es_ot=True,
         n_bus="303",
         usuario_creador_id=1,
-        estado=EstadoSolicitud.REPORTADO.value,
+        estado="REPORTADO",
         descripcion_general="OT Reportada Antigua",
         fecha_creacion=ahora,
         fecha_actualizacion=ahora,

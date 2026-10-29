@@ -14,6 +14,7 @@ from app.modules.taller.models.taller_ubicacion import Ciudad, Taller, TallerRes
 from app.modules.taller.services.resultado_falla_service import resultado_falla_service
 from app.modules.taller.services.taller_service import taller_service
 from app.modules.supervision.repository.supervision_repository import supervision_repository
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_solicitud
 
 
 async def _crear_solicitud(db, conductor, falla, sufijo):
@@ -26,6 +27,7 @@ async def _crear_solicitud(db, conductor, falla, sufijo):
         ),
         conductor.id,
     )
+    solicitud = await aprobar_solicitud(db, solicitud.id, AprobacionOT(4, "Supervisor", "Preparar OT para resultados"))
     return solicitud, solicitud.detalles[0].id
 
 

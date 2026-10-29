@@ -6,6 +6,7 @@ from app.modules.taller.dtos.averias_dto import SolicitudDetalleCreateDTO, Solic
 from app.modules.taller.dtos.bitacora_dto import SolicitudComentarioDTO
 from app.modules.taller.dtos.cuadrilla_dto import SolicitudMecanicoDTO
 from app.modules.taller.dtos.pauta_dto import PautaRespuestaDTO
+from app.modules.taller.dtos.estado_visible_dto import EstadoVisibleDTO
 
 
 class SolicitudEvidenciaDTO(BaseModel):
@@ -58,7 +59,7 @@ class SolicitudCreateDTO(BaseModel):
         return self
 
 
-class SolicitudDTO(BaseModel):
+class SolicitudDTO(EstadoVisibleDTO):
     """Ficha canónica integral de una orden de trabajo (OT) de taller."""
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,7 +72,6 @@ class SolicitudDTO(BaseModel):
     usuario_creador_telefono: Optional[str] = None
     mecanico_cierre_id: Optional[int] = None
     mecanico_cierre_nombre: Optional[str] = None
-    estado: str
     descripcion_general: Optional[str] = None
     foto_url: Optional[str] = None
     motivo_incompleto_checklist: Optional[str] = None
@@ -103,7 +103,7 @@ class SolicitudDTO(BaseModel):
     estadias: List[EstadiaTallerDTO] = []
 
 
-class SolicitudResumenDTO(BaseModel):
+class SolicitudResumenDTO(EstadoVisibleDTO):
     """
     DTO ultraligero para listados de alta velocidad del mecánico (Bandeja de Pendientes y Mis Trabajos)
     y vista de auditoría para la supervisora.
@@ -112,7 +112,6 @@ class SolicitudResumenDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(..., description="Número identificador de la OT (numero_ot)")
-    estado: str = Field(..., description="Estado actual de la orden de trabajo")
     n_bus: str = Field(..., description="Número de bus")
     fecha_ingreso: Optional[datetime] = Field(
         None, description="Fecha de ingreso al taller (fecha_primer_ingreso_taller o fecha_creacion)"

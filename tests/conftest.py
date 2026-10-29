@@ -203,6 +203,9 @@ async def taller_resultado(client: AsyncClient, auth_headers_supervisor, seed_te
     async def payload(solicitud_id, detalle_id, estado, mecanicos_ids=None, **extra):
         ficha = await client.get(f"/api/v1/taller/{solicitud_id}", headers=auth_headers_supervisor)
         assert ficha.status_code == 200, ficha.text
+        if not ficha.json()["es_ot"]:
+            aprobada = await client.post(f"/api/v1/taller/{solicitud_id}/aprobar", json={}, headers=auth_headers_supervisor)
+            assert aprobada.status_code == 200, aprobada.text
         detalle = next(item for item in ficha.json()["detalles"] if item["id"] == detalle_id)
         body = {
             "operacion_id": str(uuid4()),

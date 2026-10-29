@@ -16,7 +16,7 @@ def contexto_asignacion():
         SimpleNamespace(id=20, descripcion_personalizada="Freno largo", asignaciones=[]),
     ]
     solicitud = SimpleNamespace(
-        id=1, estado="EN_REPARACION", detalles=detalles,
+        id=1, es_ot=True, estado="EN_REPARACION", detalles=detalles,
         mecanicos=[], asignaciones_fallas=[], comentarios=[],
     )
     repo = MagicMock(spec=TallerRepository)

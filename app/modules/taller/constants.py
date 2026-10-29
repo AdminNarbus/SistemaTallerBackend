@@ -4,7 +4,6 @@ from typing import Final
 
 class EstadoSolicitud(str, Enum):
     """Estados canónicos del ciclo de vida de una Solicitud de Mantención en Taller."""
-    REPORTADO = "REPORTADO"
     PENDIENTE = "PENDIENTE"
     EN_REPARACION = "EN_REPARACION"
     LIBERADO = "LIBERADO"

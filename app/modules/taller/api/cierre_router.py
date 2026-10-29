@@ -18,11 +18,26 @@ from app.modules.taller.dtos import (
     SolicitudDTO,
 )
 from app.modules.taller.services.cierre_service import cierre_service
+from app.modules.taller.dtos.aprobacion_dto import AprobarSolicitudDTO
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_solicitud
 from app.modules.taller.api.request_parsers import parse_json_or_multipart
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/{id}/aprobar", response_model=SolicitudDTO)
+async def aprobar_solicitud_ot(
+    id: int,
+    dto: AprobarSolicitudDTO,
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Aprueba la solicitud como OT sin asignar equipo ni ingresar físicamente al bus."""
+    return await aprobar_solicitud(db, id, AprobacionOT(
+        current_user.id, current_user.nombre_completo, dto.comentario or "Aprobación por supervisión",
+    ))
 
 
 @router.patch("/{id}/estado", response_model=SolicitudDTO)

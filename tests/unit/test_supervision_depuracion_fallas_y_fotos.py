@@ -28,6 +28,7 @@ async def test_eliminar_falla_duplicada_exitoso(db_session, seed_test_data):
     db_session.add(bus)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8801,
         n_bus="881",
         bus_id=8801,
@@ -90,6 +91,7 @@ async def test_eliminar_falla_bloqueada_si_resuelta(db_session, seed_test_data):
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8802,
         n_bus="882",
         usuario_creador_id=conductor.id,
@@ -130,6 +132,7 @@ async def test_eliminar_falla_bloqueada_en_ot_finalizada(db_session, seed_test_d
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8803,
         n_bus="883",
         usuario_creador_id=conductor.id,
@@ -167,6 +170,7 @@ async def test_editar_falla_con_justificacion_exitoso(db_session, seed_test_data
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8804,
         n_bus="884",
         usuario_creador_id=conductor.id,
@@ -220,6 +224,7 @@ async def test_eliminar_evidencia_inicial_exitoso_y_ajuste_portada(db_session, s
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8805,
         n_bus="885",
         usuario_creador_id=conductor.id,
@@ -287,6 +292,7 @@ async def test_eliminar_evidencia_bloqueada_si_es_de_bitacora_o_falla(db_session
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=8806,
         n_bus="886",
         usuario_creador_id=conductor.id,

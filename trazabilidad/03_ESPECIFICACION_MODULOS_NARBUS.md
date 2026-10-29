@@ -39,6 +39,9 @@
 - `POST /solicitudes`: Creación de orden de taller. Soporta `multipart/form-data` con campo binario `foto` (subida atómica a GCS en 1 solo request HTTP) o `application/json` con `foto_url`.
 
 ### Bandejas de Trabajo del Mecánico (Single-Roundtrip SQL)
+- `GET /api/v1/taller/buses`: listado unificado de buses y OT vigente, ordenado antes de paginar y con `X-Total-Count`, para MECANICO/ADMIN.
+- `POST /api/v1/taller/buses/{bus_id}/fallas`: crea una solicitud sin aprobar si falta un registro vigente; autoasignarse aprueba como OT y comienza atención. Reutiliza solicitudes y OT liberadas. Véase [contrato de buses para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+- `POST /api/v1/taller/{id}/aprobar`: supervisión aprueba explícitamente como OT. Las asignaciones de supervisión y la toma/autoasignación del mecánico también aprueban. `es_ot=false` implica `estado=null` en la respuesta; no se añade un estado nuevo.
 - `GET /pendientes`: Pestaña 1 mecánico (buses esperando en taller, paginación con `limit` y `skip`, `Cache-Control: max-age=15`).
 - `GET /mis-trabajos`: Pestaña 2 mecánico (órdenes en reparación donde el mecánico está asignado activamente, `limit` y `skip`).
 - `GET /{id}`: Consulta detallada de la solicitud con todas sus relaciones cargadas.

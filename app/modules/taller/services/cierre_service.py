@@ -149,6 +149,8 @@ class CierreService:
         now = datetime.now(timezone.utc)
 
         if ctx is not None:
+            if ctx.get("es_ot", True) is False:
+                raise BusinessRuleException("Apruebe la solicitud como OT antes de finalizarla")
             estado_ot_anterior = ctx["estado"]
             total_items_pauta = ctx.get("total_pauta", 0)
             items_respondidos = ctx.get("respondidos_pauta", 0)
@@ -164,6 +166,8 @@ class CierreService:
             )
             if not solicitud_fallback:
                 raise NotFoundException("Solicitud de taller no encontrada")
+            if getattr(solicitud_fallback, "es_ot", True) is False:
+                raise BusinessRuleException("Apruebe la solicitud como OT antes de finalizarla")
             estado_ot_anterior = solicitud_fallback.estado
             (
                 total_items_pauta,
@@ -312,6 +316,8 @@ class CierreService:
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
+        if getattr(solicitud, "es_ot", True) is False:
+            raise BusinessRuleException("Apruebe la solicitud como OT antes de cambiar su estado")
         nuevo_estado = dto.estado.value
         estado_anterior = solicitud.estado
         if estado_anterior == nuevo_estado:
@@ -440,7 +446,6 @@ class CierreService:
 
         elif nuevo_estado in (
             EstadoSolicitud.PENDIENTE.value,
-            EstadoSolicitud.REPORTADO.value,
         ):
             await self.repo.desactivar_cuadrilla_y_asignaciones_completas(
                 db, solicitud_id=solicitud.id, fecha_desasignacion=now

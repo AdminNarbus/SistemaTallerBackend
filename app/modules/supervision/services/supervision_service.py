@@ -65,7 +65,7 @@ class SupervisionService:
             # Fallback en caso extremo
             return SolicitudResumenDTO(
                 id=item.id,
-                estado=item.estado,
+                estado=item.estado, es_ot=getattr(item, "es_ot", True) is not False,
                 n_bus=item.n_bus or "S/N",
                 fecha_ingreso=getattr(item, "fecha_primer_ingreso_taller", None) or item.fecha_creacion,
                 fecha_actualizacion=getattr(item, "fecha_actualizacion", None) or item.fecha_creacion,
@@ -92,7 +92,7 @@ class SupervisionService:
 
         return SolicitudResumenDTO(
             id=data["id"],
-            estado=data["estado"],
+            estado=data["estado"], es_ot=data.get("es_ot", True),
             n_bus=data.get("n_bus") or "S/N",
             fecha_ingreso=fecha_ingreso,
             fecha_actualizacion=fecha_actualizacion,
@@ -146,7 +146,7 @@ class SupervisionService:
         return SolicitudAuditoriaDTO(
             id=data["id"],
             n_bus=data.get("n_bus") or "S/N",
-            estado=data["estado"],
+            estado=data["estado"], es_ot=data.get("es_ot", True),
             fecha_creacion=data["fecha_creacion"],
             fecha_cierre=data.get("fecha_cierre"),
             fecha_liberacion=data.get("fecha_liberacion"),
@@ -246,7 +246,7 @@ class SupervisionService:
         return SolicitudAuditoriaDTO(
             id=sol.id,
             n_bus=sol.n_bus or "S/N",
-            estado=sol.estado,
+            estado=sol.estado, es_ot=getattr(sol, "es_ot", True) is not False,
             fecha_creacion=sol.fecha_creacion,
             fecha_cierre=sol.fecha_cierre,
             fecha_liberacion=sol.fecha_liberacion,

@@ -1,5 +1,27 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Solicitudes y aprobación como OT (AV-0135 - COMPLETADO)
+
+- Migración `033_es_ot`: columna booleana `es_ot` no nula. Registros previos conservados como OT; nuevas solicitudes con `false` por defecto. Aplicada en dev_local.
+- Una solicitud sin aprobar devuelve `es_ot=false` y `estado=null` en detalle, resúmenes, auditoría y tarjetas de buses. La UI muestra **Solicitud**, sin badge de estado.
+- `POST /api/v1/taller/{id}/aprobar` para SUPERVISOR/ADMIN: aprobación idempotente, sin asignación ni ingreso físico.
+- Tomar/autoasignarse por mecánico o asignar fallas por supervisión aprueba en la misma transacción. Entregar turno, liberar y finalizar conservan `es_ot=true`.
+- El enum canónico tiene únicamente `PENDIENTE`, `EN_REPARACION`, `LIBERADO`, `FINALIZADO`; se retira el miembro residual `REPORTADO` y se conserva compatibilidad de lectura histórica.
+- Orden de la lista: OT en atención, OT liberadas, solicitudes sin aprobar y buses sin registro vigente. Contrato actualizado en [Buses y solicitudes para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+
+## Buses y reporte de fallas para mecánicos (AV-0133 - COMPLETADO)
+
+- `GET /api/v1/taller/buses`: listado unificado de buses y OT vigente, con búsqueda, total, orden global y paginación en una consulta SQL.
+- `POST /api/v1/taller/buses/{bus_id}/fallas`: crea una OT si falta o reutiliza la vigente, incluida `LIBERADO`; `autoasignar` es opcional y predetermina `false`.
+- Reporte, creación de OT, asignación, estadía e historial se guardan en una transacción; reportes concurrentes del mismo bus reutilizan una sola OT.
+- Contrato de integración: [Buses para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+- Ajuste AV-0134: listado mínimo para tarjetas con número de bus, OT, creador, fecha de creación original, fallas pendientes y estado; detalle completo bajo demanda al abrir la OT.
+
+## Corrección de motivo de egreso (AV-0132 - COMPLETADO)
+
+- `motivo_salida` de estadías pasa a `TEXT` mediante migración `032_motivo_salida_estadia`, aplicada en dev_local para conservar motivos mayores a 50 caracteres.
+- `alembic check` detecta diferencias ajenas al cambio registradas en AV-0132; no se modificaron esas otras estructuras.
+
 ## Depuración de Fallas e Imágenes por Supervisión (AV-0130 - COMPLETADO)
 
 - **Eliminación de fallas con 1 clic:** Supervisión puede eliminar fallas duplicadas o erróneas en OTs abiertas (`DELETE /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`). Desasocia evidencias enlazadas a la falla, elimina en cascada segura asignaciones y eventos de resolución, desactiva la presencia del mecánico si ya no le restan averías activas, y registra automáticamente en la bitácora inmutable: `"Se elimina falla '{falla}' por duplicidad"` (`tipo="SUPERVISION"`).

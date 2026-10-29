@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
-from sqlalchemy import CheckConstraint, UniqueConstraint, Index, text, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import CheckConstraint, UniqueConstraint, Index, text, DateTime, ForeignKey, Integer, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -36,7 +36,7 @@ class TallerSolicitudEstadia(Base):
     fecha_ingreso: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fecha_salida: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     horas_estadia: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 1), nullable=True)
-    motivo_salida: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    motivo_salida: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relación bidireccional
     solicitud: Mapped["TallerSolicitud"] = relationship(

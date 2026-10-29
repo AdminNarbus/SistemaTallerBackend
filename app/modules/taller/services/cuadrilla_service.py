@@ -35,6 +35,8 @@ from app.modules.taller.services.estadias_helper import (
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,6 +128,8 @@ class CuadrillaService:
                     colab_entry.mecanico = u_c
                 self.repo.add_mecanico(db, colab_entry)
                 attach_mecanico_safe(solicitud, colab_entry)
+
+        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Inicio de atención por mecánico", fecha_evento=now))
 
         # 5. Actualizar estado y asegurar telemetría de taller
         solicitud.estado = "EN_REPARACION"
@@ -573,10 +577,11 @@ class CuadrillaService:
                 attach_mecanico_safe(solicitud, nueva_presencia)
                 presencias_activas_existentes.add(m_id)
 
+        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", fecha_evento=now))
+
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
-            EstadoSolicitud.REPORTADO.value,
         ]:
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
             await asegurar_ingreso_taller_y_estadia(self.repo, db, solicitud, now)
@@ -720,10 +725,11 @@ class CuadrillaService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
+        await aprobar_como_ot(db, solicitud, AprobacionOT(supervisor_id, sup_nom, "Asignación por supervisión", fecha_evento=now))
+
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,
             EstadoSolicitud.LIBERADO.value,
-            EstadoSolicitud.REPORTADO.value,
         ]:
             solicitud.estado = EstadoSolicitud.EN_REPARACION.value
             await asegurar_ingreso_taller_y_estadia(self.repo, db, solicitud, now)

@@ -245,7 +245,7 @@ async def test_agregar_colaborador_estado_invalido_lanza_business_rule():
     """agregar_colaborador rechaza solicitudes que no estén EN_REPARACION."""
     # Arrange
     mock_repo = AsyncMock()
-    mock_solicitud = MagicMock(estado=EstadoSolicitud.REPORTADO.value)
+    mock_solicitud = MagicMock(estado=EstadoSolicitud.PENDIENTE.value)
     mock_repo.get_solicitud_operacional.return_value = mock_solicitud
     service = TallerService(repository=mock_repo)
     mock_db = AsyncMock()
@@ -338,7 +338,8 @@ async def test_create_and_get_solicitud(db_session, seed_test_data):
     solicitud = await taller_service.create_solicitud(db_session, dto, creador_id)
     assert solicitud.id is not None
     assert solicitud.n_bus == "BUS-101"
-    assert solicitud.estado == "PENDIENTE"
+    assert solicitud.es_ot is False
+    assert solicitud.estado is None
     assert len(solicitud.detalles) == 1
     assert solicitud.detalles[0].falla_id == falla_id
 
@@ -605,7 +606,8 @@ async def test_supervisor_crea_solicitud_marca_bus_en_taller(db_session, seed_te
     )
 
     assert solicitud.bus_id == bus.id
-    assert solicitud.estado == "PENDIENTE"
+    assert solicitud.es_ot is False
+    assert solicitud.estado is None
     assert solicitud.total_visitas == 1
     assert solicitud.fecha_primer_ingreso_taller is not None
     # El bus queda en taller por el ingreso explícito.

@@ -78,8 +78,6 @@ class CambiarEstadoSolicitudDTO(BaseModel):
             if val == "REPORTADO":
                 return EstadoSolicitud.PENDIENTE
             return val
-        if v == EstadoSolicitud.REPORTADO:
-            return EstadoSolicitud.PENDIENTE
         return v
 
 

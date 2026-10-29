@@ -109,7 +109,8 @@ async def test_mantencion_api_full_flow(client, auth_headers_conductor, auth_hea
     sol_data = create_res.json()
     sol_id = sol_data["id"]
     detalle_id = sol_data["detalles"][0]["id"]
-    assert sol_data["estado"] == "PENDIENTE"
+    assert sol_data["es_ot"] is False
+    assert sol_data["estado"] is None
 
     # 2. Mecánico 1 revisa solicitudes pendientes
     pendientes_res = await client.get("/api/v1/taller/pendientes", headers=auth_headers_mecanico1)
@@ -265,6 +266,7 @@ async def test_agregar_falla_solicitud_finalizada_rechazo(
     seed_test_data,
     auth_headers_conductor,
     auth_headers_mecanico1,
+    auth_headers_supervisor,
 ):
     """Verifica que no se pueda agregar fallas a una solicitud que ya está FINALIZADA."""
     # 1. Crear solicitud
@@ -273,6 +275,8 @@ async def test_agregar_falla_solicitud_finalizada_rechazo(
     sol_id = create_res.json()["id"]
 
     # 2. Finalizar solicitud
+    aprobada = await client.post(f"/api/v1/taller/{sol_id}/aprobar", json={}, headers=auth_headers_supervisor)
+    assert aprobada.status_code == 200, aprobada.text
     fin_res = await client.post(
         f"/api/v1/taller/{sol_id}/finalizar",
         json={"motivo_incompleto_checklist": "No aplica pauta", "liberar_bus_taller": False},

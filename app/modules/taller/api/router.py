@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.modules.taller.api.catalogo_router import router as catalogo_router
+from app.modules.taller.api.buses_router import router as buses_router
 from app.modules.taller.api.solicitud_router import router as solicitud_router
 from app.modules.taller.api.pauta_router import router as pauta_router
 from app.modules.taller.api.cuadrilla_router import router as cuadrilla_router
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/taller", tags=["Taller"])
 
 # Inclusión de sub-routers organizados por responsabilidad única (SRP)
 router.include_router(taller_ubicacion_router)
+router.include_router(buses_router)
 router.include_router(catalogo_router)
 router.include_router(solicitud_router)
 router.include_router(pauta_router)
@@ -21,6 +23,7 @@ router.include_router(cierre_router)
 
 __all__ = [
     "router",
+    "buses_router",
     "catalogo_router",
     "solicitud_router",
     "pauta_router",

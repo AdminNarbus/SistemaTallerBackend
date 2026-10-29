@@ -54,6 +54,7 @@ async def test_supervision_resumen_taller_kpis(db_session, seed_test_data):
 
     # 3. Sembrar solicitud con detalles (1 resuelto, 1 pendiente)
     sol = TallerSolicitud(
+        es_ot=True,
         id=701,
         n_bus="777",
         bus_id=77,
@@ -106,6 +107,7 @@ async def test_supervision_alertas_operacionales(db_session, seed_test_data):
     # 2. Sembrar orden con fecha_creacion antigua sin haber ingresado a taller (fecha_primer_ingreso_taller IS NULL: 72 horas)
     fecha_antigua = datetime.now(timezone.utc) - timedelta(hours=72)
     sol1 = TallerSolicitud(
+        es_ot=True,
         id=702,
         n_bus="888",
         bus_id=770,
@@ -118,6 +120,7 @@ async def test_supervision_alertas_operacionales(db_session, seed_test_data):
     # Sembrar orden en estado LIBERADO con fecha_liberacion antigua (excediendo umbral: 96 horas)
     fecha_lib_antigua = datetime.now(timezone.utc) - timedelta(hours=96)
     sol2 = TallerSolicitud(
+        es_ot=True,
         id=703,
         n_bus="889",
         usuario_creador_id=conductor.id,
@@ -463,6 +466,7 @@ async def test_cambiar_estado_solicitud_flujo_completo(db_session, seed_test_dat
     await db_session.flush()
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=781,
         n_bus="881",
         bus_id=81,
@@ -547,6 +551,7 @@ async def test_ciclo_fecha_liberacion_en_cambio_estado(db_session, seed_test_dat
     await db_session.flush()
 
     sol = TallerSolicitud(
+        es_ot=True,
         id=782,
         n_bus="882",
         bus_id=82,

@@ -5,6 +5,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.auth.constants import RolUsuario
 from app.modules.taller.constants import EstadoSolicitud, EstadoFalla, TipoEventoFalla
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
@@ -41,6 +42,8 @@ from app.modules.taller.services.trazabilidad_fallas import registrar_evento_fal
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +64,18 @@ class AveriasService:
         mecanico_id: int,
         dto: AgregarFallaDTO,
     ) -> SolicitudDTO:
-        """Permite agregar una avería detectada durante la atención en taller."""
+        solicitud = await self.registrar_falla(db, solicitud_id, mecanico_id, dto)
+        await db.commit()
+        return orm_to_solicitud_dto(solicitud)
+
+    async def registrar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        dto: AgregarFallaDTO,
+    ) -> TallerSolicitud:
+        """Registra la falla sin commit para componerla con la creación de una OT."""
         logger.info(
             "[MANTENCION] Agregando nueva avería | solicitud_id=%s, mecanico_id=%s, autoasignar=%s",
             solicitud_id,
@@ -156,6 +170,8 @@ class AveriasService:
         asignado_id = dto.effective_asignado_id
 
         if es_supervisor and dto.resuelto and resolutor_id:
+            if solicitud.es_ot is False:
+                raise BusinessRuleException("Apruebe la solicitud como OT antes de registrar una resolución")
             u_resolutor = await self.repo.get_usuario_by_id(db, resolutor_id)
             if not u_resolutor or not u_resolutor.is_active:
                 raise BusinessRuleException(
@@ -210,10 +226,11 @@ class AveriasService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
+            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now))
+
             if solicitud.estado in [
                 EstadoSolicitud.PENDIENTE.value,
                 EstadoSolicitud.LIBERADO.value,
-                EstadoSolicitud.REPORTADO.value,
             ]:
                 solicitud.estado = EstadoSolicitud.EN_REPARACION.value
                 await asegurar_ingreso_taller_y_estadia(
@@ -260,10 +277,11 @@ class AveriasService:
                     self.repo.add_mecanico(db, nueva_presencia)
                     attach_mecanico_safe(solicitud, nueva_presencia)
 
+                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now))
+
                 if solicitud.estado in [
                     EstadoSolicitud.PENDIENTE.value,
                     EstadoSolicitud.LIBERADO.value,
-                    EstadoSolicitud.REPORTADO.value,
                 ]:
                     solicitud.estado = EstadoSolicitud.EN_REPARACION.value
                     await asegurar_ingreso_taller_y_estadia(
@@ -339,8 +357,7 @@ class AveriasService:
                 motivo=comentario_entry.comentario,
             ),
         )
-        await db.commit()
-        return orm_to_solicitud_dto(solicitud)
+        return solicitud
 
     async def check_detalle(
         self,

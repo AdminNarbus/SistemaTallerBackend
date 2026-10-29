@@ -327,6 +327,7 @@ async def test_dar_de_baja_bus_con_ots_abiertas_requiere_forzar(db_session, seed
     bus = await bus_fleet_service.create_bus(db_session, dto=dto)
 
     solicitud = TallerSolicitud(
+        es_ot=True,
         n_bus="716",
         bus_id=bus.id,
         usuario_creador_id=conductor.id,

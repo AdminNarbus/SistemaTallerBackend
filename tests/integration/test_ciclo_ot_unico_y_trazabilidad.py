@@ -37,6 +37,7 @@ async def test_reportes_del_mismo_bus_se_consolidan_y_preservan_reportante(
 
     # LIBERADO continúa activo: anexar una falla no lo devuelve a PENDIENTE.
     anterior = await db_session.get(TallerSolicitud, ot_inicial["id"])
+    anterior.es_ot = True
     anterior.estado = EstadoSolicitud.LIBERADO.value
     await db_session.commit()
 

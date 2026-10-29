@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field
+from app.modules.taller.dtos.estado_visible_dto import EstadoVisibleDTO
 
 from app.modules.supervision.constants import TipoAlertaSupervision, SeveridadAlerta
 
@@ -73,7 +74,7 @@ class DetalleFallaAuditoriaDTO(BaseModel):
             self.nombre = self.falla_nombre
 
 
-class SolicitudAuditoriaDTO(BaseModel):
+class SolicitudAuditoriaDTO(EstadoVisibleDTO):
     """
     DTO ultraligero exclusivo para el Dashboard y tarjetas de auditoría de supervisión.
     Omite deliberadamente colecciones pesadas (comentarios, pauta, evidencias, fotos, patentes, etc.)
@@ -81,7 +82,6 @@ class SolicitudAuditoriaDTO(BaseModel):
     """
     id: int
     n_bus: str
-    estado: str
     fecha_creacion: datetime
     fecha_cierre: Optional[datetime] = None
     fecha_liberacion: Optional[datetime] = None

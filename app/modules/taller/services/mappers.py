@@ -200,7 +200,7 @@ def dict_to_solicitud_dto(
         usuario_creador_telefono=r.get("usuario_creador_telefono"),
         mecanico_cierre_id=r.get("mecanico_cierre_id"),
         mecanico_cierre_nombre=r.get("mecanico_cierre_nombre"),
-        estado=r["estado"],
+        estado=r["estado"], es_ot=r.get("es_ot", True),
         descripcion_general=r.get("descripcion_general"),
         foto_url=storage.get_url(r.get("foto_url")),
         motivo_incompleto_checklist=r.get("motivo_incompleto_checklist"),
@@ -278,7 +278,7 @@ def dict_to_solicitud_resumen_dto(
 
     return SolicitudResumenDTO(
         id=r["id"],
-        estado=r["estado"],
+        estado=r["estado"], es_ot=r.get("es_ot", True),
         n_bus=r["n_bus"],
         fecha_ingreso=fecha_ingreso,
         fecha_actualizacion=fecha_actualizacion,
@@ -329,7 +329,7 @@ def orm_to_solicitud_resumen_dto(
 
     return SolicitudResumenDTO(
         id=sol.id,
-        estado=sol.estado,
+        estado=sol.estado, es_ot=getattr(sol, "es_ot", True) is not False,
         n_bus=sol.n_bus,
         fecha_ingreso=fecha_ingreso,
         fecha_actualizacion=fecha_actualizacion,
@@ -760,7 +760,7 @@ def orm_to_solicitud_dto(
         usuario_creador_telefono=creador_telefono,
         mecanico_cierre_id=sol.mecanico_cierre_id,
         mecanico_cierre_nombre=mecanico_cierre_nombre,
-        estado=sol.estado,
+        estado=sol.estado, es_ot=getattr(sol, "es_ot", True) is not False,
         descripcion_general=sol.descripcion_general,
         foto_url=storage.get_url(sol.foto_url),
         motivo_incompleto_checklist=getattr(sol, "motivo_incompleto_checklist", None),

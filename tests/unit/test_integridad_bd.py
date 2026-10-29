@@ -60,7 +60,7 @@ async def test_seed_pauta_conserva_respuestas_con_ids_mayores_a_diez(db_session,
     from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
     from app.modules.taller.models.taller_solicitud import TallerSolicitud
 
-    ot = TallerSolicitud(n_bus='PAUTA-ID-HISTORICO')
+    ot = TallerSolicitud(es_ot=True, n_bus='PAUTA-ID-HISTORICO')
     item = PautaTallerItem(id=500, categoria='Motor', item='Revisión', orden=1)
     anterior = PautaTallerItem(id=501, categoria='Motor', item='Anterior', orden=1, is_active=False)
     db_session.add_all([ot, item, anterior])

@@ -119,6 +119,7 @@ async def test_egreso_conserva_motivo_y_cierra_estadia(
     db_session.add(bus)
     await db_session.flush()
     solicitud = TallerSolicitud(
+        es_ot=True,
         n_bus=bus.n_bus, bus_id=bus.id, estado="EN_REPARACION",
         fecha_creacion=ingreso, horas_taller_acumuladas=3,
     )

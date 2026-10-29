@@ -25,11 +25,14 @@ class BusesTallerRepository:
     def _consulta_buses(self, filtros: dict):
         ot = TallerSolicitud
         fallas = self._conteo_fallas()
-        prioridad = case((ot.estado.in_(("REPORTADO", "PENDIENTE", "EN_REPARACION")), 0),
-                         (ot.estado == "LIBERADO", 1), else_=2)
+        prioridad = case(
+            (ot.es_ot.is_(True) & ot.estado.in_(("PENDIENTE", "EN_REPARACION")), 0),
+            (ot.es_ot.is_(True) & (ot.estado == "LIBERADO"), 1),
+            (ot.id.is_not(None), 2), else_=3,
+        )
         consulta = select(
             Bus.id.label("bus_id"), Bus.n_bus, ot.id.label("ot_id"), ot.estado.label("ot_estado"),
-            ot.fecha_creacion, self._nombre_creador().label("creador_nombre"),
+            ot.es_ot, ot.fecha_creacion, self._nombre_creador().label("creador_nombre"),
             func.coalesce(fallas.c.pendientes, 0).label("numero_fallas_pendientes"),
             prioridad.label("prioridad"),
         ).outerjoin(ot, ot.id == self._ot_vigente()).outerjoin(

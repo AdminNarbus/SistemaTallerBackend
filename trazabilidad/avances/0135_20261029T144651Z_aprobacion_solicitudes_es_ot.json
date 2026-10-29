@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 135,
+  "id": "AV-0135",
+  "timestamp": "2026-10-29T14:46:51.404549Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SOLICITUD-A-OT",
+    "name": "Aprobación de solicitudes mediante es_ot",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Separar solicitud y OT mediante es_ot, con aprobación explícita por supervisión o automática al asignar/iniciar trabajo, sin exponer estado antes de aprobar ni introducir un quinto estado.",
+  "scope": {
+    "planned": [
+      "Agregar columna es_ot",
+      "Aprobar por supervisión, asignación supervisada o inicio/autoasignación de mecánico",
+      "Ocultar estado de solicitudes sin aprobar"
+    ],
+    "completed": [
+      "Migración 033 generada y revisada, aplicada en dev_local",
+      "Registros previos conservados como OT; nuevas solicitudes con false",
+      "POST /api/v1/taller/{id}/aprobar idempotente y autorizado para SUPERVISOR/ADMIN",
+      "Aprobación atómica desde tomar, autoasignar, asignar y agregar falla asignada",
+      "es_ot y estado=null consistentes en tarjetas, detalle, pendientes y auditoría (ORM y PostgreSQL nativo)",
+      "Enum canónico limitado a cuatro estados; compatibilidad histórica preservada",
+      "Bitácora con actor y fecha de aprobación, sin duplicación concurrente",
+      "Contrato frontend y pruebas anteriores adaptados a aprobación explícita"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend",
+      "Push o despliegue remoto",
+      "Diferencias de esquema preexistentes ajenas a es_ot",
+      "Reescritura del historial inmutable"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/models/taller_solicitud.py",
+      "action": "modified",
+      "summary": "Boolean es_ot no nulo, default false"
+    },
+    {
+      "path": "alembic/versions/033_es_ot_distinguir_solicitudes_y_ordenes.py",
+      "action": "created",
+      "summary": "Backfill conservador de existentes como OT y default false para nuevas solicitudes; downgrade reversible"
+    },
+    {
+      "path": "alembic/script.py.mako",
+      "action": "modified",
+      "summary": "Corregir filtro empty inexistente que impedía autogenerar migraciones"
+    },
+    {
+      "path": "app/modules/taller/services/aprobacion_ot_service.py",
+      "action": "created",
+      "summary": "Aprobación única por registro con bitácora, lock existente y publicación tras commit"
+    },
+    {
+      "path": "app/modules/taller/dtos/aprobacion_dto.py",
+      "action": "created",
+      "summary": "Payload de aprobación con comentario opcional"
+    },
+    {
+      "path": "app/modules/taller/dtos/estado_visible_dto.py",
+      "action": "created",
+      "summary": "Contrato común: estado=null cuando es_ot=false"
+    },
+    {
+      "path": "app/modules/taller/api/cierre_router.py",
+      "action": "modified",
+      "summary": "Endpoint de aprobación explícita por supervisión"
+    },
+    {
+      "path": "app/modules/taller/services/cuadrilla_service.py",
+      "action": "modified",
+      "summary": "Aprobar al tomar, autoasignar o asignar por supervisión"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Aprobar cuando se añade una falla asignada; proteger resoluciones de solicitudes sin aprobación"
+    },
+    {
+      "path": "app/modules/taller/services/cierre_service.py",
+      "action": "modified",
+      "summary": "Impedir cierre y cambio de estado de solicitudes no aprobadas"
+    },
+    {
+      "path": "app/modules/taller/services/resultado_falla_service.py",
+      "action": "modified",
+      "summary": "Validar aprobación antes de registrar resultados"
+    },
+    {
+      "path": "app/modules/taller/repository/buses_taller_repository.py",
+      "action": "modified",
+      "summary": "Listar es_ot y ordenar OT en atención, liberadas, solicitudes y buses sin registro"
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Incluir es_ot en lecturas SQL nativas y contexto de cierre"
+    },
+    {
+      "path": "app/modules/supervision/repository/supervision_repository.py",
+      "action": "modified",
+      "summary": "Propagar es_ot en lecturas nativas de auditoría"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Propagar es_ot a detalle y resúmenes desde ORM y filas PostgreSQL"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Ocultación consistente en auditoría y resúmenes"
+    },
+    {
+      "path": "app/modules/taller/constants.py",
+      "action": "modified",
+      "summary": "Retirar miembro residual REPORTADO del enum canónico"
+    },
+    {
+      "path": "tests/integration/test_aprobacion_solicitudes.py",
+      "action": "created",
+      "summary": "Permisos, idempotencia, visibilidad, las tres vías de aprobación y permanencia de es_ot"
+    },
+    {
+      "path": "tests/migrations/test_es_ot.py",
+      "action": "created",
+      "summary": "Backfill, default false y ciclo upgrade/downgrade/upgrade PostgreSQL"
+    },
+    {
+      "path": "tests/migrations/test_buses_mecanicos_postgresql.py",
+      "action": "modified",
+      "summary": "Lecturas nativas sin estado antes de aprobar y aprobaciones concurrentes sin duplicación"
+    },
+    {
+      "path": "tests",
+      "action": "modified",
+      "summary": "Fixtures históricos marcan OT aprobadas; flujos de resultados aprueban en su preparación y creación nueva espera estado null"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_BUSES_MECANICOS.md",
+      "action": "modified",
+      "summary": "Contrato es_ot, tarjeta Solicitud sin estado, aprobación explícita e implícita"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Estado actual de la aprobación de solicitudes"
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Documentar nuevo endpoint y flujo"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Separar aprobación y estado operativo",
+      "rationale": "El usuario eligió una columna es_ot y pidió no mostrar estado mientras la solicitud no esté aprobada.",
+      "consequences": "Internamente conserva PENDIENTE para el ciclo y las restricciones existentes; las respuestas muestran es_ot=false y estado=null. Una OT aprobada utiliza solo los cuatro estados canónicos."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Tres vías de aprobación en una transacción",
+      "rationale": "El usuario autorizó aprobación explícita, autoasignación/inicio por mecánico y asignación por supervisión.",
+      "consequences": "Se conserva el registro y sus fallas; el cambio de es_ot y la asignación se confirman juntos. La aprobación explícita no asigna equipo ni registra ingreso físico."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar como OT los registros anteriores",
+      "rationale": "Antes no existía una marca para determinar cuáles estaban sin aprobación; eran tratados como OT.",
+      "consequences": "La migración utiliza default temporal true para existentes y cambia a false para nuevos registros, evitando desclasificar trabajo e historial previo."
+    },
+    {
+      "id": "DEC-004",
+      "title": "No reintroducir REPORTADO como estado",
+      "rationale": "La documentación y el usuario establecen cuatro estados canónicos desde la migración 014.",
+      "consequences": "Se retira el miembro residual del enum y sus usos operativos; se preservan restricciones históricas y normalización de compatibilidad sin crear un quinto estado."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Aprobación idempotente y auditable",
+      "rationale": "La aprobación puede coincidir con otra aprobación o asignación.",
+      "consequences": "Se reutiliza el lock de ciclo/fila, se escribe bitácora solo al pasar a true y no se revierte la marca al entregar turno/liberar/finalizar."
+    },
+    {
+      "id": "DEC-006",
+      "title": "Revisar y limitar la migración autogenerada",
+      "rationale": "La plantilla tenía un filtro Mako inexistente y la comparación detecta diferencias previas de otras tablas.",
+      "consequences": "Se corrigió la plantilla y se retiraron operaciones ajenas de la migración; es_ot es la única modificación estructural."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -u -m pytest tests/unit tests/integration tests/e2e tests/migrations -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "349 passed, 5 advertencias de deprecación de Starlette, en 172.60s. Incluye API, unitarias, E2E, PostgreSQL temporal y ciclo de migración."
+    },
+    {
+      "command": "python -m alembic revision --autogenerate --rev-id 033_es_ot -m distinguir_solicitudes_y_ordenes",
+      "result": "passed",
+      "evidence": "Generada después de corregir script.py.mako; revisión manual retiró diferencias preexistentes ajenas."
+    },
+    {
+      "command": "python -u -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "dev_local pasó de 032_motivo_salida_estadia a 033_es_ot."
+    },
+    {
+      "command": "SELECT version_num FROM alembic_version; SELECT data_type,is_nullable,column_default FROM information_schema.columns WHERE table_name='taller_solicitudes' AND column_name='es_ot'",
+      "result": "passed",
+      "evidence": "033_es_ot; boolean; nullable NO; default false. Datos previos preservados como OT."
+    },
+    {
+      "command": "python -m alembic check",
+      "result": "failed",
+      "evidence": "Solo diferencias preexistentes ya registradas: taller_correcciones_visitas, expresión uq_ciudades_codigo_normalizado y nombre de restricción única de taller_resultado_ubicaciones. Sin diferencias de es_ot."
+    },
+    {
+      "command": "Generar app.openapi()",
+      "result": "passed",
+      "evidence": "EstadoSolicitud enum con PENDIENTE, EN_REPARACION, LIBERADO, FINALIZADO; endpoint POST /api/v1/taller/{id}/aprobar presente."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar en frontend es_ot y la aprobación de supervisión, ocultando el estado de registros sin aprobar.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/buses-mecanicos-y-motivo-egreso",
+    "commit": "ce1e37c",
+    "dirty": true
+  },
+  "notes": [
+    "La colección genérica de tests encontró una carpeta temporal antigua sin permisos; se ejecutaron las cuatro carpetas oficiales.",
+    "Las pruebas previas asumían aprobación implícita: se adaptaron fixtures y escenarios al nuevo flujo; no se debilitaron las validaciones de producción.",
+    "Sin push ni despliegue remoto."
+  ]
+}

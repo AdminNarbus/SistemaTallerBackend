@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -53,6 +53,7 @@ class TallerSolicitud(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    es_ot: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     n_bus: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     bus_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("buses.id", ondelete="RESTRICT"), nullable=True, index=True

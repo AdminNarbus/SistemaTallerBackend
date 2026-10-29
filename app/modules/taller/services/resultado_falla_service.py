@@ -95,14 +95,17 @@ class ResultadoFallaService:
         detalle = await taller_repository.get_detalle_operacional(db, solicitud_id, detalle_id)
         if detalle is None:
             raise NotFoundException("Detalle de falla no encontrado")
-        solicitud_estado = await db.scalar(select(TallerSolicitud.estado).where(TallerSolicitud.id == solicitud_id))
-        if solicitud_estado is None:
+        cabecera = (await db.execute(select(TallerSolicitud.estado, TallerSolicitud.es_ot).where(TallerSolicitud.id == solicitud_id))).first()
+        if cabecera is None:
             raise NotFoundException("Solicitud de taller no encontrada")
+        solicitud_estado = cabecera.estado
 
         huella = await self._huella(dto, fotos)
         previa = await db.get(OperacionResultado, str(dto.operacion_id))
         if previa:
             return self._replay(previa, actor_id, detalle_id, huella)
+        if not cabecera.es_ot:
+            raise BusinessRuleException("Apruebe la solicitud como OT antes de registrar un resultado")
         if solicitud_estado == "FINALIZADO":
             raise BusinessRuleException("Reabra la OT antes de registrar un resultado")
         evento_vigente_id = await db.scalar(

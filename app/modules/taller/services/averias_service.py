@@ -42,6 +42,8 @@ from app.modules.taller.services.trazabilidad_fallas import registrar_evento_fal
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
+
 logger = logging.getLogger(__name__)
 
 
@@ -168,6 +170,8 @@ class AveriasService:
         asignado_id = dto.effective_asignado_id
 
         if es_supervisor and dto.resuelto and resolutor_id:
+            if solicitud.es_ot is False:
+                raise BusinessRuleException("Apruebe la solicitud como OT antes de registrar una resolución")
             u_resolutor = await self.repo.get_usuario_by_id(db, resolutor_id)
             if not u_resolutor or not u_resolutor.is_active:
                 raise BusinessRuleException(
@@ -222,10 +226,11 @@ class AveriasService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
+            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now))
+
             if solicitud.estado in [
                 EstadoSolicitud.PENDIENTE.value,
                 EstadoSolicitud.LIBERADO.value,
-                EstadoSolicitud.REPORTADO.value,
             ]:
                 solicitud.estado = EstadoSolicitud.EN_REPARACION.value
                 await asegurar_ingreso_taller_y_estadia(
@@ -272,10 +277,11 @@ class AveriasService:
                     self.repo.add_mecanico(db, nueva_presencia)
                     attach_mecanico_safe(solicitud, nueva_presencia)
 
+                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now))
+
                 if solicitud.estado in [
                     EstadoSolicitud.PENDIENTE.value,
                     EstadoSolicitud.LIBERADO.value,
-                    EstadoSolicitud.REPORTADO.value,
                 ]:
                     solicitud.estado = EstadoSolicitud.EN_REPARACION.value
                     await asegurar_ingreso_taller_y_estadia(

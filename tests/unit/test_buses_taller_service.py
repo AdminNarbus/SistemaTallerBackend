@@ -33,7 +33,7 @@ async def test_bus_no_disponible_no_crea_ot(bus, error):
 async def test_bus_sin_ot_id_reutiliza_ot_por_numero():
     # Arrange
     repo = MagicMock()
-    ot = TallerSolicitud(id=20, n_bus="100", estado="LIBERADO")
+    ot = TallerSolicitud(es_ot=True, id=20, n_bus="100", estado="LIBERADO")
     repo.get_solicitud_activa_por_bus = AsyncMock(side_effect=[None, ot])
     repo.flush = AsyncMock()
     servicio = BusesTallerService(taller_repo=repo)

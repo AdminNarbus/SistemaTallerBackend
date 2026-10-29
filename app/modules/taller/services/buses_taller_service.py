@@ -50,7 +50,7 @@ class BusesTallerService:
         ot = None
         if fila["ot_id"] is not None:
             ot = OTBusMecanicoDTO(
-                id=fila["ot_id"], estado=fila["ot_estado"],
+                id=fila["ot_id"], estado=fila["ot_estado"], es_ot=fila["es_ot"],
                 creador_nombre=fila["creador_nombre"], fecha_creacion=fila["fecha_creacion"],
                 numero_fallas_pendientes=fila["numero_fallas_pendientes"],
             )
@@ -124,7 +124,7 @@ class BusesTallerService:
         now = datetime.now(timezone.utc)
         solicitud = TallerSolicitud(
             bus_id=bus.id, n_bus=bus.n_bus or str(bus.id), usuario_creador_id=actor.id,
-            estado="PENDIENTE", fecha_creacion=now, fecha_actualizacion=now,
+            estado="PENDIENTE", es_ot=False, fecha_creacion=now, fecha_actualizacion=now,
             horas_taller_acumuladas=0,
         )
         self.taller_repo.add_solicitud(db, solicitud)

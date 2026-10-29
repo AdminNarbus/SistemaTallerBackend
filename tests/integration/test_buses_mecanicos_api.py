@@ -36,7 +36,7 @@ async def test_falla_crea_ot_y_autoasigna_solo_si_se_solicita(
     ot = response.json()
     assert ot["bus_id"] == bus_id
     assert ot["usuario_creador_id"] == 2
-    assert ot["estado"] == ("EN_REPARACION" if autoasignar else "PENDIENTE")
+    assert ot["estado"] == ("EN_REPARACION" if autoasignar else None)
     assert len(ot["detalles"]) == 1
     falla = ot["detalles"][0]
     assert falla["reportado_por_id"] == 2
@@ -49,15 +49,16 @@ async def test_falla_crea_ot_y_autoasigna_solo_si_se_solicita(
     eventos = (await db_session.execute(select(TallerSolicitudEstadoEvento).order_by(TallerSolicitudEstadoEvento.id))).scalars().all()
     assert eventos[0].tipo_evento == "CREACION"
     assert eventos[0].usuario_actor_id == 2
-    assert eventos[-1].estado_nuevo == ot["estado"]
+    assert eventos[-1].estado_nuevo == (ot["estado"] or "PENDIENTE")
+    assert ot["es_ot"] is bool(autoasignar)
 
 
-@pytest.mark.parametrize("estado", ["REPORTADO", "PENDIENTE", "EN_REPARACION", "LIBERADO"])
+@pytest.mark.parametrize("estado", ["PENDIENTE", "EN_REPARACION", "LIBERADO"])
 @pytest.mark.parametrize("autoasignar", [False, True])
 async def test_reutiliza_ot_vigente_incluida_liberada(
     client, db_session, bus_mecanico, auth_headers_mecanico1, estado, autoasignar,
 ):
-    solicitud = TallerSolicitud(n_bus=bus_mecanico.n_bus, bus_id=bus_mecanico.id, estado=estado)
+    solicitud = TallerSolicitud(es_ot=True, n_bus=bus_mecanico.n_bus, bus_id=bus_mecanico.id, estado=estado)
     db_session.add(solicitud)
     await db_session.commit()
     solicitud_id = solicitud.id
@@ -76,7 +77,7 @@ async def test_reutiliza_ot_vigente_incluida_liberada(
 async def test_ot_finalizada_se_conserva_y_abre_un_nuevo_ciclo(
     client, db_session, bus_mecanico, auth_headers_mecanico1,
 ):
-    anterior = TallerSolicitud(n_bus=bus_mecanico.n_bus, bus_id=bus_mecanico.id, estado="FINALIZADO")
+    anterior = TallerSolicitud(es_ot=True, n_bus=bus_mecanico.n_bus, bus_id=bus_mecanico.id, estado="FINALIZADO")
     db_session.add(anterior)
     await db_session.commit()
     anterior_id = anterior.id
@@ -96,7 +97,7 @@ async def test_ot_finalizada_se_conserva_y_abre_un_nuevo_ciclo(
 async def test_reutiliza_ot_historica_sin_bus_id(
     client, db_session, bus_mecanico, auth_headers_mecanico1,
 ):
-    solicitud = TallerSolicitud(n_bus=bus_mecanico.n_bus.lower(), estado="LIBERADO")
+    solicitud = TallerSolicitud(es_ot=True, n_bus=bus_mecanico.n_bus.lower(), estado="LIBERADO")
     db_session.add(solicitud)
     await db_session.commit()
     solicitud_id = solicitud.id
@@ -155,12 +156,12 @@ async def test_permisos_y_bus_inexistente_o_inactivo(
 async def flota_mecanicos(db_session):
     now = datetime.now(timezone.utc)
     for numero, estado in [("01", None), ("02", "FINALIZADO"), ("03", "LIBERADO"),
-                           ("04", "EN_REPARACION"), ("05", "PENDIENTE"), ("06", "REPORTADO")]:
+                           ("04", "EN_REPARACION"), ("05", "PENDIENTE"), ("06", "PENDIENTE")]:
         bus = Bus(n_bus=numero, patente=f"TEST-{numero}", is_active=True)
         db_session.add(bus)
         await db_session.flush()
         if estado:
-            db_session.add(TallerSolicitud(bus_id=bus.id, n_bus=numero, estado=estado, fecha_actualizacion=now))
+            db_session.add(TallerSolicitud(es_ot=True, bus_id=bus.id, n_bus=numero, estado=estado, fecha_actualizacion=now))
     db_session.add(Bus(n_bus="00", patente="INACTIVO", is_active=False))
     await db_session.commit()
 
@@ -173,7 +174,7 @@ async def test_lista_buses_con_orden_global_y_sin_ot_finalizada(
     buses = response.json()
     assert response.headers["X-Total-Count"] == "6"
     assert [bus["n_bus"] for bus in buses] == ["04", "05", "06", "03", "01", "02"]
-    assert [bus["ot"]["estado"] for bus in buses[:4]] == ["EN_REPARACION", "PENDIENTE", "REPORTADO", "LIBERADO"]
+    assert [bus["ot"]["estado"] for bus in buses[:4]] == ["EN_REPARACION", "PENDIENTE", "PENDIENTE", "LIBERADO"]
     assert all(bus["ot"] is None for bus in buses[4:])
     assert all(set(bus) == {"bus_id", "n_bus", "ot"} for bus in buses)
 
@@ -183,6 +184,7 @@ async def test_tarjeta_devuelve_creador_y_fecha_de_creacion_de_ot(
 ):
     creacion = datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
     solicitud = TallerSolicitud(
+        es_ot=True,
         bus_id=bus_mecanico.id, n_bus=bus_mecanico.n_bus, estado="PENDIENTE",
         usuario_creador_id=seed_test_data["conductor"].id,
         fecha_creacion=creacion, fecha_actualizacion=creacion + timedelta(days=9),
@@ -202,7 +204,7 @@ async def test_tarjeta_devuelve_creador_y_fecha_de_creacion_de_ot(
     tarjeta = response.json()[0]
     assert set(tarjeta) == {"bus_id", "n_bus", "ot"}
     ot = tarjeta["ot"]
-    assert set(ot) == {"id", "estado", "creador_nombre", "fecha_creacion", "numero_fallas_pendientes"}
+    assert set(ot) == {"id", "es_ot", "estado", "creador_nombre", "fecha_creacion", "numero_fallas_pendientes"}
     assert ot["id"] == solicitud.id
     assert ot["creador_nombre"] == "Juan Conductor"
     assert ot["fecha_creacion"].startswith("2026-10-20T12:00:00")
@@ -237,8 +239,8 @@ async def test_listado_usa_una_consulta_y_cuenta_fallas_sin_duplicar_bus(db_sess
     bus = Bus(n_bus="LEGACY", patente="LEG-001", is_active=True)
     db_session.add(bus)
     await db_session.flush()
-    activa = TallerSolicitud(n_bus="legacy", estado="LIBERADO")
-    finalizada = TallerSolicitud(n_bus=bus.n_bus, bus_id=bus.id, estado="FINALIZADO")
+    activa = TallerSolicitud(es_ot=True, n_bus="legacy", estado="LIBERADO")
+    finalizada = TallerSolicitud(es_ot=True, n_bus=bus.n_bus, bus_id=bus.id, estado="FINALIZADO")
     db_session.add_all([activa, finalizada])
     await db_session.flush()
     db_session.add_all([

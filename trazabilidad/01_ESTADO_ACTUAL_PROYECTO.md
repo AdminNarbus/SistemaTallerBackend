@@ -1,5 +1,14 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Solicitudes y aprobación como OT (AV-0135 - COMPLETADO)
+
+- Migración `033_es_ot`: columna booleana `es_ot` no nula. Registros previos conservados como OT; nuevas solicitudes con `false` por defecto. Aplicada en dev_local.
+- Una solicitud sin aprobar devuelve `es_ot=false` y `estado=null` en detalle, resúmenes, auditoría y tarjetas de buses. La UI muestra **Solicitud**, sin badge de estado.
+- `POST /api/v1/taller/{id}/aprobar` para SUPERVISOR/ADMIN: aprobación idempotente, sin asignación ni ingreso físico.
+- Tomar/autoasignarse por mecánico o asignar fallas por supervisión aprueba en la misma transacción. Entregar turno, liberar y finalizar conservan `es_ot=true`.
+- El enum canónico tiene únicamente `PENDIENTE`, `EN_REPARACION`, `LIBERADO`, `FINALIZADO`; se retira el miembro residual `REPORTADO` y se conserva compatibilidad de lectura histórica.
+- Orden de la lista: OT en atención, OT liberadas, solicitudes sin aprobar y buses sin registro vigente. Contrato actualizado en [Buses y solicitudes para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+
 ## Buses y reporte de fallas para mecánicos (AV-0133 - COMPLETADO)
 
 - `GET /api/v1/taller/buses`: listado unificado de buses y OT vigente, con búsqueda, total, orden global y paginación en una consulta SQL.

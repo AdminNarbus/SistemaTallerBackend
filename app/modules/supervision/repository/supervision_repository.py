@@ -605,7 +605,7 @@ class SupervisionRepository:
             sql = text("""
                 WITH base_filtered AS (
                     SELECT s.id, s.n_bus, s.bus_id, s.usuario_creador_id, s.mecanico_cierre_id,
-                           s.estado, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
+                           s.estado, s.es_ot, s.fecha_creacion, s.fecha_actualizacion, s.fecha_cierre, s.fecha_liberacion,
                            s.fecha_primer_ingreso_taller,
                            COALESCE(s.horas_taller_acumuladas, 0.0) as horas_taller_acumuladas,
                            COALESCE((
@@ -719,7 +719,7 @@ class SupervisionRepository:
                 SELECT 
                     bf.id,
                     bf.n_bus,
-                    bf.estado,
+                    bf.estado, bf.es_ot,
                     bf.fecha_creacion,
                     bf.fecha_actualizacion,
                     bf.fecha_cierre,

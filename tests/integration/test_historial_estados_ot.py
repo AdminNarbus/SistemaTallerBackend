@@ -18,6 +18,8 @@ async def test_historial_conserva_cierres_reapertura_y_paginacion(
 ):
     ot = await crear_ot(client, auth_headers_conductor)
     url = f"/api/v1/taller/{ot['id']}"
+    aprobada = await client.post(url + '/aprobar', json={}, headers=auth_headers_supervisor)
+    assert aprobada.status_code == 200, aprobada.text
     cierres = []
     for estado in ('FINALIZADO', 'PENDIENTE', 'FINALIZADO'):
         res = await client.patch(url + '/estado', headers=auth_headers_supervisor,
@@ -95,7 +97,7 @@ async def test_transiciones_cuadrilla_cierre_batch_y_anexar_fallas(
 async def test_evento_sin_cambio_y_rollback(db_session, seed_test_data):
     from datetime import datetime, timezone
     from app.modules.taller.models.taller_solicitud import TallerSolicitud
-    ot = TallerSolicitud(n_bus='HIST-ROLLBACK', estado='PENDIENTE')
+    ot = TallerSolicitud(es_ot=True, n_bus='HIST-ROLLBACK', estado='PENDIENTE')
     db_session.add(ot)
     await db_session.commit()
     id_ot = ot.id

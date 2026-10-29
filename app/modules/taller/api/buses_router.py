@@ -19,7 +19,7 @@ async def listar_buses_mecanico(
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Una fila por bus: OT pendiente/en reparación, OT liberada y sin OT vigente."""
+    """Tarjetas de bus y OT con creador, fecha de creación, fallas pendientes y estado."""
     buses, total = await buses_taller_service.listar(db, filtros)
     response.headers["X-Total-Count"] = str(total)
     response.headers["Cache-Control"] = "no-store"

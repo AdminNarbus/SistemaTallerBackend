@@ -24,16 +24,12 @@ class AgregarFallaBusDTO(SolicitudDetalleCreateDTO):
 class OTBusMecanicoDTO(BaseModel):
     id: int
     estado: str
-    fecha_actualizacion: Optional[datetime] = None
+    creador_nombre: Optional[str] = None
+    fecha_creacion: datetime
     numero_fallas_pendientes: int = 0
 
 
 class BusMecanicoDTO(BaseModel):
     bus_id: int
     n_bus: Optional[str] = None
-    patente: str
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    en_taller: bool
-    is_active: bool
     ot: Optional[OTBusMecanicoDTO] = None

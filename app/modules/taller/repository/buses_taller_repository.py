@@ -1,6 +1,7 @@
 from sqlalchemy import case, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
@@ -27,17 +28,28 @@ class BusesTallerRepository:
         prioridad = case((ot.estado.in_(("REPORTADO", "PENDIENTE", "EN_REPARACION")), 0),
                          (ot.estado == "LIBERADO", 1), else_=2)
         consulta = select(
-            Bus.id.label("bus_id"), Bus.n_bus, Bus.patente, Bus.marca, Bus.modelo,
-            Bus.en_taller, Bus.is_active, ot.id.label("ot_id"), ot.estado.label("ot_estado"),
-            ot.fecha_actualizacion, func.coalesce(fallas.c.pendientes, 0).label("numero_fallas_pendientes"),
+            Bus.id.label("bus_id"), Bus.n_bus, ot.id.label("ot_id"), ot.estado.label("ot_estado"),
+            ot.fecha_creacion, self._nombre_creador().label("creador_nombre"),
+            func.coalesce(fallas.c.pendientes, 0).label("numero_fallas_pendientes"),
             prioridad.label("prioridad"),
-        ).outerjoin(ot, ot.id == self._ot_vigente()).outerjoin(fallas, fallas.c.solicitud_id == ot.id)
+        ).outerjoin(ot, ot.id == self._ot_vigente()).outerjoin(
+            Usuario, Usuario.id == ot.usuario_creador_id,
+        ).outerjoin(fallas, fallas.c.solicitud_id == ot.id)
         if filtros["solo_activos"]:
             consulta = consulta.where(Bus.is_active.is_(True))
         if filtros.get("q"):
             consulta = consulta.where(or_(Bus.n_bus.icontains(filtros["q"], autoescape=True),
                                           Bus.patente.icontains(filtros["q"], autoescape=True)))
         return consulta
+
+    def _nombre_creador(self):
+        nombre = func.nullif(Usuario.nombre, "")
+        apellido = func.nullif(Usuario.apellido, "")
+        return case(
+            (nombre.is_not(None) & apellido.is_not(None), nombre + " " + apellido),
+            (nombre.is_not(None), nombre),
+            else_=Usuario.username,
+        )
 
     def _ot_vigente(self):
         ot = TallerSolicitud

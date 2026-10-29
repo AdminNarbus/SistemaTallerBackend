@@ -18,23 +18,25 @@ Dentro de cada grupo se ordena por `n_bus` y `bus_id`. Las OT antiguas sin `bus_
 [
   {
     "bus_id": 51,
-    "n_bus": "351",
-    "patente": "ABCD12",
-    "marca": "Scania",
-    "modelo": "K400",
-    "en_taller": true,
-    "is_active": true,
+    "n_bus": "356",
     "ot": {
-      "id": 12,
-      "estado": "EN_REPARACION",
-      "fecha_actualizacion": "2026-10-29T12:00:00Z",
+      "id": 1,
+      "estado": "PENDIENTE",
+      "creador_nombre": "Juan Pérez",
+      "fecha_creacion": "2026-10-29T12:00:00Z",
       "numero_fallas_pendientes": 3
     }
   }
 ]
 ```
 
-`ot` es `null` si no hay una OT vigente. `numero_fallas_pendientes` cuenta fallas `PENDIENTE` e `INCOMPLETA`, tengan asignación o no. `en_taller` indica ubicación física y no reemplaza el estado de la OT.
+El listado devuelve únicamente los datos de la tarjeta: `n_bus` → **356**; `ot.id` → **OT 1**; `ot.creador_nombre` → **Juan Pérez**; `ot.fecha_creacion` → **29-10-2026**; `ot.numero_fallas_pendientes` → **3 Pendientes**; `ot.estado` → **PENDIENTE**. `bus_id` se conserva como identificador para abrir el formulario de falla y como clave estable de la fila.
+
+`fecha_creacion` es la creación original de la OT, no su última modificación ni el ingreso físico al taller. Formatear la fecha ISO en zona `America/Santiago`. El nombre es el creador de la OT (conductor, mecánico u otro usuario reportante), no el mecánico asignado; puede ser `null` en registros históricos sin creador.
+
+`ot` es `null` si no hay una OT vigente. En ese caso mostrar **Sin OT** y permitir añadir una falla. `numero_fallas_pendientes` cuenta fallas `PENDIENTE` e `INCOMPLETA`, tengan asignación o no; no es la cantidad de OT.
+
+Al hacer clic en una tarjeta con OT, consultar `GET /api/v1/taller/{ot.id}` para obtener la ficha completa. No consultar el detalle de cada OT mientras se carga la lista. El endpoint de listado no devuelve patente, marca, modelo, ubicación física ni estado de alta/baja; la búsqueda por patente y el filtro `solo_activos` siguen resolviéndose en SQL.
 
 La cabecera `X-Total-Count` contiene el total filtrado, incluso si la página solicitada está vacía. El listado y su total se resuelven en una consulta SQL. `Cache-Control: no-store` evita conservar una clasificación anterior al reporte.
 

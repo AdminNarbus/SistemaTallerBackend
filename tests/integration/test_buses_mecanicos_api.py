@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -175,6 +175,39 @@ async def test_lista_buses_con_orden_global_y_sin_ot_finalizada(
     assert [bus["n_bus"] for bus in buses] == ["04", "05", "06", "03", "01", "02"]
     assert [bus["ot"]["estado"] for bus in buses[:4]] == ["EN_REPARACION", "PENDIENTE", "REPORTADO", "LIBERADO"]
     assert all(bus["ot"] is None for bus in buses[4:])
+    assert all(set(bus) == {"bus_id", "n_bus", "ot"} for bus in buses)
+
+
+async def test_tarjeta_devuelve_creador_y_fecha_de_creacion_de_ot(
+    client, db_session, bus_mecanico, auth_headers_mecanico1, seed_test_data,
+):
+    creacion = datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
+    solicitud = TallerSolicitud(
+        bus_id=bus_mecanico.id, n_bus=bus_mecanico.n_bus, estado="PENDIENTE",
+        usuario_creador_id=seed_test_data["conductor"].id,
+        fecha_creacion=creacion, fecha_actualizacion=creacion + timedelta(days=9),
+    )
+    db_session.add(solicitud)
+    await db_session.flush()
+    db_session.add_all([
+        TallerSolicitudDetalle(solicitud_id=solicitud.id, estado="PENDIENTE"),
+        TallerSolicitudDetalle(solicitud_id=solicitud.id, estado="INCOMPLETA"),
+        TallerSolicitudDetalle(solicitud_id=solicitud.id, estado="RESUELTA", resuelto=True),
+    ])
+    await db_session.commit()
+
+    response = await client.get("/api/v1/taller/buses", headers=auth_headers_mecanico1)
+
+    assert response.status_code == 200, response.text
+    tarjeta = response.json()[0]
+    assert set(tarjeta) == {"bus_id", "n_bus", "ot"}
+    ot = tarjeta["ot"]
+    assert set(ot) == {"id", "estado", "creador_nombre", "fecha_creacion", "numero_fallas_pendientes"}
+    assert ot["id"] == solicitud.id
+    assert ot["creador_nombre"] == "Juan Conductor"
+    assert ot["fecha_creacion"].startswith("2026-10-20T12:00:00")
+    assert ot["numero_fallas_pendientes"] == 2
+    assert ot["estado"] == "PENDIENTE"
 
 
 @pytest.mark.parametrize("skip, cantidad", [(0, 2), (2, 2), (4, 2), (20, 0)])

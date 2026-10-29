@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 134,
+  "id": "AV-0134",
+  "timestamp": "2026-10-29T13:06:51.842029Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "TARJETA-MECANICO",
+    "name": "Listado mínimo de buses y OT",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Ajustar GET /api/v1/taller/buses a la tarjeta mostrada por el usuario: número de bus, OT, creador, fecha original de creación de OT, fallas pendientes y estado; ficha completa bajo demanda.",
+  "scope": {
+    "planned": [
+      "Reducir información del bus en la lista",
+      "Usar fecha de creación de OT y mostrar nombre del creador",
+      "Conservar consulta separada del detalle al hacer clic"
+    ],
+    "completed": [
+      "Listado reducido",
+      "JOIN de creador en una sola consulta",
+      "Fecha de creación original de OT",
+      "Guía frontend y pruebas actualizadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend",
+      "Cambios de esquema",
+      "Modificar el flujo de reporte y autoasignación"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/bus_mecanico_dto.py",
+      "action": "modified",
+      "summary": "DTO mínimo con identificadores, creador, fecha de creación, fallas pendientes y estado"
+    },
+    {
+      "path": "app/modules/taller/repository/buses_taller_repository.py",
+      "action": "modified",
+      "summary": "Eliminar columnas de ficha de bus y unir creador en la misma consulta SQL"
+    },
+    {
+      "path": "app/modules/taller/services/buses_taller_service.py",
+      "action": "modified",
+      "summary": "Mapear la nueva tarjeta mínima"
+    },
+    {
+      "path": "app/modules/taller/api/buses_router.py",
+      "action": "modified",
+      "summary": "Actualizar descripción del listado"
+    },
+    {
+      "path": "tests/integration/test_buses_mecanicos_api.py",
+      "action": "modified",
+      "summary": "Verificar campos mínimos, creador y fecha original distinta de última modificación"
+    },
+    {
+      "path": "tests/migrations/test_buses_mecanicos_postgresql.py",
+      "action": "modified",
+      "summary": "Verificar tarjeta reducida y creador en PostgreSQL temporal"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_BUSES_MECANICOS.md",
+      "action": "modified",
+      "summary": "Nuevo ejemplo y mapeo de campos a la tarjeta; detalle al hacer clic"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Registrar ajuste AV-0134"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Retornar únicamente datos de tarjeta",
+      "rationale": "El usuario mostró una tarjeta que no necesita patente, marca, modelo, ubicación ni alta/baja.",
+      "consequences": "Se conservan bus_id y n_bus, más ot.id, estado, creador_nombre, fecha_creacion y numero_fallas_pendientes. ot=null representa bus sin OT vigente."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Usar fecha original y creador de la OT",
+      "rationale": "La fecha mostrada corresponde a la creación, y el nombre acompaña al reporte inicial.",
+      "consequences": "Se consulta fecha_creacion en lugar de fecha_actualizacion; el creador se obtiene por JOIN sin consultas adicionales por fila."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Obtener la ficha al seleccionar la tarjeta",
+      "rationale": "La lista solo necesita un resumen para navegar.",
+      "consequences": "El frontend utiliza GET /api/v1/taller/{ot.id} al abrir una OT y evita consultar cada ficha al cargar el listado."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -u -m pytest tests/integration/test_buses_mecanicos_api.py tests/unit/test_buses_taller_service.py tests/migrations/test_buses_mecanicos_postgresql.py -q",
+      "result": "passed",
+      "evidence": "33 passed, 1 advertencia de deprecación de Starlette, en 20.34s. Incluye consulta única, campos exactos, fecha de creación, búsqueda/paginación, PostgreSQL y concurrencia."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Actualizar la tarjeta del frontend según GUIA_FRONTEND_BUSES_MECANICOS.md.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/buses-mecanicos-y-motivo-egreso",
+    "commit": "c849711",
+    "dirty": true
+  },
+  "notes": [
+    "No requiere migración de base de datos.",
+    "La búsqueda por patente y el filtro solo_activos se conservan aunque no se devuelvan esos campos."
+  ]
+}

@@ -51,12 +51,10 @@ class BusesTallerService:
         if fila["ot_id"] is not None:
             ot = OTBusMecanicoDTO(
                 id=fila["ot_id"], estado=fila["ot_estado"],
-                fecha_actualizacion=fila["fecha_actualizacion"],
+                creador_nombre=fila["creador_nombre"], fecha_creacion=fila["fecha_creacion"],
                 numero_fallas_pendientes=fila["numero_fallas_pendientes"],
             )
-        return BusMecanicoDTO(**{campo: fila[campo] for campo in (
-            "bus_id", "n_bus", "patente", "marca", "modelo", "en_taller", "is_active",
-        )}, ot=ot)
+        return BusMecanicoDTO(bus_id=fila["bus_id"], n_bus=fila["n_bus"], ot=ot)
 
     async def agregar_falla(self, db: AsyncSession, registro: RegistroFallaBus) -> SolicitudDTO:
         try:

@@ -66,7 +66,9 @@ async def test_reportes_concurrentes_crean_una_sola_ot_y_preservan_autoasignacio
         assert [bus.bus_id for bus in buses] == [1, 2]
         assert buses[0].ot.id == primero.id
         assert buses[0].ot.numero_fallas_pendientes == 2
-        assert buses[0].en_taller is True
+        assert buses[0].ot.creador_nombre in ("Pedro Mecánico", "Ana Mecánica")
+        assert buses[0].ot.fecha_creacion == primero.fecha_creacion
+        assert await db.scalar(select(Bus.en_taller).where(Bus.id == 1)) is True
         assert buses[1].ot is None
         vacia, total = await BusesTallerService().listar(db, BusesMecanicoFiltroDTO(skip=100))
         assert vacia == []

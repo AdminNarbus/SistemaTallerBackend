@@ -6,6 +6,7 @@
 - `POST /api/v1/taller/buses/{bus_id}/fallas`: crea una OT si falta o reutiliza la vigente, incluida `LIBERADO`; `autoasignar` es opcional y predetermina `false`.
 - Reporte, creación de OT, asignación, estadía e historial se guardan en una transacción; reportes concurrentes del mismo bus reutilizan una sola OT.
 - Contrato de integración: [Buses para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+- Ajuste AV-0134: listado mínimo para tarjetas con número de bus, OT, creador, fecha de creación original, fallas pendientes y estado; detalle completo bajo demanda al abrir la OT.
 
 ## Corrección de motivo de egreso (AV-0132 - COMPLETADO)
 

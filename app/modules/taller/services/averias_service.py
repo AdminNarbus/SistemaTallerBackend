@@ -5,6 +5,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.auth.constants import RolUsuario
 from app.modules.taller.constants import EstadoSolicitud, EstadoFalla, TipoEventoFalla
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
@@ -61,7 +62,18 @@ class AveriasService:
         mecanico_id: int,
         dto: AgregarFallaDTO,
     ) -> SolicitudDTO:
-        """Permite agregar una avería detectada durante la atención en taller."""
+        solicitud = await self.registrar_falla(db, solicitud_id, mecanico_id, dto)
+        await db.commit()
+        return orm_to_solicitud_dto(solicitud)
+
+    async def registrar_falla(
+        self,
+        db: AsyncSession,
+        solicitud_id: int,
+        mecanico_id: int,
+        dto: AgregarFallaDTO,
+    ) -> TallerSolicitud:
+        """Registra la falla sin commit para componerla con la creación de una OT."""
         logger.info(
             "[MANTENCION] Agregando nueva avería | solicitud_id=%s, mecanico_id=%s, autoasignar=%s",
             solicitud_id,
@@ -339,8 +351,7 @@ class AveriasService:
                 motivo=comentario_entry.comentario,
             ),
         )
-        await db.commit()
-        return orm_to_solicitud_dto(solicitud)
+        return solicitud
 
     async def check_detalle(
         self,

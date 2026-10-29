@@ -1,0 +1,39 @@
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.taller.dtos.averias_dto import SolicitudDetalleCreateDTO
+from app.modules.taller.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+
+
+class BusesMecanicoFiltroDTO(BaseModel):
+    skip: int = Field(0, ge=0)
+    limit: int = Field(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
+    q: Optional[str] = Field(None, max_length=100)
+    solo_activos: bool = True
+
+
+class AgregarFallaBusDTO(SolicitudDetalleCreateDTO):
+    """Reportar una falla al bus y, opcionalmente, comenzar a atenderla."""
+
+    model_config = ConfigDict(extra="forbid")
+    autoasignar: bool = Field(False, description="Asignar esta nueva falla al usuario que la reporta e iniciar su atención")
+
+
+class OTBusMecanicoDTO(BaseModel):
+    id: int
+    estado: str
+    fecha_actualizacion: Optional[datetime] = None
+    numero_fallas_pendientes: int = 0
+
+
+class BusMecanicoDTO(BaseModel):
+    bus_id: int
+    n_bus: Optional[str] = None
+    patente: str
+    marca: Optional[str] = None
+    modelo: Optional[str] = None
+    en_taller: bool
+    is_active: bool
+    ot: Optional[OTBusMecanicoDTO] = None

@@ -1,5 +1,7 @@
 # Guía Técnica de Integración para el Frontend: Módulo de Mecánicos de Taller
 
+> Nueva bandeja de buses: usar `GET /api/v1/taller/buses` para obtener buses con OT en atención, liberada o sin OT vigente. El reporte por bus crea la OT cuando falta y permite autoasignación opcional. Contrato actualizado: [Buses y registro de fallas para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+
 ## 1. Contexto de Red y Principios de Rendimiento
 
 El backend de Narbus Taller se ejecuta comunicándose con la base de datos PostgreSQL en la nube de Neon (Región US-East Ohio, ~8.815 km de distancia física con Chile). Cada consulta SQL adicional o petición HTTP redundante agrega una penalización de latencia física de ida y vuelta (RTT) de **~140 ms a ~400 ms**.

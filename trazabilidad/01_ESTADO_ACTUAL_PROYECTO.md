@@ -1,5 +1,17 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Buses y reporte de fallas para mecánicos (AV-0133 - COMPLETADO)
+
+- `GET /api/v1/taller/buses`: listado unificado de buses y OT vigente, con búsqueda, total, orden global y paginación en una consulta SQL.
+- `POST /api/v1/taller/buses/{bus_id}/fallas`: crea una OT si falta o reutiliza la vigente, incluida `LIBERADO`; `autoasignar` es opcional y predetermina `false`.
+- Reporte, creación de OT, asignación, estadía e historial se guardan en una transacción; reportes concurrentes del mismo bus reutilizan una sola OT.
+- Contrato de integración: [Buses para mecánicos](GUIA_FRONTEND_BUSES_MECANICOS.md).
+
+## Corrección de motivo de egreso (AV-0132 - COMPLETADO)
+
+- `motivo_salida` de estadías pasa a `TEXT` mediante migración `032_motivo_salida_estadia`, aplicada en dev_local para conservar motivos mayores a 50 caracteres.
+- `alembic check` detecta diferencias ajenas al cambio registradas en AV-0132; no se modificaron esas otras estructuras.
+
 ## Depuración de Fallas e Imágenes por Supervisión (AV-0130 - COMPLETADO)
 
 - **Eliminación de fallas con 1 clic:** Supervisión puede eliminar fallas duplicadas o erróneas en OTs abiertas (`DELETE /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`). Desasocia evidencias enlazadas a la falla, elimina en cascada segura asignaciones y eventos de resolución, desactiva la presencia del mecánico si ya no le restan averías activas, y registra automáticamente en la bitácora inmutable: `"Se elimina falla '{falla}' por duplicidad"` (`tipo="SUPERVISION"`).

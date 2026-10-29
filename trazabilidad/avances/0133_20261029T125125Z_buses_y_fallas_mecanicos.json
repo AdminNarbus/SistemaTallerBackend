@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 133,
+  "id": "AV-0133",
+  "timestamp": "2026-10-29T12:51:25.278226Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BUSES-MECANICOS",
+    "name": "Bandeja unificada y reporte de fallas por bus",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Lista unificada para mecánicos y reporte por bus que crea la OT al añadir la falla si no existe una vigente, con autoasignación opcional. Trabajo guardado junto al fix de egreso AV-0132 en la rama solicitada por el usuario.",
+  "scope": {
+    "planned": [
+      "Lista de buses con OT en atención, liberada o sin OT vigente",
+      "Creación de OT vinculada al reporte de una falla con autoasignación opcional",
+      "Nueva rama feature para este trabajo y la corrección anterior"
+    ],
+    "completed": [
+      "GET /api/v1/taller/buses",
+      "POST /api/v1/taller/buses/{bus_id}/fallas",
+      "Orden y paginación SQL con total en una consulta",
+      "Transacción atómica y protección de OT única ante concurrencia",
+      "Historial de creación y transiciones, publicación realtime tras commit",
+      "Pruebas unitarias, API, PostgreSQL y contrato frontend"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Implementación del frontend",
+      "Push o despliegue remoto",
+      "Cambio general de permisos de creación de solicitudes",
+      "Diferencias de esquema ajenas registradas en AV-0132"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/api/buses_router.py",
+      "action": "created",
+      "summary": "GET unificado y POST de fallas por bus para MECANICO/ADMIN"
+    },
+    {
+      "path": "app/modules/taller/api/router.py",
+      "action": "modified",
+      "summary": "Registrar rutas de buses antes de la ruta dinámica de OT"
+    },
+    {
+      "path": "app/modules/taller/dtos/bus_mecanico_dto.py",
+      "action": "created",
+      "summary": "DTOs de filtros, lista y reporte con autoasignar=false"
+    },
+    {
+      "path": "app/modules/taller/repository/buses_taller_repository.py",
+      "action": "created",
+      "summary": "Lista, orden, búsqueda, página y total en una consulta SQL"
+    },
+    {
+      "path": "app/modules/taller/services/buses_taller_service.py",
+      "action": "created",
+      "summary": "Resolver o crear OT y registrar falla/autoasignación en una transacción"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Exponer registro de falla sin commit; conservar el comportamiento de agregar_falla"
+    },
+    {
+      "path": "tests/integration/test_buses_mecanicos_api.py",
+      "action": "created",
+      "summary": "Casos de OT, permisos, búsqueda, paginación, consulta única y rollback"
+    },
+    {
+      "path": "tests/unit/test_buses_taller_service.py",
+      "action": "created",
+      "summary": "Reglas de servicio aisladas con mocks"
+    },
+    {
+      "path": "tests/migrations/test_buses_mecanicos_postgresql.py",
+      "action": "created",
+      "summary": "Reportes concurrentes y listado sobre PostgreSQL desechable"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_BUSES_MECANICOS.md",
+      "action": "created",
+      "summary": "Contrato de integración y comportamiento de autoasignación"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_MODULO_MECANICOS.md",
+      "action": "modified",
+      "summary": "Enlace al nuevo contrato de la bandeja de buses"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Estado de AV-0132 y AV-0133"
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Documentar los nuevos endpoints"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Crear OT como parte de añadir falla al bus",
+      "rationale": "El usuario especificó que la OT nazca cuando el mecánico añade una falla y no mediante creación independiente de OT vacía.",
+      "consequences": "Se preservan permisos anteriores del formulario general; el nuevo endpoint crea o reutiliza la OT y devuelve SolicitudDTO."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Autoasignación opcional y explícita",
+      "rationale": "Registrar una falla no implica empezar a repararla ni ingresar físicamente el bus.",
+      "consequences": "autoasignar=false por defecto; true asigna solamente la falla nueva al reportante, activa EN_REPARACION y asegura estadía. false conserva LIBERADO en una OT liberada."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Una fila por bus y clasificación SQL antes de paginar",
+      "rationale": "El frontend no debe combinar tres consultas ni clasificar como sin OT un bus cuya orden esté en otra página.",
+      "consequences": "CTEs y joins devuelven página y total en una sola consulta, incluso para páginas vacías; OT finalizadas no se presentan como vigentes."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Reutilizar registro de averías dentro de una transacción",
+      "rationale": "Evitar duplicar asignaciones, presencia, estadías y trazabilidad; no dejar OT vacías si falla el reporte.",
+      "consequences": "Se extrae registrar_falla sin commit conservando agregar_falla; el coordinador confirma una vez y revierte errores. Advisory lock existente serializa reportes concurrentes del bus."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Guardar ambos trabajos en una nueva rama feature",
+      "rationale": "Solicitud explícita del usuario de reunir este trabajo y la corrección previa en una rama feat.",
+      "consequences": "feature/buses-mecanicos-y-motivo-egreso, con commits separados de fix y feat; sin push ni integración a develop/main."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -u -m pytest tests/integration/test_buses_mecanicos_api.py tests/unit/test_buses_taller_service.py tests/integration/test_taller_api.py tests/unit/test_taller_service.py tests/integration/test_ciclo_ot_unico_y_trazabilidad.py tests/unit/test_bus_service.py tests/unit/test_telemetria_ingreso_taller.py tests/integration/test_buses_api.py tests/migrations/test_buses_mecanicos_postgresql.py tests/migrations/test_motivo_salida_estadia.py -q",
+      "result": "passed",
+      "evidence": "115 passed, 1 advertencia de deprecación de Starlette, en 54.24s. PostgreSQL temporal para concurrencia y migración; SQLite en memoria para integración restante."
+    },
+    {
+      "command": "Generar app.openapi() e inspeccionar rutas y parámetros nuevos",
+      "result": "passed",
+      "evidence": "GET /api/v1/taller/buses y POST /api/v1/taller/buses/{bus_id}/fallas documentados; skip, limit, q y solo_activos como parámetros query."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar la nueva bandeja y el reporte con autoasignación opcional en el repositorio frontend usando GUIA_FRONTEND_BUSES_MECANICOS.md.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/buses-mecanicos-y-motivo-egreso",
+    "commit": "b544ecb",
+    "dirty": true
+  },
+  "notes": [
+    "La funcionalidad nueva no requiere migración de esquema.",
+    "La corrección previa de motivo de salida está en b544ecb y su migración 032 ya fue aplicada en dev_local.",
+    "Sin datos reales de la aplicación modificados durante estas pruebas."
+  ]
+}

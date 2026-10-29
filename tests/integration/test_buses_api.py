@@ -1,5 +1,9 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from app.modules.buses.models.bus import Bus
+from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 
 
 @pytest.mark.asyncio
@@ -98,6 +102,53 @@ async def test_actualizar_en_taller_endpoint(client, db_session, auth_headers_su
     # 4. Bus inexistente con supervisor -> 404
     res_404 = await client.patch("/api/v1/buses/9999/en-taller", json=payload, headers=auth_headers_supervisor)
     assert res_404.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("motivo", [
+    "Liberación / Egreso de taller desde Gestión de Flota",
+    "á" * 1000,
+    None,
+])
+async def test_egreso_conserva_motivo_y_cierra_estadia(
+    client, db_session, auth_headers_supervisor, motivo
+):
+    # Arrange
+    ingreso = datetime.now(timezone.utc) - timedelta(hours=2)
+    bus = Bus(n_bus="EGRESO-51", patente="EG-0051", en_taller=True, is_active=True)
+    db_session.add(bus)
+    await db_session.flush()
+    solicitud = TallerSolicitud(
+        n_bus=bus.n_bus, bus_id=bus.id, estado="EN_REPARACION",
+        fecha_creacion=ingreso, horas_taller_acumuladas=3,
+    )
+    db_session.add(solicitud)
+    await db_session.flush()
+    estadia = TallerSolicitudEstadia(
+        solicitud_id=solicitud.id, numero_visita=1, fecha_ingreso=ingreso,
+    )
+    db_session.add(estadia)
+    await db_session.commit()
+
+    # Act
+    response = await client.patch(
+        f"/api/v1/buses/{bus.id}/en-taller",
+        json={"en_taller": False, "motivo": motivo},
+        headers=auth_headers_supervisor,
+    )
+
+    # Assert
+    assert response.status_code == 200, response.text
+    assert response.json()["en_taller"] is False
+    await db_session.refresh(estadia)
+    await db_session.refresh(solicitud)
+    await db_session.refresh(bus)
+    assert bus.en_taller is False
+    assert estadia.fecha_salida is not None
+    assert estadia.motivo_salida == (motivo or "MOVIMIENTO_FISICO")
+    assert float(estadia.horas_estadia) == pytest.approx(2, abs=0.1)
+    assert float(solicitud.horas_taller_acumuladas) == pytest.approx(5, abs=0.1)
+    assert solicitud.estado == "EN_REPARACION"
 
 
 @pytest.mark.asyncio

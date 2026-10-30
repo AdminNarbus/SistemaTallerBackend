@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.dtos.catalogo_dto import FallaTallerDTO
 from app.modules.taller.dtos.taller_ubicacion_dto import UbicacionEventoDTO, TallerSnapshotDTO
+from app.modules.taller.dtos.bitacora_dto import SolicitudComentarioDTO
 
 
 class MecanicoAsignadoDTO(BaseModel):
@@ -36,6 +37,9 @@ class AsignacionFallaDTO(BaseModel):
     resuelto_en_esta_asignacion: bool
     duracion_minutos: Optional[int] = None
     comentario: Optional[str] = None
+    comentario_avance_id: Optional[int] = Field(
+        None, description="Mensaje original compartido por las asignaciones de un avance; se muestra una sola vez en historial_avances.",
+    )
 
 
 class SolicitudDetalleCreateDTO(BaseModel):
@@ -233,6 +237,9 @@ class SolicitudDetalleDTO(BaseModel):
     fecha_cambio_estado: Optional[datetime] = None
     mecanicos_asignados: List[MecanicoAsignadoDTO] = []
     historial_asignaciones: List[AsignacionFallaDTO] = []
+    historial_avances: List[SolicitudComentarioDTO] = Field(
+        default_factory=list, description="Avances únicos de esta falla, con el autor y fecha del mensaje global original.",
+    )
     historial_eventos: List[FallaEventoDTO] = []
     ubicacion: Optional[UbicacionEventoDTO] = None
     talleres_colaboradores: List[TallerSnapshotDTO] = Field(default_factory=list)

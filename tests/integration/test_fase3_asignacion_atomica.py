@@ -108,8 +108,9 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
     mec_ids_f1_post = [m["id"] for m in det1_post_fin["mecanicos_asignados"]]
     assert 2 not in mec_ids_f1_post
     assert 3 not in mec_ids_f1_post
-    # La orden sigue EN_REPARACION porque Falla 2 sigue activa para el equipo
-    assert data_fin_m1["estado"] == "EN_REPARACION"
+    # El cierre grupal incluye también Falla 2 aunque el cliente solo envíe Falla 1.
+    assert data_fin_m1["estado"] == "PENDIENTE"
+    assert all(not d["mecanicos_asignados"] for d in data_fin_m1["detalles"])
 
     # 7. Cualquiera del equipo termina el avance restante del grupo
     res_fin_total = await client.post(
@@ -117,10 +118,7 @@ async def test_flujo_fase3_asignacion_atomica_y_coresponsabilidad(
         json={"comentario": "Fin de jornada del equipo sin cerrar todas las fallas"},
         headers=auth_headers_mecanico2,
     )
-    assert res_fin_total.status_code == 200
-    data_final = res_fin_total.json()
-    # Como no quedan mecánicos asignados activamente en ninguna falla, la solicitud pasa a PENDIENTE
-    assert data_final["estado"] == "PENDIENTE"
+    assert res_fin_total.status_code == 422
 
     # 8. Verificación de permisos (RBAC)
     # Conductor intenta autoasignarse -> 403

@@ -1,0 +1,41 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.schemas
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.tables
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.types
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.constraints
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.defaults
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.comments
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.checkconstraint_byname
+INFO  [alembic.autogenerate.compare.tables] Detected added table 'taller_correcciones_visitas'
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_consolidacion_archivos_id_seq' as owned by integer column 'taller_consolidacion_archivos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'reportes_neumaticos_id_seq' as owned by integer column 'reportes_neumaticos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_pauta_id_seq' as owned by integer column 'taller_solicitud_pauta(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_estadias_id_seq' as owned by integer column 'taller_solicitud_estadias(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'roles_id_seq' as owned by integer column 'roles(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitudes_id_seq' as owned by integer column 'taller_solicitudes(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_estado_eventos_id_seq' as owned by integer column 'taller_solicitud_estado_eventos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'talleres_id_seq' as owned by integer column 'talleres(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_resultado_ubicaciones_id_seq' as owned by integer column 'taller_resultado_ubicaciones(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_detalles_id_seq' as owned by integer column 'taller_solicitud_detalles(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'categorias_falla_id_seq' as owned by integer column 'categorias_falla(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_asignacion_fallas_id_seq' as owned by integer column 'taller_asignacion_fallas(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'fallas_taller_id_seq' as owned by integer column 'fallas_taller(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'buses_id_seq' as owned by integer column 'buses(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_falla_evento_mecanicos_id_seq' as owned by integer column 'taller_falla_evento_mecanicos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'ciudades_id_seq' as owned by integer column 'ciudades(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'pauta_taller_items_id_seq' as owned by integer column 'pauta_taller_items(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'usuarios_id_seq' as owned by integer column 'usuarios(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_falla_eventos_id_seq' as owned by integer column 'taller_falla_eventos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_comentarios_id_seq' as owned by integer column 'taller_solicitud_comentarios(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_mecanicos_id_seq' as owned by integer column 'taller_solicitud_mecanicos(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_resultado_colaboradores_id_seq' as owned by integer column 'taller_resultado_colaboradores(id)', assuming SERIAL and omitting
+INFO  [alembic.ddl.postgresql] Detected sequence named 'taller_solicitud_evidencias_id_seq' as owned by integer column 'taller_solicitud_evidencias(id)', assuming SERIAL and omitting
+INFO  [alembic.autogenerate.compare.constraints] Detected changed index 'uq_ciudades_codigo_normalizado' on 'ciudades': expression #1 'lower(TRIM(BOTH FROM codigo))' to 'lower(trim(codigo))'
+INFO  [alembic.autogenerate.compare.constraints] Detected removed unique constraint 'taller_resultado_ubicaciones_operacion_id_key' on 'taller_resultado_ubicaciones'
+INFO  [alembic.autogenerate.compare.constraints] Detected added unique constraint 'uq_resultado_ubicacion_operacion' on '('operacion_id',)'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\Fabian\Desktop\Narbus\BackendTallerNarbus\venv\Lib\site-packages\alembic\command.py", line 370, in check
+    raise util.AutogenerateDiffsDetected(
+alembic.util.exc.AutogenerateDiffsDetected: New upgrade operations detected: [('add_table', Table('taller_correcciones_visitas', MetaData(), Column('solicitud_id', Integer(), table=<taller_correcciones_visitas>, primary_key=True, nullable=False), Column('estadia_id', Integer(), table=<taller_correcciones_visitas>, nullable=False), Column('fecha_correccion', DateTime(timezone=True), table=<taller_correcciones_visitas>, nullable=False, server_default=DefaultClause(<sqlalchemy.sql.functions.now at 0x287246b10d0; now>, for_update=False)), Column('motivo', Text(), table=<taller_correcciones_visitas>, nullable=False), Column('datos_originales', JSON(), table=<taller_correcciones_visitas>, nullable=False), schema=None)), ('remove_index', Index('uq_ciudades_codigo_normalizado', <alembic.util.sqla_compat._textual_index_element object at 0x0000028724D8E5D0>, unique=True)), ('add_index', Index('uq_ciudades_codigo_normalizado', <sqlalchemy.sql.functions.Function at 0x28724d8e1b0; lower>, unique=True)), ('remove_constraint', UniqueConstraint(Column('operacion_id', NullType(), table=<taller_resultado_ubicaciones>))), ('add_constraint', UniqueConstraint(Column('operacion_id', NullType(), table=<taller_resultado_ubicaciones>)))]

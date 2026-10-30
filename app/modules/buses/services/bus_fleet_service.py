@@ -9,6 +9,7 @@ from app.modules.buses.dtos.bus_lifecycle_dto import BusCreateDTO, BusDarDeBajaD
 from app.modules.buses.models.bus import Bus
 from app.modules.buses.repository.bus_repository import BusRepository, bus_repository
 from app.core.realtime.events import RealtimeEvent, publish_event_soon
+from app.modules.taller.repository.taller_repository import TallerRepository, taller_repository
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,12 @@ logger = logging.getLogger(__name__)
 class BusFleetService:
     """Servicio especializado en el ciclo de vida, altas, bajas auditadas y reactivación de flota."""
 
-    def __init__(self, repository: Optional[BusRepository] = None) -> None:
+    def __init__(
+        self, repository: Optional[BusRepository] = None,
+        taller_repo: Optional[TallerRepository] = None,
+    ) -> None:
         self.repo = repository or bus_repository
+        self.taller_repo = taller_repo or taller_repository
 
     async def create_bus(
         self,
@@ -29,6 +34,7 @@ class BusFleetService:
         Crea un nuevo bus en la base de datos validando unicidad de patente y n_bus.
         Asigna fecha_creacion con timestamp exacto para trazabilidad.
         """
+        await self.taller_repo.lock_bus_cycle(db, None, dto.n_bus)
         bus_existente = await self.repo.get_by_patente(db, dto.patente)
         if bus_existente:
             raise ConflictException(f"Ya existe un bus registrado con la patente '{dto.patente}'; reactive su ficha si está dado de baja")
@@ -63,6 +69,10 @@ class BusFleetService:
         )
         self.repo.add_bus(db, bus)
         try:
+            await db.flush()
+            await self.taller_repo.vincular_solicitudes_sin_bus(db, bus)
+            if await self.taller_repo.tiene_estadia_abierta_bus(db, bus.id):
+                bus.en_taller = True
             await db.commit()
         except IntegrityError as exc:
             await db.rollback()

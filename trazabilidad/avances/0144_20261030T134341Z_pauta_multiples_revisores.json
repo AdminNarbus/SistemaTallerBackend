@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 144,
+  "id": "AV-0144",
+  "timestamp": "2026-10-30T13:43:41Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "PAUTA-MULTI-REVISOR", "name": "Varios mecánicos ejecutores por punto preventivo", "statusBefore": "pending", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Supervisores y administradores seleccionan múltiples revisores por punto con mecanicos_ids; las lecturas exponen IDs y nombres completos. Se confirmó y probó que el POST de mecánico atribuye el punto solo al autor, sin expandir a su cuadrilla.",
+  "scope": {
+    "planned": ["Varios revisores por punto en supervisión", "Confirmar atribución desde flujo del mecánico", "Preservar revisiones existentes y documentar frontend"],
+    "completed": ["DTOs y validaciones para lista de revisores", "Persistencia normalizada y reemplazo atómico", "Migración con backfill y reversión protegida", "Lectura SQL PostgreSQL y ORM con todos los revisores", "Guía de integración y pruebas"],
+    "pending": [],
+    "outOfScope": ["Aplicar migración en Neon", "Despliegue", "Atribuir automáticamente el punto a toda la cuadrilla"]
+  },
+  "changes": [
+    {"path": "alembic/versions/034_pauta_multiples_mecanicos.py", "action": "created", "summary": "Tabla asociativa, FK e índice, backfill y downgrade con protección contra pérdida de ejecutores"},
+    {"path": "app/modules/taller/models/pauta_taller.py", "action": "modified", "summary": "Modelo de ejecutores y relación de respuesta"},
+    {"path": "app/models/__init__.py y app/modules/taller/models/__init__.py", "action": "modified", "summary": "Registrar modelo de asociación"},
+    {"path": "app/modules/taller/dtos/pauta_revisor_dto.py", "action": "created", "summary": "DTO de ejecutor y normalizador compatible"},
+    {"path": "app/modules/formularios/dtos/pauta_dto.py y app/modules/taller/dtos/pauta_dto.py", "action": "modified", "summary": "Payload y respuestas con múltiples revisores"},
+    {"path": "app/modules/formularios/repository/pauta_repository.py", "action": "modified", "summary": "Carga en lote, reemplazo y eliminación de asociaciones"},
+    {"path": "app/modules/formularios/services/formulario_pauta_service.py", "action": "modified", "summary": "Validación y bitácora de todos los ejecutores"},
+    {"path": "app/modules/taller/repository/taller_repository.py y app/modules/taller/services/mappers.py", "action": "modified", "summary": "Lectura de todos los revisores en detalle SQL/ORM"},
+    {"path": "app/modules/supervision/api/pauta_router.py", "action": "modified", "summary": "Contrato OpenAPI actualizado"},
+    {"path": "tests/integration/test_pauta_supervision.py", "action": "modified", "summary": "Múltiples revisores, reemplazo, desmarcado, validaciones y mecánico con equipo"},
+    {"path": "tests/migrations/test_pauta_multiples_mecanicos.py", "action": "created", "summary": "PostgreSQL temporal: backfill, CTE real de detalle, constraints, cascada y reversión protegida"},
+    {"path": "GUIA_FRONTEND_PAUTA_PREVENTIVA.md y trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Contrato vigente, semántica del flujo de mecánico y migración requerida"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Tabla relacional para los ejecutores", "rationale": "Una FK singular no representa varios revisores y un array no mantiene integridad relacional con usuarios.", "consequences": "Nueva tabla con PK compuesta y backfill; cada respuesta sigue siendo única por OT/punto."},
+    {"id": "DEC-002", "title": "Compatibilidad con el revisor singular", "rationale": "Existen clientes que consumen o envían mecanico_id.", "consequences": "Se conserva entrada singular alternativa y salida singular de menor ID; frontend usa mecanicos para el conjunto completo."},
+    {"id": "DEC-003", "title": "Mantener la atribución individual del POST de mecánico", "rationale": "El usuario consultó el comportamiento actual; no autorizó inferir que todos los compañeros revisaron el punto.", "consequences": "Solo el actor autenticado queda como ejecutor en el POST existente. La selección múltiple explícita corresponde al PATCH de supervisión."},
+    {"id": "DEC-004", "title": "Reversión protegida", "rationale": "Volver a una FK singular perdería asociaciones si hay más de un ejecutor.", "consequences": "El downgrade se rechaza mientras existan respuestas múltiples y preserva el conjunto; con datos compatibles revierte y permite reupgrade."}
+  ],
+  "verification": [
+    {"command": "pytest tests/integration/test_pauta_supervision.py tests/unit/test_pauta_gestion_service.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/unit/test_formularios_module.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_supervision_service.py -q", "result": "passed", "evidence": "61 passed en SQLite en memoria, dev_local; incluye varios revisores y mecánico con compañeros activos."},
+    {"command": "pytest tests/migrations/test_pauta_multiples_mecanicos.py -q", "result": "passed", "evidence": "1 passed contra PostgreSQL temporal local aislado. Upgrade, backfill, consulta real de pauta del detalle, bloqueo de downgrade con múltiples, ciclo compatible, FK, unicidad y cascada."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar migración 034 por el flujo de despliegue e integrar selección múltiple en frontend.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit, push, despliegue ni acceso a Neon.", "Migración aplicada únicamente en PostgreSQL temporal para pruebas.", "El supervisor continúa como autor de bitácora; revisores explícitos se guardan como ejecutores."]
+}

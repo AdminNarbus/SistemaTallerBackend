@@ -368,6 +368,12 @@ class SolicitudService:
 
         now = datetime.now(timezone.utc)
         solicitud = await self.repo.get_solicitud_activa_por_bus(db, bus_id, n_bus)
+        if solicitud is None and bus_id is not None and n_bus:
+            solicitud = await self.repo.get_solicitud_activa_por_bus(db, None, n_bus)
+            if solicitud is not None and solicitud.bus_id not in (None, bus_id):
+                raise BusinessRuleException("El número de bus ya está asociado a otro vehículo en la OT activa")
+            if solicitud is not None and solicitud.bus_id is None:
+                solicitud.bus_id = bus_id
         es_nueva_ot = solicitud is None
         if es_nueva_ot:
             solicitud = TallerSolicitud(

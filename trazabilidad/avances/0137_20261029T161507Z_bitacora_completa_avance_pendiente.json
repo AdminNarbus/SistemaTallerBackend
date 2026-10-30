@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 137,
+  "id": "AV-0137",
+  "timestamp": "2026-10-29T16:15:07Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BITACORA-AVANCE-PENDIENTE",
+    "name": "Verificar término de avance pendiente y mensaje duplicado",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se confirmó el flujo existente de término de avance sin resolver fallas y la inclusión de todos los tipos de comentario en la bitácora. El caso reportado corresponde a notas compartidas por ocho asignaciones y una única entrada global; se documentó el contrato para evitar duplicación visual.",
+  "scope": {
+    "planned": ["Verificar término de avance pendiente", "Investigar mensaje duplicado", "Verificar bitácora global completa"],
+    "completed": [
+      "Consulta SELECT en transacciones de solo lectura de comentarios, asignaciones y eventos de falla",
+      "Identificación de OT 7, asignaciones 217–224 y comentario global 575",
+      "Pruebas individuales y colaborativas de término de avance con fallas pendientes",
+      "Prueba de lectura de todos los tipos de comentario, preservando mensajes distintos con texto idéntico",
+      "Prueba de inclusión de notas de repuesto y resultado de falla, con reintento idempotente",
+      "Guía de integración para el chat global y actualización del estado del proyecto"
+    ],
+    "pending": [],
+    "outOfScope": ["Cambiar el repositorio frontend", "Modificar datos históricos", "Cambiar esquema o lógica productiva"]
+  },
+  "changes": [
+    {"path": "tests/integration/test_bitacora_completa_y_avance_pendiente.py", "action": "created", "summary": "Cuatro casos de integración para las reglas consultadas"},
+    {"path": "GUIA_FRONTEND_BITACORA_COMPLETA.md", "action": "created", "summary": "Flujo de avance pendiente, identidad de mensajes y evidencia del caso OT 7"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registrar verificación y límites del diagnóstico"}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Conservar el flujo existente",
+      "rationale": "Terminar avance cierra asignaciones sin modificar el estado de la falla; ya satisface el caso solicitado.",
+      "consequences": "Se agregan pruebas y documentación sin alterar reglas de negocio."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Usar la bitácora como fuente del chat global",
+      "rationale": "Las asignaciones son registros por pareja falla/mecánico y almacenan la misma nota grupal. En OT 7 existen ocho copias y una sola entrada global.",
+      "consequences": "La guía indica consumir comentarios del detalle completo sin concatenar notas de asignaciones ni eventos de falla. La lógica visual no se confirmó al no revisar el frontend."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Preservar mensajes distintos con texto idéntico",
+      "rationale": "La identidad corresponde al ID de comentario; el texto, autor y minuto no identifican una operación.",
+      "consequences": "El contrato mantiene todos los tipos y mensajes legítimos, y recomienda integrar respuestas por ID."
+    }
+  ],
+  "verification": [
+    {
+      "command": "SolicitudService.get_solicitud(session, 7) usando AsyncSession sin autoflush y transacción SERIALIZABLE postgresql_readonly=True",
+      "result": "passed",
+      "evidence": "El DTO real devuelve diez comentarios globales e incluye 558 y 575. La nota completa está en 575 bajo Luis Linares, 28 de octubre 10:27:26 America/Santiago. También figura en las asignaciones de las cuatro fallas. No se inspeccionó el frontend ni el HTTP de su despliegue."
+    },
+    {
+      "command": "SELECT parametrizado en taller_solicitud_comentarios y consultas acotadas en taller_asignacion_fallas y taller_falla_eventos, con postgresql_readonly=True",
+      "result": "passed",
+      "evidence": "Nota exacta presente en ocho asignaciones de OT 7; una entrada global 575, ENTREGA_TURNO, del 28 de octubre 10:27:26 America/Santiago. El inicio de asignaciones es del 27 a las 18:19:45."
+    },
+    {
+      "command": "ENVIRONMENT=dev_local STORAGE_PROVIDER=local PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -p pytest_asyncio.plugin tests/integration/test_bitacora_completa_y_avance_pendiente.py -q --tb=short",
+      "result": "passed",
+      "evidence": "4 passed in 3.00s. SQLite en memoria mediante tests/conftest.py; sin acceso a Neon durante las pruebas. Ejecución fuera del aislamiento por bloqueo del socket interno de asyncio en Windows."
+    },
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace en cambios rastreados."}
+  ],
+  "blockers": [],
+  "nextStep": "Verificar qué respuesta y fuente consume la pantalla donde falta el mensaje; el servicio backend local sí devuelve la nota completa. La causa visual sigue sin confirmarse.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit ni push.", "Los archivos de AV-0136 preexistentes se conservaron."]
+}

@@ -1,5 +1,75 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+## Validación para publicación Git Flow (AV-0146)
+
+- Cambios agrupados en `feature/bitacora-buses-pauta-supervision`: bitácora y cierre de cuadrilla, vínculo de buses y solicitudes, y pauta preventiva con múltiples revisores.
+- Suite completa sobre los directorios del proyecto: **399 pruebas aprobadas**, incluidas integración, E2E y migraciones en PostgreSQL temporal local. Diez advertencias de deprecación de Starlette.
+- `git diff --check` aprobado y una sola revisión final de Alembic: `034_pauta_mecanicos`.
+- Flujo de publicación preparado: feature hacia `develop`, rama `release/2026.10.30-bitacora-pauta` hacia `main` y sincronización de `main` hacia `develop`.
+- Las diferencias locales de esquema documentadas en AV-0145 siguen registradas para una tarea posterior.
+
+## Confirmación de migración 034 en base local (AV-0145)
+
+- Por instrucción del usuario, operación limitada a `narbus_taller_db` en localhost:5432, validando dirección real loopback `::1/128`; sin acceso a Neon ni cambios de configuración.
+- La base ya estaba en `034_pauta_mecanicos` antes de ejecutar el upgrade, que resultó idempotente. Verificados 7 vínculos de revisores y cero revisiones anteriores con revisor sin asociación.
+- `alembic check` local detecta diferencias ajenas a la tabla nueva: `taller_correcciones_visitas` ausente, expresión de índice de ciudades y nombre de restricción única de ubicación. Informe en `trazabilidad/auditoria/20261030_local_alembic_check.txt`; no se aplicaron correcciones adicionales.
+
+## Varios revisores por punto de pauta (AV-0144)
+
+- El supervisor/administrador puede enviar `mecanicos_ids: [2, 3]` por punto en el PATCH de pauta. La lista reemplaza la selección vigente; `mecanico_id` sigue aceptado como entrada individual compatible, sin combinar ambos campos.
+- Respuestas de pauta incluyen `mecanicos_ids` y `mecanicos: [{id, nombre}]`; los campos singulares conservan al revisor de menor ID. Una revisión con varios ejecutores sigue contando como un solo punto.
+- El POST del mecánico registra solo al autor autenticado, aunque pertenezca a una cuadrilla; no atribuye automáticamente el trabajo al equipo.
+- Nueva migración **034_pauta_mecanicos**: tabla de relación, backfill del revisor previo y downgrade protegido ante múltiples ejecutores. Probada en PostgreSQL temporal, no aplicada en Neon.
+- 61 pruebas de pauta/supervisión y 1 prueba PostgreSQL de migración/SQL aprobadas. Guía actualizada; sin despliegue.
+
+## Mecánico ejecutor en pauta registrada por supervisión (AV-0143)
+
+- El PATCH de pauta exige `mecanico_id` por punto revisado, validando rol MECANICO y usuario activo en una consulta por lote.
+- La respuesta de pauta identifica al mecánico seleccionado; el supervisor/administrador del token figura como autor en la bitácora, junto con los revisores indicados en cada cambio.
+- Desmarcar (`estado=null`) no admite mecánico ni observación. Un revisor inválido rechaza íntegramente el lote; los POST de taller/formularios mantienen su contrato.
+- Selector frontend: `GET /api/v1/auth/mecanicos?q=&skip=0&limit=20`, etiqueta `nombre_completo`, valor `id`, total en `X-Total-Count`.
+- Guía actualizada: [Pauta preventiva](../GUIA_FRONTEND_PAUTA_PREVENTIVA.md). 32 pruebas locales aprobadas, sin migración ni despliegue.
+
+## Gestión de pauta preventiva en supervisión (AV-0142)
+
+- Nuevos `GET/PATCH /api/v1/supervision/solicitudes/{id}/pauta`, exclusivos de SUPERVISOR y ADMIN: catálogo activo completo con puntos revisados/pendientes y actualización parcial atómica.
+- `estado=null` devuelve un punto a pendiente; `OK`, `DEFECTO` y `NO_APLICA` registran una respuesta. Actor del token, bitácora CHECKLIST, fecha de actualización y evento de tiempo real.
+- El GET de detalle de supervisión omite `pauta_respuestas` y devuelve `pauta_resumen: {revisadas, total}`, contado en SQL sobre ítems activos. Los contratos anteriores de taller/formularios se conservan.
+- Sin migración ni despliegue. Guía: [Pauta preventiva](../GUIA_FRONTEND_PAUTA_PREVENTIVA.md).
+
+## Bus de prueba 1 reparado con autorización (AV-0141)
+
+- Autorización expresa del usuario: bus completamente ficticio y temporal en producción.
+- Script idempotente aplicado: registro de catálogo **ID 51**, número **1**, patente **TEST-BUS-1**, tipo **PRUEBA FICTICIA**; OT 35 vinculada a ese ID.
+- Verificación de solo lectura: el servicio de listado para mecánicos devuelve la tarjeta en la primera página con OT 35 pendiente y tres fallas pendientes/incompletas. El bus real ID 1/número 354 conserva sus datos.
+- Se resuelve la escritura pendiente de AV-0140. El código de bitácora sigue local, sin despliegue; frontend debe usar `historial_avances` para avances de falla y `comentarios` para el chat general.
+
+## Cierre de cuadrilla, avances únicos y vínculo de bus (AV-0140)
+
+- La regla vigente de `terminar-avance` cierra todas las asignaciones y presencias activas de la OT, incluidas fallas distintas de los compañeros. `detalles_ids` conserva compatibilidad, pero no limita el cierre.
+- `detalles[].historial_avances` entrega un solo mensaje por avance, con ID, autor y fecha originales. Las asignaciones normalizadas devuelven `comentario_avance_id` y no repiten el texto. No requiere migración ni filtrado frontend.
+- Caso OT 7 verificado por lectura: una entrada 575 por cada falla 20/21/22/251 y cero copias del texto en sus asignaciones de respuesta.
+- Alta normal de bus: ID generado y vínculo transaccional de solicitudes antiguas del mismo número sin FK; creación de solicitud reutiliza su OT activa.
+- Origen del bus ficticio 1 confirmado en AV-0122: el script creó OT 35 sin catálogo. Reparación idempotente preparada con `TEST-BUS-1` e ID autogenerado; su ejecución fue rechazada por revisión automática y está pendiente de aprobación expresa para escribir en la base configurada.
+- 114 pruebas locales aprobadas. Sin despliegue ni modificaciones de datos en la base configurada.
+- Contrato vigente: [Bitácora y avances](../GUIA_FRONTEND_BITACORA_COMPLETA.md).
+
+## Corrección de respuesta y selección al terminar avance (AV-0138)
+
+- `terminar-avance` devuelve la ficha completa con todos los comentarios anteriores y la nueva nota. La respuesta operacional anterior contenía solo el nuevo avance, aunque el historial permanecía en la BD.
+- Selecciones con fallas sin asignación propia activa se rechazan íntegramente con 422; se preservan asignaciones, presencia, estado y bitácora.
+- El cierre parcial conserva la actividad en las fallas restantes; cerrar solo presencia mantiene la OT en reparación si quedan asignaciones de otros mecánicos.
+- 63 pruebas aprobadas, incluyendo 14 casos específicos de bitácora/avance. Sin cambios de esquema, datos históricos ni despliegue.
+- Detalle del contrato y limitaciones: [Bitácora completa](../GUIA_FRONTEND_BITACORA_COMPLETA.md).
+
+## Verificación de avance pendiente y bitácora completa (AV-0137)
+
+- Confirmado por API: `terminar-avance` permite cerrar asignaciones conservando las fallas pendientes, tanto individualmente como en equipo.
+- La ficha completa expone todos los tipos de comentario; las observaciones de fallas y repuestos también aparecen en `comentarios`.
+- Caso OT 7 verificado mediante SELECT: una sola entrada global 575 contiene la nota reportada; ocho asignaciones comparten esa nota por pertenecer a cuatro fallas y dos mecánicos. La duplicación visual requiere revisar la composición del chat en el frontend.
+- Cuatro pruebas de integración aprobadas en SQLite en memoria. Sin cambios de lógica productiva, esquema ni datos históricos.
+- Contrato y diagnóstico: [Bitácora completa](../GUIA_FRONTEND_BITACORA_COMPLETA.md).
+
 ## Solicitudes y aprobación como OT (AV-0135 - COMPLETADO)
 
 - Migración `033_es_ot`: columna booleana `es_ot` no nula. Registros previos conservados como OT; nuevas solicitudes con `false` por defecto. Aplicada en dev_local.

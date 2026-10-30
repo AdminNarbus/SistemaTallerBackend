@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import text, CheckConstraint, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,3 +61,21 @@ class TallerSolicitudPauta(Base):
     )
     item: Mapped["PautaTallerItem"] = relationship("PautaTallerItem", lazy="selectin")
     mecanico: Mapped[Optional["Usuario"]] = relationship("Usuario", lazy="selectin")
+    revisores: Mapped[List["TallerSolicitudPautaMecanico"]] = relationship(
+        back_populates="respuesta", cascade="all, delete-orphan", passive_deletes=True,
+    )
+
+
+class TallerSolicitudPautaMecanico(Base):
+    """Ejecutores de una respuesta; no depende de la cuadrilla actual de la OT."""
+
+    __tablename__ = "taller_solicitud_pauta_mecanicos"
+
+    pauta_id: Mapped[int] = mapped_column(
+        ForeignKey("taller_solicitud_pauta.id", ondelete="CASCADE"), primary_key=True,
+    )
+    mecanico_id: Mapped[int] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="RESTRICT"), primary_key=True, index=True,
+    )
+    respuesta: Mapped["TallerSolicitudPauta"] = relationship(back_populates="revisores")
+    mecanico: Mapped["Usuario"] = relationship()

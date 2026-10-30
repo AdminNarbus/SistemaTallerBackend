@@ -125,8 +125,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     assert com_sup.comentario.startswith("Asignación:")
     assert mecanico2_nom in com_sup.comentario
 
-    # 8. Terminar avance en equipo
-    dto_avance = TerminarAvanceDTO(detalles_ids=[det1_id, det2_id], comentario="Corte de turno mediodía")
+    # 8. Terminar avance en la falla propia; la falla 1 fue reasignada al mecánico 2.
+    dto_avance = TerminarAvanceDTO(detalles_ids=[det2_id], comentario="Corte de turno mediodía")
     sol_avance = await taller_service.terminar_avance(db_session, solicitud.id, dto_avance, mecanico1_id)
     com_avance = sol_avance.comentarios[-1]
     assert com_avance.tipo == "ENTREGA_TURNO"

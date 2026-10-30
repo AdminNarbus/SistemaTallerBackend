@@ -12,7 +12,7 @@ from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudM
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_estado_evento import TallerSolicitudEstadoEvento
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
-from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta, TallerSolicitudPautaMecanico
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
@@ -38,6 +38,7 @@ __all__ = [
     "TallerAsignacionFalla",
     "PautaTallerItem",
     "TallerSolicitudPauta",
+    "TallerSolicitudPautaMecanico",
     "TallerSolicitudEvidencia",
     "TallerSolicitudEstadia",
     "TallerFallaEvento",

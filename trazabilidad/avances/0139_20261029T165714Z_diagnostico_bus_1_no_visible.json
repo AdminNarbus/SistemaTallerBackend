@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 139,
+  "id": "AV-0139",
+  "timestamp": "2026-10-29T16:57:14Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "DIAGNOSTICO-BUS-1", "name": "Identificar por qué no aparece el bus número 1", "statusBefore": "in_progress", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "La OT 35 tiene n_bus=1, bus_id nulo y estado PENDIENTE. No existe un registro del número 1 en el catálogo buses, del que parte el nuevo listado para mecánicos; por eso ese listado no puede devolverlo. El servicio de pendientes sí devuelve la OT.",
+  "scope": {
+    "planned": ["Revisar filtros del listado de mecánicos", "Consultar bus y OT en modo de solo lectura", "Contrastar servicios de buses y pendientes"],
+    "completed": ["SELECT acotados en la base configurada", "Lectura de los servicios reales con transacción de solo lectura", "Diagnóstico de ausencia de bus de catálogo y vínculo de OT"],
+    "pending": [],
+    "outOfScope": ["Crear o vincular buses sin identificación física confirmada", "Modificar datos", "Inspeccionar frontend o revisión desplegada"]
+  },
+  "changes": [{"path": "trazabilidad/avances/0139_20261029T165714Z_diagnostico_bus_1_no_visible.json", "action": "created", "summary": "Evidencia y límites del diagnóstico"}],
+  "decisions": [
+    {"id": "DEC-001", "title": "Distinguir número de bus de ID interno", "rationale": "El registro buses.id=1 corresponde al número 354, no al número 1.", "consequences": "No se vincula OT 35 a buses.id=1; hacerlo mezclaría vehículos distintos."},
+    {"id": "DEC-002", "title": "Conservar los datos durante el diagnóstico", "rationale": "No se conoce patente ni correspondencia de flota de la OT histórica con n_bus=1. El usuario solicitó explicar la ausencia.", "consequences": "Se informa la falta de catálogo y vínculo sin crear registros ni cambiar la OT."}
+  ],
+  "verification": [
+    {"command": "SELECT buses por n_bus 1/01/001 y por id=1; SELECT solicitudes y asignaciones relacionadas, postgresql_readonly=True", "result": "passed", "evidence": "Sin buses con número 1/01/001. buses.id=1 es número 354. OT 35: n_bus=1, bus_id=null, PENDIENTE, es_ot=true, 13 fallas, 3 pendientes o incompletas y sin asignaciones activas."},
+    {"command": "BusesTallerService.listar(q=1, limit=100) con solo_activos=True y False, AsyncSession en transacción SERIALIZABLE de solo lectura", "result": "passed", "evidence": "Ambos filtros devuelven 25 coincidencias por subcadena y ninguna con número de bus 1/01/001; no es un filtro de baja del vehículo."},
+    {"command": "SolicitudService.get_solicitud(35) y list_pendientes(limit=100), solo lectura", "result": "passed", "evidence": "Ficha 35 disponible: bus_id=null, PENDIENTE, 2 fallas pendientes y 1 incompleta. La OT aparece en pendientes."}
+  ],
+  "blockers": [],
+  "nextStep": "Identificar el vehículo físico de la OT 35 y determinar su registro o vínculo correcto en el catálogo, o definir soporte de solicitudes históricas sin bus de catálogo.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Diagnóstico sobre la base configurada en .env; no se verificó qué revisión está desplegada en producción.", "Se conservaron todos los cambios previos de la sesión."]
+}

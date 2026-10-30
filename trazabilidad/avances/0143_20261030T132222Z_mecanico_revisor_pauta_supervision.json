@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 143,
+  "id": "AV-0143",
+  "timestamp": "2026-10-30T13:22:22Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "PAUTA-REVISOR", "name": "Separar ejecutor mecánico y autor de gestión de pauta", "statusBefore": "pending", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "El supervisor o administrador indica mecanico_id por punto revisado; el mecánico seleccionado se guarda como revisor y el actor autenticado permanece en la bitácora. Guía frontend incluye el endpoint existente de búsqueda de mecánicos y el nuevo payload.",
+  "scope": {
+    "planned": ["Seleccionar mecánico ejecutor", "Conservar supervisor como autor de bitácora", "Dar contexto al frontend"],
+    "completed": ["mecanico_id requerido para estados no nulos en PATCH de supervisión", "Validación por lote de usuarios MECANICO activos", "Respuesta y bitácora distinguen ejecutor y actor", "Guía con búsqueda/paginación de mecánicos y payload", "32 pruebas aprobadas"],
+    "pending": [],
+    "outOfScope": ["Despliegue", "Modificar datos históricos", "Frontend", "Cambiar contratos de POST existentes"]
+  },
+  "changes": [
+    {"path": "app/modules/formularios/dtos/pauta_dto.py", "action": "modified", "summary": "Campo mecanico_id en cambios por punto"},
+    {"path": "app/modules/formularios/repository/pauta_repository.py", "action": "modified", "summary": "Consulta de mecánicos activos y persistencia del ejecutor por respuesta"},
+    {"path": "app/modules/formularios/services/formulario_pauta_service.py", "action": "modified", "summary": "Validación de revisores y descripción de ejecutores en bitácora"},
+    {"path": "app/modules/supervision/api/pauta_router.py", "action": "modified", "summary": "Documentar nuevo requisito en OpenAPI"},
+    {"path": "tests/integration/test_pauta_supervision.py", "action": "modified", "summary": "Verificar ejecutores diferentes del actor, cambio de revisor, validaciones y selector"},
+    {"path": "tests/unit/test_pauta_gestion_service.py", "action": "modified", "summary": "Validación aislada de revisores y ausencia de escrituras parciales"},
+    {"path": "GUIA_FRONTEND_PAUTA_PREVENTIVA.md", "action": "modified", "summary": "Selector de mecánicos, payload por punto, respuesta y trazabilidad"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registrar contrato vigente"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Exigir ejecutor explícito en cada revisión de supervisión", "rationale": "El actor autenticado puede no ser quien hizo la revisión.", "consequences": "Cada estado no nulo requiere un mecánico activo; no se usa al supervisor como valor predeterminado. El responsable puede variar por punto."},
+    {"id": "DEC-002", "title": "Reutilizar la FK de mecánico y la bitácora existentes", "rationale": "Ambos vínculos ya existen y representan respectivamente revisión y autor del comentario.", "consequences": "Sin migración. La pauta expone mecánico ejecutor y la bitácora conserva al supervisor/administrador; el evento conserva al actor autenticado para invalidación."},
+    {"id": "DEC-003", "title": "Usar el buscador de mecánicos existente", "rationale": "GET /auth/mecanicos ya filtra mecánicos activos y ofrece búsqueda y paginación.", "consequences": "Frontend usa id como valor y nombre_completo como etiqueta, respetando skip/limit y X-Total-Count."}
+  ],
+  "verification": [
+    {"command": "pytest tests/integration/test_pauta_supervision.py tests/unit/test_pauta_gestion_service.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/unit/test_formularios_module.py tests/unit/test_comentarios_predeterminados.py -q", "result": "passed", "evidence": "32 passed, 5 warnings; dev_local y SQLite en memoria. Incluye SUPERVISOR/ADMIN, ejecutores distintos, corrección de responsable, validación de revisor ausente/inexistente/inactivo/de otro rol y búsqueda de mecánicos."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar selector y mecanico_id por punto en frontend; desplegar por flujo habitual.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit, push ni despliegue.", "Se preservan respuestas históricas; no se hizo backfill ni acceso a base remota.", "Pruebas fuera del sandbox por socketpair de asyncio en Windows; base SQLite en memoria."]
+}

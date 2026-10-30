@@ -16,7 +16,7 @@ from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDe
 from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudMecanico
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
-from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta, TallerSolicitudPautaMecanico
 from app.modules.taller.models.taller_solicitud_estadia import TallerSolicitudEstadia
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
@@ -344,6 +344,9 @@ class TallerRepository:
                 selectinload(TallerSolicitud.asignaciones_fallas).joinedload(TallerAsignacionFalla.asignado_por),
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.item),
                 selectinload(TallerSolicitud.pauta_respuestas).joinedload(TallerSolicitudPauta.mecanico),
+                selectinload(TallerSolicitud.pauta_respuestas).selectinload(
+                    TallerSolicitudPauta.revisores,
+                ).joinedload(TallerSolicitudPautaMecanico.mecanico),
                 selectinload(TallerSolicitud.evidencias),
                 selectinload(TallerSolicitud.estadias),
             )
@@ -700,6 +703,14 @@ class TallerRepository:
                                 'estado', p.estado,
                                 'observacion', p.observacion,
                                 'mecanico_id', p.mecanico_id,
+                                'mecanicos', COALESCE((
+                                    SELECT json_agg(json_build_object(
+                                        'id', upr.id, 'nombre', TRIM(CONCAT(upr.nombre, ' ', upr.apellido))
+                                    ) ORDER BY upr.id)
+                                    FROM taller_solicitud_pauta_mecanicos rpm
+                                    JOIN usuarios upr ON upr.id = rpm.mecanico_id
+                                    WHERE rpm.pauta_id = p.id
+                                ), '[]'::json),
                                 'mecanico_nombre', CASE WHEN up.id IS NOT NULL THEN CONCAT(up.nombre, ' ', up.apellido) ELSE NULL END,
                                 'fecha_registro', p.fecha_registro
                             ) ORDER BY pi.orden ASC, p.id ASC

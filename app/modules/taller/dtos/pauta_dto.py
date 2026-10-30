@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.modules.taller.dtos.pauta_revisor_dto import PautaMecanicoDTO, completar_revisores
 
 
 class PautaTallerItemDTO(BaseModel):
@@ -35,6 +36,10 @@ class PautaRespuestaDTO(BaseModel):
     mecanico_id: Optional[int] = None
     mecanico_nombre: Optional[str] = None
     fecha_registro: datetime
+    mecanicos_ids: List[int] = Field(default_factory=list)
+    mecanicos: List[PautaMecanicoDTO] = Field(default_factory=list)
+
+    _completar_revisores = model_validator(mode="before")(completar_revisores)
 
 
 class PautaBatchUpdateDTO(BaseModel):

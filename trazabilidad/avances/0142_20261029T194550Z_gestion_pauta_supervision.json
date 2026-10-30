@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 142,
+  "id": "AV-0142",
+  "timestamp": "2026-10-29T19:45:50Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "PAUTA-SUPERVISION", "name": "Gestión de pauta preventiva y resumen en detalle de supervisión", "statusBefore": "pending", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Nuevos GET/PATCH de pauta para SUPERVISOR y ADMIN, con puntos activos revisados y pendientes, corrección por lote, retorno a pendiente y bitácora. El detalle GET de supervisión entrega solo progreso de pauta en lugar de sus respuestas.",
+  "scope": {
+    "planned": ["Mostrar revisadas/total al abrir OT", "Gestionar puntos revisados y pendientes desde supervisión", "Documentar endpoints y permisos"],
+    "completed": ["GET/PATCH /supervision/solicitudes/{id}/pauta", "DTO exclusivo de detalle con pauta_resumen", "Conteo dinámico SQL sobre catálogo activo", "Bloqueo de OT en escrituras de pauta, validación íntegra del lote y trazabilidad", "Guía de integración y 52 pruebas aprobadas"],
+    "pending": [],
+    "outOfScope": ["Frontend", "Despliegue", "Cambiar catálogo maestro", "Migraciones de esquema"]
+  },
+  "changes": [
+    {"path": "app/modules/formularios/dtos/pauta_dto.py", "action": "modified", "summary": "DTOs de progreso, puntos activos y cambios parciales con estado nullable"},
+    {"path": "app/modules/formularios/repository/pauta_repository.py", "action": "modified", "summary": "Conteos SQL, lock de OT, eliminación de respuestas y registro de bitácora"},
+    {"path": "app/modules/formularios/services/formulario_pauta_service.py", "action": "modified", "summary": "Consulta de gestión, validación atómica, persistencia y evento posterior al commit; bloqueo compartido con POST existente"},
+    {"path": "app/modules/supervision/api/pauta_router.py", "action": "created", "summary": "Rutas protegidas para supervisores y administradores"},
+    {"path": "app/modules/supervision/dtos/pauta_dto.py", "action": "created", "summary": "DTO de detalle de supervisión excluye pauta_respuestas"},
+    {"path": "app/modules/supervision/api/router.py", "action": "modified", "summary": "Registrar rutas y nuevo contrato de detalle"},
+    {"path": "app/modules/supervision/services/supervision_service.py", "action": "modified", "summary": "Adjuntar progreso dinámico de pauta al detalle"},
+    {"path": "tests/integration/test_pauta_supervision.py", "action": "created", "summary": "Permisos de ambos roles, datos inválidos, avance dinámico, desmarcado, contratos y catálogo vacío"},
+    {"path": "tests/unit/test_pauta_gestion_service.py", "action": "created", "summary": "Validación aislada y ausencia de escritura parcial ante errores"},
+    {"path": "GUIA_FRONTEND_PAUTA_PREVENTIVA.md", "action": "created", "summary": "Contratos, ejemplos, permisos y semántica de pendientes"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registrar capacidad y cambio de contrato"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Gestión exclusiva mediante nuevas rutas de supervisión", "rationale": "El supervisor solo tenía lectura en los endpoints previos. Las nuevas rutas permiten gestionar sin ampliar los permisos de los POST de mecánicos.", "consequences": "GET/PATCH exclusivos de SUPERVISOR y ADMIN; mecánicos conservan su flujo anterior."},
+    {"id": "DEC-002", "title": "Pendiente representado por ausencia de respuesta", "rationale": "El esquema solo admite OK, DEFECTO y NO_APLICA. Ninguno significa no revisado.", "consequences": "PATCH estado=null elimina la respuesta vigente, conserva una entrada de bitácora y reduce el avance; no necesita migración."},
+    {"id": "DEC-003", "title": "Resumen específico para el GET de detalle de supervisión", "rationale": "El usuario solicita revisadas/total al abrir la OT y un endpoint separado para el desglose.", "consequences": "Ese GET omite pauta_respuestas y agrega pauta_resumen. El total se calcula desde ítems activos; frontend debe adoptar este contrato."},
+    {"id": "DEC-004", "title": "Reutilizar trazabilidad de autor existente", "rationale": "mecanico_id referencia usuarios y permite identificar al supervisor o administrador sin un cambio de esquema.", "consequences": "El ID proviene del token y los nombres históricos de los campos se conservan, documentando que representan al último autor."},
+    {"id": "DEC-005", "title": "Serializar escrituras de pauta por OT", "rationale": "Los POST existentes y el nuevo PATCH pueden actualizar los mismos ítems.", "consequences": "Ambos toman bloqueo de fila de la solicitud en PostgreSQL; el lote nuevo se valida antes de cualquier escritura."}
+  ],
+  "verification": [
+    {"command": "pytest tests/integration/test_pauta_supervision.py tests/unit/test_pauta_gestion_service.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/unit/test_supervision_service.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py -q", "result": "passed", "evidence": "45 passed, 5 warnings. dev_local, almacenamiento local y SQLite en memoria."},
+    {"command": "pytest tests/unit/test_formularios_module.py tests/unit/test_comentarios_predeterminados.py -q", "result": "passed", "evidence": "7 passed, 2 warnings. Regresión de consumidores actuales de pauta."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar el contrato documentado en el frontend y desplegar por el flujo habitual.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit, push ni despliegue.", "Se preservaron cambios previos del workspace.", "Las pruebas usaron ejecución local fuera del sandbox por bloqueo de socketpair interno de asyncio en Windows; no accedieron a la base remota.", "Pruebas sobre SQLite; no se verificó concurrencia de bloqueos PostgreSQL contra una instancia externa."]
+}

@@ -34,12 +34,15 @@ from app.modules.supervision.dtos import (
     SolicitudAuditoriaDTO,
 )
 from app.modules.supervision.services import supervision_service
+from app.modules.supervision.api.pauta_router import router as pauta_router
+from app.modules.supervision.dtos.pauta_dto import SolicitudDetalleSupervisionDTO
 from app.modules.taller.services.averias_service import averias_service
 
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supervision", tags=["supervision"])
+router.include_router(pauta_router)
 
 
 @router.get("/alertas", response_model=List[AlertaSupervisionDTO])
@@ -292,15 +295,17 @@ async def dar_de_baja_bus_supervision(
 
 @router.get(
     "/solicitudes/{id}",
-    response_model=SolicitudDTO,
+    response_model=SolicitudDetalleSupervisionDTO,
     summary="Detalle completo de una OT para Supervisión",
-    description="Permite a la supervisora consultar la totalidad de la información de una orden de trabajo (averías, mecánicos asignados, evidencias, bitácora).",
+    description="Consulta averías, mecánicos asignados, evidencias y bitácora de una OT. "
+                "La pauta se entrega como pauta_resumen (revisadas/total). "
+                "Consultar /solicitudes/{id}/pauta para el desglose de puntos.",
 )
 async def get_solicitud_supervision(
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
-) -> SolicitudDTO:
+) -> SolicitudDetalleSupervisionDTO:
     """Obtiene el detalle completo de una solicitud por su ID desde el panel de supervisión."""
     logger.info("[SUPERVISION] Consulta detalle solicitud_id=%s | supervisor_id=%s", id, current_user.id)
     return await supervision_service.get_solicitud(db, solicitud_id=id)

@@ -683,6 +683,8 @@ def orm_to_solicitud_dto(
                 observacion=pr.observacion,
                 mecanico_id=pr.mecanico_id,
                 mecanico_nombre=mec_nom,
+                mecanicos=[{"id": revisor.mecanico_id, "nombre": revisor.mecanico.nombre_completo}
+                           for revisor in sorted(_get_rel(pr, "revisores") or [], key=lambda r: r.mecanico_id)],
                 fecha_registro=pr.fecha_registro,
             )
         )

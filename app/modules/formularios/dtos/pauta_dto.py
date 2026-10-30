@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Annotated, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.modules.taller.dtos.pauta_revisor_dto import PautaMecanicoDTO, completar_revisores
 from app.modules.taller.constants import EstadoItemPauta
 
 
@@ -41,6 +42,10 @@ class PautaRespuestaDTO(BaseModel):
     mecanico_id: Optional[int] = None
     mecanico_nombre: Optional[str] = None
     fecha_registro: datetime
+    mecanicos_ids: List[int] = Field(default_factory=list)
+    mecanicos: List[PautaMecanicoDTO] = Field(default_factory=list)
+
+    _completar_revisores = model_validator(mode="before")(completar_revisores)
 
 
 class PautaBatchUpdateDTO(BaseModel):
@@ -56,3 +61,47 @@ class PautaEstadoResumenDTO(BaseModel):
     completado: bool
     items_con_defecto: int
     respuestas: List[PautaRespuestaDTO] = []
+
+
+class PautaProgresoDTO(BaseModel):
+    revisadas: int
+    total: int
+
+
+class PautaPuntoDTO(PautaTallerItemDTO):
+    revisado: bool
+    respuesta: Optional[PautaRespuestaDTO] = None
+
+
+class PautaGestionDTO(BaseModel):
+    solicitud_id: int
+    resumen: PautaProgresoDTO
+    puntos: List[PautaPuntoDTO]
+
+
+class PautaPuntoUpdateDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: int = Field(gt=0)
+    estado: Optional[EstadoItemPauta] = Field(
+        description="OK, DEFECTO o NO_APLICA para registrar revisión; null para devolver a pendiente."
+    )
+    observacion: Optional[str] = None
+    mecanico_id: Optional[int] = Field(
+        default=None, gt=0, description="Compatibilidad: un solo revisor. Usar este campo o mecanicos_ids."
+    )
+    mecanicos_ids: Optional[List[Annotated[int, Field(gt=0)]]] = Field(
+        default=None, description="Lista de ejecutores del punto. Reemplaza la selección anterior."
+    )
+
+    @property
+    def revisores_ids(self) -> List[int]:
+        if self.mecanicos_ids is not None:
+            return self.mecanicos_ids
+        return [self.mecanico_id] if self.mecanico_id is not None else []
+
+
+class PautaGestionUpdateDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    puntos: List[PautaPuntoUpdateDTO] = Field(min_length=1)

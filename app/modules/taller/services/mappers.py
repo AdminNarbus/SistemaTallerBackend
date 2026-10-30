@@ -23,6 +23,7 @@ from app.modules.taller.utils import (
     calcular_telemetria_estadias,
 )
 from app.modules.taller.dtos.taller_ubicacion_dto import UbicacionEventoDTO, TallerSnapshotDTO
+from app.modules.taller.services.avances_falla_mapper import normalizar_avances_fallas
 
 
 def _ubicacion_evento_dto(ubicacion):
@@ -190,7 +191,7 @@ def dict_to_solicitud_dto(
     )
     horas_en_taller_val = horas_acum
 
-    return SolicitudDTO(
+    return normalizar_avances_fallas(SolicitudDTO(
         id=r["id"],
         n_bus=r["n_bus"],
         bus_id=r.get("bus_id"),
@@ -235,7 +236,7 @@ def dict_to_solicitud_dto(
         pauta_respuestas=pauta_respuestas_raw,
         evidencias=evidencias_dtos,
         estadias=estadias_dtos,
-    )
+    ))
 
 
 def dict_to_solicitud_resumen_dto(
@@ -750,7 +751,7 @@ def orm_to_solicitud_dto(
 
     horas_en_taller_val = horas_acum
 
-    return SolicitudDTO(
+    return normalizar_avances_fallas(SolicitudDTO(
         id=sol.id,
         n_bus=sol.n_bus,
         bus_id=sol.bus_id,
@@ -792,7 +793,7 @@ def orm_to_solicitud_dto(
         pauta_respuestas=pauta_dtos,
         evidencias=evidencias_dtos,
         estadias=estadias_dtos,
-    )
+    ))
 
 
 def mapear_a_solicitud_dto(

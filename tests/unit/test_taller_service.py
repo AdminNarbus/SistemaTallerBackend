@@ -511,8 +511,8 @@ async def test_autoasignar_falla_ocupada_bloquea_con_business_rule(db_session, s
 
 
 @pytest.mark.asyncio
-async def test_terminar_avance_aislado_por_mecanico(db_session, seed_test_data):
-    """Verifica que terminar_avance solo libere el trabajo del mecánico emisor y mantenga activo a sus compañeros."""
+async def test_terminar_avance_cierra_cuadrilla_con_fallas_distintas(db_session, seed_test_data):
+    """Un integrante cierra también las asignaciones del compañero en otras fallas."""
     conductor_id = seed_test_data["conductor"].id
     mecanico1_id = seed_test_data["mecanico1"].id
     mecanico2_id = seed_test_data["mecanico2"].id
@@ -552,28 +552,22 @@ async def test_terminar_avance_aislado_por_mecanico(db_session, seed_test_data):
         mecanico_nombre="Mecánico 1",
     )
 
-    # El bus/OT DEBE permanecer en EN_REPARACION porque Mecánico 2 sigue en Falla B
-    assert sol_post_m1.estado == "EN_REPARACION"
+    assert sol_post_m1.estado == "PENDIENTE"
+    assert sol_post_m1.mecanicos == []
 
-    # Falla B debe seguir con Mecánico 2 asignado
+    # Falla B también queda sin asignaciones activas.
     detalle_b = next(d for d in sol_post_m1.detalles if d.id == falla_b_id)
-    assert any(m.id == mecanico2_id for m in detalle_b.mecanicos_asignados)
+    assert detalle_b.mecanicos_asignados == []
 
     # Falla A no debe tener asignado a Mecánico 1
     detalle_a = next(d for d in sol_post_m1.detalles if d.id == falla_a_id)
     assert not any(m.id == mecanico1_id for m in detalle_a.mecanicos_asignados)
 
-    # Ahora Mecánico 2 termina su avance
-    sol_post_m2 = await taller_service.terminar_avance(
-        db_session,
-        solicitud_id=sol.id,
-        dto=TerminarAvanceDTO(comentario="Mecánico 2 terminó"),
-        mecanico_id=mecanico2_id,
-        mecanico_nombre="Mecánico 2",
-    )
-
-    # Al no quedar ningún mecánico activo, la OT pasa a PENDIENTE
-    assert sol_post_m2.estado == "PENDIENTE"
+    # Otro integrante no puede guardar un segundo cierre del mismo turno.
+    with pytest.raises(BusinessRuleException):
+        await taller_service.terminar_avance(
+            db_session, sol.id, TerminarAvanceDTO(comentario="Reintento"), mecanico2_id,
+        )
 
 
 @pytest.mark.asyncio

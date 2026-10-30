@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 136,
+  "id": "AV-0136",
+  "timestamp": "2026-10-29T15:39:58.607792Z",
+  "phase": "backend_taller",
+  "type": "completed",
+  "milestone": {
+    "id": "NEON-MIGRACIONES-033",
+    "name": "Conectar entorno local a Neon y ejecutar migraciones",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "summary": "Se activó el bloque Neon en .env y se comentó el local. Neon se actualizó de revisión 031 a 033; alembic check se ejecutó y detectó diferencias de esquema ajenas a las columnas migradas.",
+  "scope": {
+    "planned": [
+      "Activar Neon y comentar conexión local",
+      "Ejecutar alembic upgrade head y check"
+    ],
+    "completed": [
+      "Bloque Neon activo y local comentado, credenciales preservadas",
+      "Migraciones 032 y 033 aplicadas en Neon",
+      "Head 033_es_ot confirmado",
+      "motivo_salida TEXT y es_ot BOOLEAN NOT NULL DEFAULT false verificados por SELECT",
+      "Informe completo de diferencias de esquema guardado"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Corregir diferencias de esquema detectadas por check",
+      "Publicar .env o credenciales en Git",
+      "Despliegue de aplicación"
+    ]
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Activar POSTGRES_* de Neon y comentar los cinco valores locales; archivo ignorado por Git"
+    },
+    {
+      "path": "trazabilidad/auditoria/20261029_neon_alembic_check.txt",
+      "action": "created",
+      "summary": "Salida completa del chequeo de esquema de Neon"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Usar el bloque Neon ya existente",
+      "rationale": "Solicitud explícita del usuario de cambiar la conexión activa y comentar la local.",
+      "consequences": "Se conserva la configuración local comentada y el perfil de ejecución dev_local; no se muestran ni publican credenciales."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Aplicar únicamente las migraciones versionadas pendientes",
+      "rationale": "Neon estaba en 031_depuracion_supervision; el head del código es 033_es_ot.",
+      "consequences": "Se aplicaron 032_motivo_salida_estadia y 033_es_ot; no se ejecutó DDL manual ni se modificó el puntero con stamp."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Registrar las diferencias de check sin ejecutar alteraciones adicionales",
+      "rationale": "El usuario pidió ejecutar el chequeo. Las diferencias incluyen reducción de longitudes, nulabilidad y eliminación de índices/restricciones que requieren revisión propia.",
+      "consequences": "El upgrade está completado, pero el esquema global aún difiere del ORM. El informe queda disponible para una corrección posterior mediante migración revisada."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Cargar Settings y comprobar host de async_database_url sin revelar credenciales",
+      "result": "passed",
+      "evidence": "Host efectivo termina en .neon.tech; bloque local comentado."
+    },
+    {
+      "command": "python -m alembic current (antes)",
+      "result": "passed",
+      "evidence": "031_depuracion_supervision"
+    },
+    {
+      "command": "python -u -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "031 -> 032_motivo_salida_estadia -> 033_es_ot"
+    },
+    {
+      "command": "python -u -m alembic current (después)",
+      "result": "passed",
+      "evidence": "033_es_ot (head)"
+    },
+    {
+      "command": "SELECT metadatos de columnas en information_schema.columns",
+      "result": "passed",
+      "evidence": "motivo_salida: text nullable; es_ot: boolean NOT NULL DEFAULT false."
+    },
+    {
+      "command": "python -m alembic check",
+      "result": "failed",
+      "evidence": "Diferencias de longitudes, nulabilidad, índices y restricciones en buses, catálogos, reportes de neumáticos, roles, asignaciones, comentarios, pauta, usuarios y ubicación de resultados. Salida completa en trazabilidad/auditoria/20261029_neon_alembic_check.txt."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Revisar el informe de diferencias y preparar una migración correctiva si el usuario solicita alinear completamente Neon con los modelos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "develop",
+    "commit": "2764d7f",
+    "dirty": true
+  },
+  "notes": [
+    ".env continúa excluido por Git.",
+    "No se realizó un push adicional; los únicos archivos nuevos de seguimiento son el informe y este registro."
+  ]
+}

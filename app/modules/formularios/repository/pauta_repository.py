@@ -1,13 +1,16 @@
 import logging
 from datetime import datetime
 from typing import Any, List, Optional, Set
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.auth.models.usuario import Usuario
-from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta
+from app.modules.auth.models.rol import Rol
+from app.modules.auth.constants import RolUsuario
+from app.modules.taller.models.pauta_taller import PautaTallerItem, TallerSolicitudPauta, TallerSolicitudPautaMecanico
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,51 @@ class PautaRepository:
     Responsabilidad exclusiva: Consultas y persistencia de catálogo y respuestas de pauta.
     No gestiona lógica de negocio ni realiza commits de transacciones.
     """
+
+    async def lock_solicitud(self, db: AsyncSession, solicitud_id: int) -> bool:
+        stmt = select(TallerSolicitud.id).where(TallerSolicitud.id == solicitud_id).with_for_update()
+        return (await db.execute(stmt)).scalar_one_or_none() is not None
+
+    async def get_mecanicos_activos(self, db: AsyncSession, ids: Set[int]) -> dict[int, str]:
+        stmt = select(Usuario.id, Usuario.nombre, Usuario.apellido).join(Rol, Usuario.rol_id == Rol.id).where(
+            Usuario.id.in_(ids), Usuario.is_active.is_(True), Rol.nombre == RolUsuario.MECANICO.value,
+        )
+        rows = (await db.execute(stmt)).all()
+        return {row.id: f"{row.nombre or ''} {row.apellido or ''}".strip() for row in rows}
+
+    async def get_progreso(self, db: AsyncSession, solicitud_id: int) -> dict:
+        stmt = (
+            select(func.count(PautaTallerItem.id).label("total"),
+                   func.count(TallerSolicitudPauta.id).label("revisadas"))
+            .select_from(PautaTallerItem)
+            .outerjoin(TallerSolicitudPauta, and_(
+                TallerSolicitudPauta.item_id == PautaTallerItem.id,
+                TallerSolicitudPauta.solicitud_id == solicitud_id,
+            ))
+            .where(PautaTallerItem.is_active.is_(True))
+        )
+        return dict((await db.execute(stmt)).mappings().one())
+
+    async def eliminar_respuestas(self, db: AsyncSession, solicitud_id: int, item_ids: List[int]) -> None:
+        respuestas = select(TallerSolicitudPauta.id).where(
+            TallerSolicitudPauta.solicitud_id == solicitud_id, TallerSolicitudPauta.item_id.in_(item_ids),
+        )
+        await db.execute(delete(TallerSolicitudPautaMecanico).where(
+            TallerSolicitudPautaMecanico.pauta_id.in_(respuestas),
+        ))
+        stmt = delete(TallerSolicitudPauta).where(
+            TallerSolicitudPauta.solicitud_id == solicitud_id,
+            TallerSolicitudPauta.item_id.in_(item_ids),
+        )
+        await db.execute(stmt)
+
+    async def registrar_gestion(self, db: AsyncSession, comentario: TallerSolicitudComentario) -> None:
+        db.add(comentario)
+        await db.execute(
+            update(TallerSolicitud)
+            .where(TallerSolicitud.id == comentario.solicitud_id)
+            .values(fecha_actualizacion=comentario.fecha_registro)
+        )
 
     async def get_pauta_items(self, db: AsyncSession) -> List[PautaTallerItem]:
         """Retorna los ítems activos de la pauta preventiva ordenados por orden e ID."""
@@ -47,6 +95,7 @@ class PautaRepository:
             .options(
                 selectinload(TallerSolicitudPauta.item),
                 selectinload(TallerSolicitudPauta.mecanico),
+                selectinload(TallerSolicitudPauta.revisores).joinedload(TallerSolicitudPautaMecanico.mecanico),
             )
         )
         res = await db.execute(stmt)
@@ -56,8 +105,7 @@ class PautaRepository:
         self, db: AsyncSession, solicitud_id: int
     ) -> tuple[int, List[dict]]:
         """
-        Retorna (total_items, respuestas_data) en exactamente 1 sola consulta SQL
-        usando LEFT JOIN entre pauta_taller_items, taller_solicitud_pauta y usuarios.
+        Retorna catálogo/respuestas y carga sus ejecutores en lote, en hasta 2 consultas SQL.
         """
         stmt = (
             select(
@@ -108,17 +156,49 @@ class PautaRepository:
                     "mecanico_nombre": mec_nom,
                     "fecha_registro": r.fecha_registro,
                 })
-        return total_items, respuestas
+        revisores = await self.get_revisores(db, [respuesta["id"] for respuesta in respuestas])
+        return total_items, [dict(respuesta, mecanicos=revisores.get(respuesta["id"], []))
+                             for respuesta in respuestas]
+
+    async def get_revisores(self, db: AsyncSession, pauta_ids: List[int]) -> dict[int, list[dict]]:
+        if not pauta_ids:
+            return {}
+        stmt = select(TallerSolicitudPautaMecanico.pauta_id, Usuario.id, Usuario.nombre, Usuario.apellido).join(
+            Usuario, Usuario.id == TallerSolicitudPautaMecanico.mecanico_id,
+        ).where(TallerSolicitudPautaMecanico.pauta_id.in_(pauta_ids)).order_by(Usuario.id)
+        result = {}
+        for row in (await db.execute(stmt)).all():
+            result.setdefault(row.pauta_id, []).append(
+                {"id": row.id, "nombre": f"{row.nombre or ''} {row.apellido or ''}".strip()},
+            )
+        return result
+
+    async def reemplazar_revisores(self, db: AsyncSession, solicitud_id: int, respuestas: List[dict]) -> None:
+        stmt = select(TallerSolicitudPauta.id, TallerSolicitudPauta.item_id).where(
+            TallerSolicitudPauta.solicitud_id == solicitud_id,
+            TallerSolicitudPauta.item_id.in_([r["item_id"] for r in respuestas]),
+        )
+        pauta_ids = {row.item_id: row.id for row in (await db.execute(stmt)).all()}
+        await db.execute(delete(TallerSolicitudPautaMecanico).where(
+            TallerSolicitudPautaMecanico.pauta_id.in_(pauta_ids.values()),
+        ))
+        values = [{"pauta_id": pauta_ids[r["item_id"]], "mecanico_id": mecanico_id}
+                  for r in respuestas for mecanico_id in r["mecanicos_ids"]]
+        if values:
+            await db.execute(insert(TallerSolicitudPautaMecanico), values)
 
     async def upsert_pauta_respuestas(
         self, db: AsyncSession, solicitud_id: int, respuestas: List[dict], mecanico_id: int, now: datetime
     ) -> None:
         """
-        Guarda o actualiza en lote las respuestas de la pauta preventiva en 1 sola operación atómica.
+        Upsert de respuestas y reemplazo de ejecutores dentro de la transacción del servicio.
         Usa ON CONFLICT DO UPDATE según el dialecto (PostgreSQL o SQLite).
         """
         if not respuestas:
             return
+
+        respuestas = [dict(r, mecanicos_ids=sorted(r.get("mecanicos_ids") or [r.get("mecanico_id", mecanico_id)]))
+                      for r in respuestas]
 
         values = [
             {
@@ -126,7 +206,7 @@ class PautaRepository:
                 "item_id": r["item_id"],
                 "estado": r["estado"],
                 "observacion": r.get("observacion"),
-                "mecanico_id": mecanico_id,
+                "mecanico_id": r["mecanicos_ids"][0],
                 "fecha_registro": now,
             }
             for r in respuestas
@@ -176,6 +256,9 @@ class PautaRepository:
                     obj.fecha_registro = val["fecha_registro"]
                 else:
                     db.add(TallerSolicitudPauta(**val))
+            await db.flush()
+
+        await self.reemplazar_revisores(db, solicitud_id, respuestas)
 
     async def get_conteo_pauta_y_mecanico(
         self, db: AsyncSession, solicitud_id: int, mecanico_id: int

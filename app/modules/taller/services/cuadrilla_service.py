@@ -36,6 +36,7 @@ from app.modules.taller.services.estadias_helper import (
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
 
 from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
+from app.modules.taller.services.solicitud_service import SolicitudService
 
 logger = logging.getLogger(__name__)
 
@@ -811,22 +812,16 @@ class CuadrillaService:
 
         sol_detalles_map = {d.id: d for d in solicitud.detalles}
 
-        if dto.detalles_ids:
-            target_detalles_ids = set(dto.detalles_ids)
-        else:
-            target_detalles_ids = {a.detalle_id for a in mis_asigs_activas}
-
-        mis_fallas_ids = {a.detalle_id for a in mis_asigs_activas}
-        asignaciones_activas = [
-            a
-            for a in todas_asigs_activas
-            if a.detalle_id in target_detalles_ids
-            and (a.mecanico_id == mecanico_id or a.detalle_id in mis_fallas_ids)
-        ]
+        if dto.detalles_ids and not set(dto.detalles_ids).issubset(sol_detalles_map):
+            raise BusinessRuleException(
+                "Todas las fallas indicadas deben pertenecer a esta solicitud"
+            )
+        # El grupo es la cuadrilla activa de la OT, incluso si trabaja en fallas distintas.
+        # detalles_ids se conserva para clientes antiguos y no limita el cierre grupal.
+        asignaciones_activas = todas_asigs_activas
 
         mecanicos_involucrados_ids = {a.mecanico_id for a in asignaciones_activas}
-        if mi_presencia:
-            mecanicos_involucrados_ids.add(mecanico_id)
+        mecanicos_involucrados_ids.update(p.mecanico_id for p in presencias_activas)
 
         cerradas_asig_ids = set()
 
@@ -843,14 +838,11 @@ class CuadrillaService:
                 asig.comentario = dto.comentario.strip()
             cerradas_asig_ids.add(asig.id)
 
-        con_restantes_ids = set()
-        quedan_asignaciones = False
-        if cerradas_asig_ids:
-            restantes = [a for a in todas_asigs_activas if a.id not in cerradas_asig_ids]
-            con_restantes_ids = {
-                a.mecanico_id for a in restantes if a.mecanico_id in mecanicos_involucrados_ids
-            }
-            quedan_asignaciones = len(restantes) > 0
+        restantes = [a for a in todas_asigs_activas if a.id not in cerradas_asig_ids]
+        con_restantes_ids = {
+            a.mecanico_id for a in restantes if a.mecanico_id in mecanicos_involucrados_ids
+        }
+        quedan_asignaciones = bool(restantes)
 
         presencias_cerradas_ids = set()
         for p in presencias_activas:
@@ -983,8 +975,12 @@ class CuadrillaService:
                 motivo=comentario_entry.comentario,
             ),
         )
+        # La carga operacional omite la bitácora; devolver la ficha completa evita
+        # reemplazar el historial del chat por una respuesta con solo la nota nueva.
+        await db.flush()
+        respuesta = await SolicitudService(repository=self.repo).get_solicitud(db, solicitud_id)
         await db.commit()
-        return orm_to_solicitud_dto(solicitud)
+        return respuesta
 
 
 cuadrilla_service = CuadrillaService()

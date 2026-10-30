@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 146,
+  "id": "AV-0146",
+  "timestamp": "2026-10-30T15:49:31Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "VALIDACION-GITFLOW-20261030",
+    "name": "Validar cambios locales para publicarlos mediante Git Flow",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se validaron todos los cambios locales de bitácora, cuadrillas, vinculación de buses y pauta de supervisión. Se registraron en una rama feature mediante commits separados por funcionalidad y se preparó su integración por develop y release hacia main.",
+  "scope": {
+    "planned": ["Revisar ramas y cambios locales", "Agrupar commits por funcionalidad", "Ejecutar la suite local y verificar el diff"],
+    "completed": ["Ramas main y develop confirmadas contra origin", "Rama feature creada desde develop", "Commits separados de bitácora, buses y pauta", "399 pruebas aprobadas", "Revisión única de Alembic y diff sin errores de whitespace"],
+    "pending": [],
+    "outOfScope": ["Aplicar migraciones a la base configurada", "Corregir las diferencias de esquema registradas en AV-0145"]
+  },
+  "changes": [
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registrar validación conjunta y flujo de publicación"},
+    {"path": "trazabilidad/avances/0146_20261030T154931Z_validacion_publicacion_gitflow.json", "action": "created", "summary": "Evidencia de validación y decisiones de Git Flow"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Usar las ramas Git Flow existentes", "rationale": "La configuración del repositorio identifica develop y main como ramas de desarrollo y producción; esos son los destinos indicados por el usuario.", "consequences": "La feature se integra primero en develop y la promoción a main se realiza desde una rama release."},
+    {"id": "DEC-002", "title": "Conservar commits por funcionalidad", "rationale": "Las reglas del repositorio exigen Conventional Commits y cambios atómicos.", "consequences": "Bitácora, vinculación de buses y pauta preventiva tienen commits separados; la documentación de auditoría se conserva en un commit propio."},
+    {"id": "DEC-003", "title": "Validar con persistencia temporal local", "rationale": "La tarea autoriza publicar código y las reglas requieren pruebas locales aisladas.", "consequences": "La suite utiliza SQLite en memoria y PostgreSQL temporal. La revisión 034 se verifica sin aplicar cambios a la base configurada."},
+    {"id": "DEC-004", "title": "Excluir carpetas temporales de la colección de pruebas", "rationale": "La colección genérica encontró una carpeta temporal ignorada sin permisos de lectura.", "consequences": "Se ejecutaron explícitamente tests/unit, tests/integration, tests/e2e y tests/migrations; tras un bloqueo en el sandbox, la suite terminó correctamente fuera de él."}
+  ],
+  "verification": [
+    {"command": "ENVIRONMENT=dev_local STORAGE_PROVIDER=local python -m pytest tests/unit tests/integration tests/e2e tests/migrations -q --tb=short -o faulthandler_timeout=45", "result": "passed", "evidence": "399 passed, 10 warnings in 237.83s. Advertencias de Starlette por HTTP_422_UNPROCESSABLE_ENTITY."},
+    {"command": "python -m alembic heads", "result": "passed", "evidence": "034_pauta_mecanicos (head), una sola revisión final."},
+    {"command": "git diff origin/develop --check", "result": "passed", "evidence": "Sin errores de whitespace."},
+    {"command": "git fetch origin --prune y comparación de main/develop contra sus remotos", "result": "passed", "evidence": "Ambas ramas locales con 0 commits por delante y 0 por detrás antes de la integración."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar la feature en develop, crear release/2026.10.30-bitacora-pauta, integrar la release en main, sincronizar develop y publicar las ramas en origin según lo autorizado.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/bitacora-buses-pauta-supervision", "commit": "c9a42a3", "dirty": true},
+  "notes": ["Las diferencias de esquema del informe local de AV-0145 son antecedentes existentes y quedan documentadas.", "El resultado del push y los merges se verifican mediante las referencias y el historial de Git."]
+}

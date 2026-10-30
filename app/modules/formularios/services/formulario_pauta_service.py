@@ -10,6 +10,10 @@ from app.modules.formularios.dtos.pauta_dto import (
     PautaEstadoResumenDTO,
     PautaRespuestaDTO,
     PautaTallerItemDTO,
+    PautaGestionDTO,
+    PautaGestionUpdateDTO,
+    PautaPuntoDTO,
+    PautaProgresoDTO,
 )
 from app.modules.formularios.repository.pauta_repository import (
     PautaRepository,
@@ -35,6 +39,96 @@ class FormularioPautaService:
         """Retorna el catálogo maestro de ítems de la pauta preventiva."""
         items = await self.repo.get_pauta_items(db)
         return [PautaTallerItemDTO.model_validate(it) for it in items]
+
+    async def get_progreso(self, db: AsyncSession, solicitud_id: int) -> PautaProgresoDTO:
+        return PautaProgresoDTO(**await self.repo.get_progreso(db, solicitud_id))
+
+    async def get_gestion(self, db: AsyncSession, solicitud_id: int) -> PautaGestionDTO:
+        if not await self.repo.check_solicitud_exists(db, solicitud_id):
+            raise NotFoundException("Solicitud de taller no encontrada")
+        items = await self.get_pauta_items(db)
+        resumen = await self.get_pauta_resumen(db, solicitud_id)
+        respuestas = {respuesta.item_id: respuesta for respuesta in resumen.respuestas}
+        return PautaGestionDTO(
+            solicitud_id=solicitud_id,
+            resumen=PautaProgresoDTO(revisadas=resumen.respondidos, total=resumen.total_items),
+            puntos=[PautaPuntoDTO(**item.model_dump(), revisado=item.id in respuestas,
+                                 respuesta=respuestas.get(item.id)) for item in items],
+        )
+
+    async def actualizar_gestion(
+        self, db: AsyncSession, solicitud_id: int, dto: PautaGestionUpdateDTO, actor_id: int,
+    ) -> PautaGestionDTO:
+        self._validar_cambios(dto)
+        if not await self.repo.lock_solicitud(db, solicitud_id):
+            raise NotFoundException("Solicitud de taller no encontrada")
+        item_ids = [punto.item_id for punto in dto.puntos]
+        validos = await self.repo.get_pauta_items_by_ids(db, item_ids)
+        if set(item_ids) != validos:
+            raise NotFoundException("Uno o más ítems de pauta no existen o están inactivos")
+        mecanicos = await self._validar_mecanicos(db, dto)
+        now = datetime.now(timezone.utc)
+        pendientes = [punto.item_id for punto in dto.puntos if punto.estado is None]
+        respuestas = [dict(punto.model_dump(), mecanicos_ids=punto.revisores_ids)
+                      for punto in dto.puntos if punto.estado is not None]
+        await self.repo.eliminar_respuestas(db, solicitud_id, pendientes)
+        await self.repo.upsert_pauta_respuestas(db, solicitud_id, respuestas, actor_id, now)
+        await self._registrar_gestion(db, solicitud_id, dto, actor_id, now, mecanicos)
+        await db.commit()
+        publish_event_soon(RealtimeEvent(resource_type="work_order", resource_id=solicitud_id,
+                           action="checklist.changed", actor_id=actor_id, version=now))
+        return await self.get_gestion(db, solicitud_id)
+
+    @staticmethod
+    def _validar_cambios(dto: PautaGestionUpdateDTO) -> None:
+        item_ids = [punto.item_id for punto in dto.puntos]
+        if len(item_ids) != len(set(item_ids)):
+            raise BusinessRuleException("No se puede repetir un ítem en la misma actualización")
+        if any(punto.estado is None and punto.observacion is not None for punto in dto.puntos):
+            raise BusinessRuleException("Un punto pendiente no admite observación de revisión")
+        for punto in dto.puntos:
+            FormularioPautaService._validar_revisores(punto)
+
+    @staticmethod
+    def _validar_revisores(punto) -> None:
+        if punto.mecanicos_ids is not None and punto.mecanico_id is not None:
+            raise BusinessRuleException("Use mecanicos_ids o mecanico_id, no ambos")
+        ids = punto.revisores_ids
+        if len(ids) != len(set(ids)) or any(revisor <= 0 for revisor in ids):
+            raise BusinessRuleException("Los IDs de mecánicos deben ser positivos y no repetidos")
+        if punto.estado is not None and not ids:
+            raise BusinessRuleException("Debe indicar uno o más mecánicos para cada revisión")
+        if punto.estado is None and ids:
+            raise BusinessRuleException("Un punto pendiente no admite mecánicos revisores")
+
+    async def _validar_mecanicos(self, db: AsyncSession, dto: PautaGestionUpdateDTO) -> dict[int, str]:
+        ids = {revisor for punto in dto.puntos for revisor in punto.revisores_ids}
+        if not ids:
+            return {}
+        mecanicos = await self.repo.get_mecanicos_activos(db, ids)
+        if set(mecanicos) != ids:
+            raise BusinessRuleException("Los revisores deben ser usuarios MECANICO activos")
+        return mecanicos
+
+    async def _registrar_gestion(
+        self, db: AsyncSession, solicitud_id: int, dto: PautaGestionUpdateDTO,
+        actor_id: int, now: datetime, mecanicos: dict[int, str],
+    ) -> None:
+        cambios = "; ".join(
+            f"ítem {punto.item_id}: {punto.estado.value if punto.estado else 'PENDIENTE'}"
+            + ("; revisores: " + ", ".join(f"{mecanicos[revisor]} (ID {revisor})"
+                                          for revisor in punto.revisores_ids)
+               if punto.revisores_ids else "")
+            + (f" ({punto.observacion})" if punto.observacion else "")
+            for punto in dto.puntos
+        )
+        comentario = TallerSolicitudComentario(
+            solicitud_id=solicitud_id, usuario_id=actor_id, tipo="CHECKLIST",
+            comentario=f"Pauta supervisión: {cambios}", fecha_registro=now,
+        )
+        await self.repo.registrar_gestion(db, comentario)
+        logger.info("[PAUTA] Gestión supervisión | solicitud_id=%s | actor_id=%s | %s",
+                    solicitud_id, actor_id, cambios)
 
     async def get_pauta_resumen(
         self, db: AsyncSession, solicitud_id: int
@@ -71,6 +165,9 @@ class FormularioPautaService:
         )
         if not dto.respuestas:
             raise BusinessRuleException("Debe enviar al menos una respuesta de pauta")
+
+        if not await self.repo.lock_solicitud(db, solicitud_id):
+            raise NotFoundException("Solicitud de taller no encontrada")
 
         now = datetime.now(timezone.utc)
 

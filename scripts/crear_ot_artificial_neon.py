@@ -1,13 +1,13 @@
 """Carga explícita e idempotente de la OT artificial autorizada para bus 1."""
-import ast
 import asyncio
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.engine import make_url
+from app.core.config import settings
+from scripts.reparar_bus_prueba_uno import asegurar_bus_prueba
 
 import app.models  # noqa: F401
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
@@ -24,12 +24,7 @@ ACTOR = "test — CARGA ARTIFICIAL"
 
 
 def neon_url():
-    tree = ast.parse(Path("scripts/vincular_ricardo_ot21_neon.py").read_text())
-    raw = next(ast.literal_eval(node.value) for node in tree.body
-               if isinstance(node, ast.Assign) and any(
-                   isinstance(target, ast.Name) and target.id == "NEON_URL"
-                   for target in node.targets))
-    url = make_url(raw)
+    url = make_url(settings.async_database_url)
     if url.database != "taller" or not url.host.endswith(".neon.tech"):
         raise RuntimeError("La carga requiere la base taller en Neon")
     return url
@@ -39,6 +34,11 @@ async def insert_fixture(db):
     existing = await db.scalar(select(TallerSolicitud.id).where(
         TallerSolicitud.descripcion_general == DESCRIPTION))
     if existing:
+        bus = await asegurar_bus_prueba(db)
+        ot = await db.get(TallerSolicitud, existing)
+        if ot.bus_id is not None and ot.bus_id != bus.id:
+            raise RuntimeError("La OT de prueba apunta a otro vehículo")
+        ot.bus_id = bus.id
         photos = (await db.scalars(select(TallerSolicitudEvidencia).where(
             TallerSolicitudEvidencia.solicitud_id == existing))).all()
         for photo in photos:
@@ -48,8 +48,9 @@ async def insert_fixture(db):
         TallerSolicitud.n_bus == "1", TallerSolicitud.estado != "FINALIZADO"))
     if active:
         raise RuntimeError("Bus 1 ya tiene una OT activa; no se modifica")
+    bus = await asegurar_bus_prueba(db)
     now = datetime.now(timezone.utc)
-    ot = TallerSolicitud(n_bus="1", estado="PENDIENTE", descripcion_general=DESCRIPTION,
+    ot = TallerSolicitud(n_bus="1", bus_id=bus.id, estado="PENDIENTE", descripcion_general=DESCRIPTION,
                          foto_url=BLACK_IMAGE, fecha_creacion=now, fecha_actualizacion=now,
                          horas_taller_acumuladas=0)
     db.add(ot)

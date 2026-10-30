@@ -82,8 +82,10 @@ async def terminar_avance(
     db: AsyncSession = SessionDep,
 ):
     """
-    Cierra el turno o avance del mecánico en sus fallas asignadas, registrando la duración en minutos.
-    Si ya no quedan mecánicos activos en la solicitud, el estado pasa a PENDIENTE.
+    Cierra todas las asignaciones y presencias activas de la cuadrilla de la OT.
+    El ejecutor debe pertenecer al grupo; detalles_ids no limita el cierre grupal.
+    Registra las duraciones y deja la OT PENDIENTE.
+    Conserva los estados de las fallas y devuelve la ficha con la bitácora completa.
     """
     logger.info(
         "[MANTENCION] Mecánico id=%s terminando avance en solicitud_id=%s | comentario='%s'",

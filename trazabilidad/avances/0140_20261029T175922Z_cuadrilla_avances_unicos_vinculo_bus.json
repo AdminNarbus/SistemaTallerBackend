@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 140,
+  "id": "AV-0140",
+  "timestamp": "2026-10-29T17:59:22Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "CUADRILLA-AVANCES-BUS", "name": "Cierre grupal y avances únicos desde backend", "statusBefore": "in_progress", "statusAfter": "awaiting_approval"},
+  "type": "in_progress",
+  "summary": "Código local completo y validado para cerrar toda la cuadrilla, entregar avances únicos por falla y vincular solicitudes al alta de un bus. Reparación del vehículo ficticio número 1 preparada y probada; la escritura en la base configurada fue rechazada por revisión automática y requiere aprobación expresa.",
+  "scope": {
+    "planned": ["Cerrar todas las asignaciones del grupo", "Entregar un avance por falla desde backend", "Revisar generación de ID de bus", "Vincular OT artificial 35 a bus con ID correcto"],
+    "completed": [
+      "Cierre de todas las asignaciones y presencias de la cuadrilla activa de la OT",
+      "Compatibilidad con detalles_ids de clientes anteriores sin limitar el cierre",
+      "historial_avances único por falla y comentario_avance_id en asignaciones, con autor/fecha originales",
+      "Normalización de datos históricos en DTO sin alterar registros almacenados",
+      "Verificación por lectura sobre OT 7 y avance 575",
+      "Alta normal genera ID y vincula solicitudes sin FK del mismo número en su transacción",
+      "Creación de solicitud recupera la OT previa por número si falta vínculo",
+      "Origen de OT 35 confirmado en script y AV-0122; no fue un fallo del endpoint de alta",
+      "Script seguro e idempotente de reparación con --apply explícito y prueba SQLite",
+      "114 pruebas aprobadas"
+    ],
+    "pending": ["Aprobación expresa para crear en la base configurada el bus ficticio 1, patente TEST-BUS-1, y vincular OT 35; después ejecutar y verificar"],
+    "outOfScope": ["Usar buses.id=1 que corresponde al bus real 354", "Inventar una patente real", "Modificar frontend", "Desplegar código"]
+  },
+  "changes": [
+    {"path": "app/modules/taller/services/cuadrilla_service.py", "action": "modified", "summary": "Cerrar cuadrilla completa y mantener la respuesta con bitácora completa"},
+    {"path": "app/modules/taller/services/avances_falla_mapper.py", "action": "created", "summary": "Unificar notas por mensaje original, instante exacto de cierre y falla"},
+    {"path": "app/modules/taller/services/mappers.py", "action": "modified", "summary": "Normalización equivalente en lecturas PostgreSQL y ORM"},
+    {"path": "app/modules/taller/dtos/averias_dto.py", "action": "modified", "summary": "historial_avances y referencia comentario_avance_id"},
+    {"path": "app/modules/taller/dtos/cuadrilla_dto.py", "action": "modified", "summary": "Contrato vigente de cierre grupal"},
+    {"path": "app/modules/taller/api/cuadrilla_router.py", "action": "modified", "summary": "Documentar alcance de toda la cuadrilla"},
+    {"path": "app/modules/taller/repository/taller_repository.py", "action": "modified", "summary": "Vincular solicitudes antiguas por número y consultar estadía abierta"},
+    {"path": "app/modules/buses/services/bus_fleet_service.py", "action": "modified", "summary": "Flush de ID autogenerado y vínculo atómico con solicitudes anteriores"},
+    {"path": "app/modules/taller/services/solicitud_service.py", "action": "modified", "summary": "Recuperar OT activa antigua por número sin crear duplicado"},
+    {"path": "scripts/reparar_bus_prueba_uno.py", "action": "created", "summary": "Reparación específica protegida e idempotente, inactiva sin --apply"},
+    {"path": "scripts/crear_ot_artificial_neon.py", "action": "modified", "summary": "Crear bus ficticio con ID generado y asociarlo a la fixture; usar configuración existente sin extraer credenciales de otro script"},
+    {"path": "tests/unit/test_avances_falla_mapper.py", "action": "created", "summary": "Autor original, repetición por turnos, ambigüedad, idempotencia y zonas horarias"},
+    {"path": "tests/integration/test_alta_bus_vincula_solicitudes.py", "action": "created", "summary": "Alta HTTP con ID generado, tarjeta visible, vínculo correcto e idempotencia de reparación"},
+    {"path": "tests/integration/test_bitacora_completa_y_avance_pendiente.py", "action": "modified", "summary": "Validar contrato grupal y notas únicas"},
+    {"path": "tests/integration/test_fase3_asignacion_atomica.py", "action": "modified", "summary": "Cierre grupal incluso con selección parcial del cliente"},
+    {"path": "tests/unit/test_taller_service.py", "action": "modified", "summary": "Cerrar compañeros con fallas distintas y rechazar segundo cierre"},
+    {"path": "GUIA_FRONTEND_BITACORA_COMPLETA.md", "action": "modified", "summary": "Reescribir contrato alrededor del resultado vigente"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Estado actual y escritura pendiente de aprobación"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "El grupo es la cuadrilla activa de la OT", "rationale": "Instrucción explícita del usuario de cerrar todas las asignaciones del grupo y no solo las del individuo.", "consequences": "Se cierran también integrantes con fallas distintas y presencias sin falla. Los IDs legados se validan contra la OT pero no restringen el alcance."},
+    {"id": "DEC-002", "title": "Normalizar en la respuesta y conservar evidencia histórica", "rationale": "El usuario pidió entregar una nota única sin filtrar en frontend. El cierre y el mensaje global comparten el instante exacto y la nota permite comprobar su correspondencia.", "consequences": "No hay cambio de esquema. Se entrega historial_avances único por ID/falla y referencias en lugar del texto repetido. Casos ambiguos conservan su nota sin inventar autor; turnos distintos con texto igual siguen separados."},
+    {"id": "DEC-003", "title": "Vincular solicitudes por número al dar de alta el catálogo", "rationale": "Una solicitud puede existir antes que el bus del catálogo y debe adquirir el ID correcto al registrar ese mismo número.", "consequences": "Flush y vínculos dentro del commit de alta, sin reasignar FKs existentes ni confundir número 1 con ID interno 1."},
+    {"id": "DEC-004", "title": "Respetar el rechazo de revisión automática", "rationale": "Se rechazó crear un vehículo sintético y vincular OT 35 en la base configurada, posiblemente productiva, por falta de confirmación expresa de identidad y destino.", "consequences": "No se reintentó por otra vía. El código y las pruebas están completos y la aplicación a la base queda pendiente de aprobación del usuario."}
+  ],
+  "verification": [
+    {"command": "pytest -p pytest_asyncio.plugin: avances, alta de bus, asignación atómica, duración, taller, comentarios, realtime, buses, API de mecánicos y optimizaciones", "result": "passed", "evidence": "114 passed, 1 warning in 37.74s. ENVIRONMENT=dev_local, STORAGE_PROVIDER=local, SQLite en memoria. Advertencia existente de Starlette por el nombre del código HTTP 422."},
+    {"command": "SolicitudService.get_solicitud(7) con AsyncSession en transacción SERIALIZABLE postgresql_readonly=True", "result": "passed", "evidence": "Un mensaje global 575; cada falla 20,21,22,251 contiene un avance 575, dos referencias de asignación y cero copias del texto. Autor Luis Linares, fecha 2026-10-28 13:27:26.841575 UTC."},
+    {"command": "SELECT descripción, eventos y catálogo para OT 35", "result": "passed", "evidence": "Descripción Bus 1 ficticio y evento test — CARGA ARTIFICIAL; AV-0122 documenta que no se creó FK de flota. Sin bus de catálogo con número 1."},
+    {"command": "python -m scripts.reparar_bus_prueba_uno sin --apply y --help", "result": "passed", "evidence": "Sin cambios y ayuda visible; no accede a BD si no se incluye --apply."},
+    {"command": "Ejecución de reparación en base configurada", "result": "not_run", "evidence": "Revisión automática rechazó la creación del bus sintético y el vínculo de OT 35. No se ejecutó el proceso ni se modificaron datos."},
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": ["Aplicar reparación de OT 35 requiere aprobación explícita por rechazo de revisión automática."],
+  "nextStep": "Tras aprobación expresa, ejecutar python -m scripts.reparar_bus_prueba_uno --apply y comprobar por SELECT el ID autogenerado y su aparición en el listado.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit, push ni despliegue.", "No se alteraron registros históricos en la base configurada.", "AV-0138 describe una regla anterior de selección individual que queda sustituida por la instrucción grupal de AV-0140."]
+}

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SolicitudMecanicoDTO(BaseModel):
@@ -49,8 +49,14 @@ class AsignarFallasSupervisoraDTO(BaseModel):
 
 class TerminarAvanceDTO(BaseModel):
     """Payload para registrar fin de turno o avance en averías asignadas."""
-    detalles_ids: Optional[List[int]] = None
-    comentario: Optional[str] = None
+    detalles_ids: Optional[List[int]] = Field(
+        None,
+        description="Campo legado: los IDs deben pertenecer a la OT. El cierre siempre incluye todas las asignaciones y presencias activas de la cuadrilla, aunque se envíe una selección parcial.",
+    )
+    comentario: Optional[str] = Field(
+        None,
+        description="Nota de cierre de toda la cuadrilla; genera un único mensaje global y un registro de avance por falla atendida.",
+    )
 
 
 class LiberarTurnoDTO(BaseModel):

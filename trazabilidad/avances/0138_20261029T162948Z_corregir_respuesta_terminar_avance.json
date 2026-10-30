@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 138,
+  "id": "AV-0138",
+  "timestamp": "2026-10-29T16:29:48Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "AVANCE-BITACORA-COMPLETA",
+    "name": "Corregir bitácora en la respuesta de término de avance",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se reprodujeron y corrigieron dos defectos del término de avance: la respuesta omitía los comentarios anteriores y se admitían fallas sin asignación propia activa. Se mantuvo el registro único global y la copia de la nota en cada asignación cerrada.",
+  "scope": {
+    "planned": ["Revisar el flujo backend de notas de avance y bitácora", "Corregir defectos reproducidos", "Verificar regresiones"],
+    "completed": [
+      "Reproducción previa de omisión del historial en la respuesta y aceptación de selecciones inválidas",
+      "Validación íntegra de IDs seleccionados antes de mutaciones",
+      "Cálculo de asignaciones restantes incluso cuando el actor solo cierra presencia",
+      "Flush y lectura completa del DTO antes del commit para incluir toda la bitácora",
+      "Descripción del contrato en DTO y router",
+      "Catorce casos específicos y regresión de 63 pruebas aprobados"
+    ],
+    "pending": [],
+    "outOfScope": ["Inspeccionar o modificar frontend", "Modificar datos históricos", "Desplegar", "Cambiar esquema de BD"]
+  },
+  "changes": [
+    {"path": "app/modules/taller/services/cuadrilla_service.py", "action": "modified", "summary": "Selección válida, conservación de asignaciones restantes y respuesta completa"},
+    {"path": "app/modules/taller/dtos/cuadrilla_dto.py", "action": "modified", "summary": "Documentar alcance de selección y nota grupal"},
+    {"path": "app/modules/taller/api/cuadrilla_router.py", "action": "modified", "summary": "Documentar rechazo y bitácora completa"},
+    {"path": "tests/integration/test_bitacora_completa_y_avance_pendiente.py", "action": "modified", "summary": "Ampliar de cuatro a catorce casos: historial, selecciones implícitas, parciales, inválidas, ajenas y presencia sin asignaciones"},
+    {"path": "tests/unit/test_comentarios_predeterminados.py", "action": "modified", "summary": "El flujo de comentarios termina solo la falla propia; la otra fue reasignada previamente a otro mecánico"},
+    {"path": "GUIA_FRONTEND_BITACORA_COMPLETA.md", "action": "modified", "summary": "Describir el defecto backend confirmado y la corrección local"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registrar AV-0138"}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Leer la ficha completa antes de confirmar el avance",
+      "rationale": "La carga operacional usa noload para comentarios y la respuesta solo mostraba la nota agregada. Un cliente que reemplaza su ficha puede perder visualmente mensajes guardados.",
+      "consequences": "Se reutiliza SolicitudService con el repositorio inyectado después de flush y antes del commit. En PostgreSQL agrega una consulta agregada de lectura; los errores al construir la respuesta no confirman el avance."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Rechazar íntegramente selecciones sin asignación propia activa",
+      "rationale": "Se ignoraban IDs no asignados y podía cerrarse la presencia, registrarse una nota sin falla y pasar indebidamente a pendiente pese a existir asignaciones activas.",
+      "consequences": "Respuesta 422 previa a cualquier mutación; las fallas compartidas siguen incluyendo colaboradores. Se conserva la semántica de lista omitida o vacía y de presencia sin fallas propias."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar las copias por asignación y el mensaje global único",
+      "rationale": "La nota grupal pertenece a las asignaciones cerradas y al avance de la OT; quitar las copias perdería el contexto por falla.",
+      "consequences": "Se mantienen los datos históricos y el modelo existente. No se atribuye al frontend la causa del caso reportado sin revisar su implementación."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_bitacora_completa_y_avance_pendiente.py antes de corregir",
+      "result": "failed",
+      "evidence": "5 failed, 2 passed: dos respuestas omitían comentario previo (ID 3 ausente de [4]); tres selecciones inválidas devolvían éxito. Fallos esperados que reproducen los defectos."
+    },
+    {
+      "command": "ENVIRONMENT=dev_local STORAGE_PROVIDER=local PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -p pytest_asyncio.plugin tests/integration/test_bitacora_completa_y_avance_pendiente.py tests/integration/test_fase3_asignacion_atomica.py tests/unit/test_duracion_y_autoasignacion_colaborativa.py tests/unit/test_taller_service.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_realtime.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "63 passed in 24.19s. SQLite en memoria, sin conexión a Neon. Ejecución fuera del aislamiento por el socket interno de asyncio en Windows."
+    },
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar y desplegar la corrección mediante el flujo habitual; comprobar la pantalla con la respuesta corregida.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit ni push.", "Los archivos previos AV-0136 y AV-0137 se conservaron."]
+}

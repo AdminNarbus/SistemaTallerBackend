@@ -22,6 +22,8 @@ from app.modules.taller.dtos import (
     DetalleUpdateDTO,
 )
 from app.modules.taller.services.mappers import orm_to_solicitud_resumen_dto
+from app.modules.supervision.dtos.pauta_dto import SolicitudDetalleSupervisionDTO
+from app.modules.formularios.services.formulario_pauta_service import formulario_pauta_service
 
 from app.modules.supervision.constants import (
     DEFAULT_PAGE_SKIP,
@@ -447,10 +449,16 @@ class SupervisionService:
         self,
         db: AsyncSession,
         solicitud_id: int,
-    ) -> SolicitudDTO:
+    ) -> SolicitudDetalleSupervisionDTO:
         """Permite a la supervisora obtener el detalle completo de una OT."""
         logger.info("[SUPERVISION_SERVICE] Consultando solicitud_id=%s", solicitud_id)
-        return await self.mantencion.get_solicitud(db, solicitud_id=solicitud_id)
+        solicitud = await self.mantencion.get_solicitud(db, solicitud_id=solicitud_id)
+        progreso = await formulario_pauta_service.get_progreso(db, solicitud_id)
+        return SolicitudDetalleSupervisionDTO(
+            **solicitud.model_dump(exclude={"pauta_respuestas", "pauta_completada"}),
+            pauta_completada=progreso.total > 0 and progreso.revisadas >= progreso.total,
+            pauta_resumen=progreso,
+        )
 
     async def eliminar_falla(
         self,

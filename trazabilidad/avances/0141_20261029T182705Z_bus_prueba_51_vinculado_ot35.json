@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 141,
+  "id": "AV-0141",
+  "timestamp": "2026-10-29T18:27:05Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "CUADRILLA-AVANCES-BUS", "name": "Aplicar reparación autorizada del bus ficticio", "statusBefore": "awaiting_approval", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Tras autorización expresa del usuario para el vehículo completamente ficticio y temporal en producción, se creó el bus número 1 con ID autogenerado 51 y patente TEST-BUS-1, vinculando la OT artificial 35. El listado del backend para mecánicos ya lo devuelve en su primera página.",
+  "scope": {
+    "planned": ["Aplicar reparación aprobada", "Verificar vínculo y visibilidad", "Aclarar integración frontend de bitácora"],
+    "completed": ["Bus de prueba ID 51 creado y OT 35 vinculada mediante script probado", "Tarjeta del bus visible en primera página del servicio de mecánicos", "Datos de bus real ID 1/número 354 preservados", "Guía y estado actualizados"],
+    "pending": [],
+    "outOfScope": ["Desplegar código de bitácora", "Modificar frontend", "Eliminar ahora el bus de prueba"]
+  },
+  "changes": [
+    {"path": "Base configurada / buses y taller_solicitudes", "action": "modified", "summary": "Bus 51/TEST-BUS-1 creado y OT 35 vinculada con ejecución del script autorizado"},
+    {"path": "GUIA_FRONTEND_BITACORA_COMPLETA.md", "action": "modified", "summary": "Registrar reparación aplicada y aclarar cambio de fuente necesario en frontend"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Cerrar pendiente de AV-0140"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Aplicar la escritura tras nueva autorización explícita", "rationale": "El usuario confirmó expresamente crear el bus completamente ficticio en producción, con intención de retirarlo a futuro; esa confirmación resuelve el rechazo previo de revisión automática.", "consequences": "Se ejecutó exclusivamente el script protegido con --apply; la base asignó ID 51. No se utilizó ni alteró el registro de bus real ID 1."},
+    {"id": "DEC-002", "title": "Distinguir reparación de datos de despliegue de código", "rationale": "La creación del bus es efectiva en la base configurada, pero las correcciones de bitácora permanecen en el checkout local.", "consequences": "Se informa que frontend no necesita deduplicar, aunque debe consumir historial_avances cuando actualmente construye las notas desde asignaciones. No se afirma que el sitio productivo ya tenga ese contrato."}
+  ],
+  "verification": [
+    {"command": "ENVIRONMENT=dev_local STORAGE_PROVIDER=local python -m scripts.reparar_bus_prueba_uno --apply", "result": "passed", "evidence": "OT 35 vinculada a bus de prueba | numero=1 | bus_id=51 | patente=TEST-BUS-1. Código de salida 0."},
+    {"command": "BusesTallerService.listar con filtros predeterminados y SELECT de buses 1/51, transacción SERIALIZABLE postgresql_readonly=True", "result": "passed", "evidence": "Total catálogo 51; primera página contiene bus_id=51, n_bus=1, OT 35 PENDIENTE y numero_fallas_pendientes=3. SELECT confirma TEST-BUS-1/PRUEBA FICTICIA y bus_id=51 en OT 35. Registro ID 1 conserva n_bus=354, patente JFCP-26 y estado activo."},
+    {"command": "git diff --check y validación JSON del avance", "result": "passed", "evidence": "Sin errores de whitespace; JSON válido."}
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar por el flujo habitual el código validado y ajustar en frontend la fuente de avances por falla cuando corresponda. Conservar el bus marcado de prueba hasta que el usuario solicite retirarlo.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "develop", "commit": "2764d7f", "dirty": true},
+  "notes": ["Sin commit, push ni despliegue de código.", "No se programó eliminación futura; el usuario solo indicó su intención de retirarlo después.", "No fue necesario repetir las 114 pruebas porque no hubo cambios de lógica desde la suite aprobada."]
+}

@@ -202,6 +202,24 @@ class TallerRepository:
     async def get_bus_by_id(self, db: AsyncSession, bus_id: int) -> Optional[Bus]:
         return await db.get(Bus, bus_id)
 
+    async def vincular_solicitudes_sin_bus(self, db: AsyncSession, bus: Bus) -> None:
+        """Vincula registros por número normalizado sin tocar vínculos existentes."""
+        if not bus.n_bus:
+            return
+        await db.execute(
+            update(TallerSolicitud).where(
+                TallerSolicitud.bus_id.is_(None),
+                func.lower(func.trim(TallerSolicitud.n_bus)) == bus.n_bus.strip().lower(),
+            ).values(bus_id=bus.id)
+        )
+
+    async def tiene_estadia_abierta_bus(self, db: AsyncSession, bus_id: int) -> bool:
+        consulta = select(TallerSolicitudEstadia.id).join(TallerSolicitud).where(
+            TallerSolicitud.bus_id == bus_id,
+            TallerSolicitudEstadia.fecha_salida.is_(None),
+        ).limit(1)
+        return await db.scalar(consulta) is not None
+
     async def lock_bus_cycle(
         self, db: AsyncSession, bus_id: Optional[int], n_bus: Optional[str]
     ) -> None:

@@ -47,7 +47,8 @@ class DeviceRestrictionMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path
-        if path in EXCLUDED_PATHS or path.startswith("/uploads/"):
+        if (path in EXCLUDED_PATHS or path.startswith("/uploads/")
+                or (request.method == "GET" and path.startswith(f"{settings.API_V1_STR}/publica/"))):
             return await call_next(request)
 
         # 2. Si no están activas las restricciones, continuar sin latencia añadida

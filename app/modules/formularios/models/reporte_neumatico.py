@@ -20,6 +20,7 @@ class ReporteNeumatico(Base, TimestampMixin):
     __tablename__ = "reportes_neumaticos"
     __table_args__ = (
         CheckConstraint("json_array_length(ruedas) = 1", name="ck_neumaticos_rueda_unica"),
+        CheckConstraint("estado IN ('REGISTRADO', 'INFORMADO')", name="ck_neumaticos_estado"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -34,6 +35,7 @@ class ReporteNeumatico(Base, TimestampMixin):
         Integer, ForeignKey("buses.id", ondelete="SET NULL"), nullable=True, index=True
     )
     n_bus: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    estado: Mapped[str] = mapped_column(String(20), nullable=False, server_default="REGISTRADO")
 
     # Datos del formulario de neumáticos
     tipo_bus: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

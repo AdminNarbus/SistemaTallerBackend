@@ -19,6 +19,7 @@ from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
 from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
 from app.modules.taller.models.taller_ubicacion import Ciudad, Taller, OperacionResultado, TallerResultadoUbicacion, TallerResultadoColaborador
 from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
+from app.modules.formularios.models.comentario_neumatico import ComentarioNeumatico
 from app.modules.taller.models import historical_snapshots  # register insert hooks
 
 __all__ = [

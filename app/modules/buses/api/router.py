@@ -121,7 +121,12 @@ async def actualizar_en_taller(
         current_user.id,
     )
     return await bus_workshop_service.actualizar_en_taller(
-        db, bus_id=bus_id, en_taller=payload.en_taller, motivo=payload.motivo
+        db,
+        bus_id=bus_id,
+        en_taller=payload.en_taller,
+        motivo=payload.motivo,
+        actor_id=current_user.id,
+        actor_nombre=current_user.nombre_completo,
     )
 
 

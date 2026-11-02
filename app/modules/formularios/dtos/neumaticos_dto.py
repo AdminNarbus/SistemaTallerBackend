@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -50,6 +50,7 @@ class ReporteNeumaticoCreateDTO(ReporteNeumaticoBaseDTO):
 
 class ReporteNeumaticoResponseDTO(BaseModel):
     id: int
+    estado: Literal["REGISTRADO", "INFORMADO"] = "REGISTRADO"
     usuario_id: Optional[int] = None
     bus_id: Optional[int] = None
     n_bus: Optional[str] = None
@@ -96,3 +97,29 @@ class ReporteNeumaticoPaginadoDTO(BaseModel):
     page: int = Field(1, description="Página actual")
     page_size: int = Field(20, description="Cantidad de elementos por página")
     pages: int = Field(0, description="Total de páginas calculadas")
+
+
+class ComentarioNeumaticoCreateDTO(BaseModel):
+    comentario: str = Field(..., min_length=1, max_length=5000)
+
+    @field_validator("comentario", mode="before")
+    @classmethod
+    def limpiar_comentario(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ComentarioNeumaticoDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    reporte_id: int
+    usuario_id: int
+    comentario: str
+    fecha_registro: datetime
+
+
+class ReporteNeumaticoDetalleDTO(ReporteNeumaticoResponseDTO):
+    comentarios: list[ComentarioNeumaticoDTO] = Field(default_factory=list)
+
+
+class EstadoNeumaticoUpdateDTO(BaseModel):
+    estado: Literal["REGISTRADO", "INFORMADO"]

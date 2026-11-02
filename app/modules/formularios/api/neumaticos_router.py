@@ -5,9 +5,17 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import SessionDep, get_current_user
+from app.api.deps import SessionDep, get_current_user, require_current_user
+from sqlalchemy import select, update
+from app.modules.formularios.models.comentario_neumatico import ComentarioNeumatico
+from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
+from app.core.exceptions import NotFoundException
 from app.modules.auth.dtos.usuario_dto import UsuarioResponseDTO
 from app.modules.formularios.dtos.neumaticos_dto import (
+    ComentarioNeumaticoCreateDTO,
+    EstadoNeumaticoUpdateDTO,
+    ComentarioNeumaticoDTO,
+    ReporteNeumaticoDetalleDTO,
     FormularioNeumaticoResponseDTO,
     FormularioNeumaticoStatusDTO,
     ReporteNeumaticoCreateDTO,
@@ -131,13 +139,13 @@ async def listar_reportes_neumaticos(
 
 @router.get(
     "/neumaticos/reportes/{id}",
-    response_model=ReporteNeumaticoResponseDTO,
+    response_model=ReporteNeumaticoDetalleDTO,
     summary="Obtener reporte de neumático por ID",
     response_description="Detalle del reporte de neumático",
 )
 @router.get(
     "/reportes/{id}",
-    response_model=ReporteNeumaticoResponseDTO,
+    response_model=ReporteNeumaticoDetalleDTO,
     include_in_schema=False,
 )
 async def get_reporte_neumatico_by_id(
@@ -148,5 +156,40 @@ async def get_reporte_neumatico_by_id(
     Endpoint HTTP: Obtiene el detalle de un reporte de neumático específico por su ID.
     """
     logger.debug("Consultando reporte de neumático por ID=%s", id)
+    reporte = await formulario_neumatico_service.get_reporte_by_id(db=db, reporte_id=id)
+    resultado = await db.execute(
+        select(ComentarioNeumatico).where(ComentarioNeumatico.reporte_id == id)
+        .order_by(ComentarioNeumatico.fecha_registro, ComentarioNeumatico.id)
+    )
+    return ReporteNeumaticoDetalleDTO(**reporte.model_dump(), comentarios=resultado.scalars().all())
+
+
+@router.post("/neumaticos/reportes/{id}/comentarios", response_model=ComentarioNeumaticoDTO, status_code=status.HTTP_201_CREATED)
+async def agregar_comentario_neumatico(
+    id: int, dto: ComentarioNeumaticoCreateDTO,
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+    db: AsyncSession = SessionDep,
+):
+    await formulario_neumatico_service.get_reporte_by_id(db=db, reporte_id=id)
+    comentario = ComentarioNeumatico(reporte_id=id, usuario_id=current_user.id, comentario=dto.comentario)
+    db.add(comentario)
+    await db.commit()
+    await db.refresh(comentario)
+    return comentario
+
+
+@router.patch("/neumaticos/reportes/{id}/estado", response_model=ReporteNeumaticoResponseDTO)
+async def cambiar_estado_reporte_neumatico(
+    id: int, dto: EstadoNeumaticoUpdateDTO,
+    current_user: UsuarioResponseDTO = Depends(require_current_user),
+    db: AsyncSession = SessionDep,
+):
+    resultado = await db.execute(
+        update(ReporteNeumatico).where(ReporteNeumatico.id == id)
+        .values(estado=dto.estado).returning(ReporteNeumatico.id)
+    )
+    if resultado.scalar_one_or_none() is None:
+        raise NotFoundException(f"Reporte de neumático {id} no encontrado")
+    await db.commit()
     return await formulario_neumatico_service.get_reporte_by_id(db=db, reporte_id=id)
 

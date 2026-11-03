@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
         await realtime_runtime.start()
     try:
         # Ejecutar siembra de datos únicamente en entorno de desarrollo local/LAN
-        if settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
+        if settings.SEED_ON_STARTUP and settings.ENVIRONMENT in [AppEnvironment.DEV_LOCAL, AppEnvironment.DEV_LAN]:
             logger.info(
                 "[STARTUP] Entorno '%s': Ejecutando siembra de datos de prueba...",
                 settings.ENVIRONMENT.value,
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
             await seed_initial_data()
         else:
             logger.info(
-                "[STARTUP] Entorno '%s': Siembra de datos omitida (entorno productivo).",
+                "[STARTUP] Entorno '%s': Siembra de datos omitida por configuración o perfil.",
                 settings.ENVIRONMENT.value,
             )
 

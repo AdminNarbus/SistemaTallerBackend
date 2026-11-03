@@ -92,6 +92,20 @@
 - `motivo_salida` de estadías pasa a `TEXT` mediante migración `032_motivo_salida_estadia`, aplicada en dev_local para conservar motivos mayores a 50 caracteres.
 - `alembic check` detecta diferencias ajenas al cambio registradas en AV-0132; no se modificaron esas otras estructuras.
 
+## Simulación local del Dashboard (AV-0135)
+
+Base local `taller_narbus` cargada mediante Alembic `032_dashboard_simulados_local`:
+409 OT, 1.253 fallas, 397 estadías y 390 ubicaciones de atención. Carga opcional
+exclusiva `dev_local`; originales preservados. Ciclo downgrade/upgrade, idempotencia,
+93 pruebas y consultas PostgreSQL del dashboard verificados. Adaptaciones y límites
+en [Datos simulados locales](../docs/DATOS_SIMULADOS_LOCALES.md). `alembic check`
+detecta diferencias preexistentes: tabla `taller_correcciones_visitas` ausente y
+divergencias de definición/nombre en un índice y una restricción única.
+
+## Dashboard bajo demanda (AV-0132)
+
+Implementado en `feature/dashboard`: módulo de lectura en `/api/v1/dashboard` para Supervisor/Admin con indicadores, seis series, tabla, ficha por bus, cronología, datos de exportación y opciones de filtros. Agregaciones SQL sobre la conexión existente; sin resultados persistidos, tareas diarias, migraciones ni cambios de frontend. Contrato y diferencias del prototipo: [Guía frontend del dashboard](GUIA_FRONTEND_DASHBOARD.md). Verificación y límites de la regresión en AV-0132.
+
 ## Depuración de Fallas e Imágenes por Supervisión (AV-0130 - COMPLETADO)
 
 - **Eliminación de fallas con 1 clic:** Supervisión puede eliminar fallas duplicadas o erróneas en OTs abiertas (`DELETE /api/v1/supervision/solicitudes/{id}/detalles/{detalle_id}`). Desasocia evidencias enlazadas a la falla, elimina en cascada segura asignaciones y eventos de resolución, desactiva la presencia del mecánico si ya no le restan averías activas, y registra automáticamente en la bitácora inmutable: `"Se elimina falla '{falla}' por duplicidad"` (`tipo="SUPERVISION"`).

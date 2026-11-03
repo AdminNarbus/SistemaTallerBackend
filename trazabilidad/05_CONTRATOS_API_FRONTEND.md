@@ -1,5 +1,9 @@
 # Contratos de API para Frontend: Sistema Integral de Taller Narbus
 
+## Contrato adicional: Dashboard
+
+Consultar [Guía frontend del dashboard](GUIA_FRONTEND_DASHBOARD.md): GET autenticados en `/api/v1/dashboard`, DTOs de query, variantes de respuesta, paginación, filtros globales/locales, selección desde gráficos y datos de exportación. Respuestas `no-store`, cálculo bajo demanda y metadatos de consulta; el frontend actual todavía no está conectado.
+
 > **Documento Oficial de Integración Frontend-Backend**  
 > **Versión:** 3.0.0  
 > **Fecha de Actualización:** 2026-09-09  

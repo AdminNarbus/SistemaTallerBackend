@@ -1,5 +1,9 @@
 # Especificación de Módulos y Arquitectura Narbus Taller
 
+## Dashboard
+
+`app/modules/dashboard` sigue Router → Service → Repository y DTOs Pydantic. Prefijo `/api/v1/dashboard`, once rutas GET parametrizadas para indicadores, series, externos, solicitudes, resumen/fallas de bus, cronología/detalles/resumen y filtros. Modelos operacionales reutilizados; sin escrituras ni migraciones. [Payloads, respuestas y reglas](GUIA_FRONTEND_DASHBOARD.md).
+
 > **Versión:** 3.1.0  
 > **Fecha:** 2026-09-15  
 > **Total Endpoints:** 48 endpoints RESTful activos  

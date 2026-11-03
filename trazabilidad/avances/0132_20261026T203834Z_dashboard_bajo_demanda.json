@@ -1,0 +1,334 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 132,
+  "id": "AV-0132",
+  "timestamp": "2026-10-26T20:38:34.141277Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "DASH-1",
+    "name": "Dashboard bajo demanda",
+    "statusBefore": "planned",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Módulo Dashboard autenticado para Supervisor/Admin, con agregaciones SQL bajo demanda, filtros compartidos, once rutas GET y contratos frontend. Sin escrituras operacionales, snapshots, tareas diarias ni cambios de frontend.",
+  "scope": {
+    "planned": [
+      "Estructura modular y rama feature/dashboard",
+      "Indicadores, seis series, tabla y filtros",
+      "Ficha de bus, cronología e informe",
+      "DTOs, autorización, pruebas y trazabilidad"
+    ],
+    "completed": [
+      "Módulo con api/dtos/services/repository/models",
+      "Once operaciones GET tipadas y no-store",
+      "SQL PostgreSQL, mediana y calendario Santiago",
+      "Pruebas aisladas, servicios con mocks, permisos y N+1",
+      "Guía con endpoints, payloads, respuestas y matriz de controles",
+      "Verificación real de consultas en transacciones READ ONLY"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Frontend y generación de archivos PDF/XLSX",
+      "Siembras, migraciones y escrituras en Neon",
+      "Programación diaria, caché persistente y realtime",
+      "Push, merge y despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "README.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/api/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/api/dependencies.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/api/router.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/constants.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/buses_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/common.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/cronologia_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/filtros_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/indicadores_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/series_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/solicitudes_dto.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/models/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/base.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/bus_dashboard_repository.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/cronologia_repository.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/dashboard_repository.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/filter_repository.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/order_queries.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/relations.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/repository/sql_expressions.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/services/__init__.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/services/bus_dashboard_service.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/services/common.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/services/cronologia_service.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "app/modules/dashboard/services/dashboard_service.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "requirements.txt",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "tests/dashboard/conftest.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "tests/dashboard/test_dashboard_api.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "tests/dashboard/test_dashboard_queries.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "tests/dashboard/test_dashboard_security.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "tests/dashboard/test_dashboard_services.py",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/02_CONTENIDO_Y_ALCANZABLE_BACKEND.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/03_ESPECIFICACION_MODULOS_NARBUS.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/05_CONTRATOS_API_FRONTEND.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/06_CATALOGO_ENDPOINTS_PAYLOADS_RESPUESTAS.md",
+      "action": "modified",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_DASHBOARD.md",
+      "action": "created",
+      "summary": "Módulo, pruebas o documentación del contrato de dashboard bajo demanda."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Cálculo bajo demanda sin almacenar resultados",
+      "rationale": "Decisión final del usuario: consultar y calcular al abrir, filtrar, actualizar o exportar. Se descartó el corte diario de las 08:00.",
+      "consequences": "Solo GET/SELECT; nuevas OT visibles en la siguiente consulta. Sin tablas, migraciones, scheduler ni canal adicional."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Mantener la arquitectura y poblaciones reales del dashboard",
+      "rationale": "Lectura completa de aplicación, scripts y documentación; la ficha y cronología ejecutadas reciben filtros generales. Las tarjetas mezclan población histórica y última OT por bus de forma explícita.",
+      "consequences": "Consultas compartidas y guía que distingue período de creación, período del hito y referencia de antigüedad."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Agregaciones SQL y DTOs acotados",
+      "rationale": "Reglas .agents: evitar full-table fetch para estadísticas, N+1 y exposición ORM.",
+      "consequences": "CTEs y funciones SQL, medianas nativas, listas paginadas máximo 100 y rankings top 5; respuesta con metadatos y no-store."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Preservar ausencia e historia",
+      "rationale": "La base tiene cobertura parcial y fechas inconsistentes; el prototipo usaba IDs fijos, omitía asignaciones de OT y convertía negativos a cero.",
+      "consequences": "Mecánicos por rol, participación única, intervalos negativos null, sin cierres inferidos de comentarios y autoría histórica sin proyectar resolutor actual."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Pruebas sin escribir en la base operacional",
+      "rationale": "Restricción de verificación de la base y regla del usuario de no sembrar ni migrar Neon.",
+      "consequences": "SQLite en memoria para pruebas y PostgreSQL real solo en transacciones READ ONLY. Pruebas antiguas del corrector no habilitadas contra remoto."
+    },
+    {
+      "id": "DEC-006",
+      "title": "Compatibilidad de dependencias",
+      "rationale": "DTOs de query requieren FastAPI >=0.115 y Santiago requiere tzdata en Windows.",
+      "consequences": "Se actualizó el mínimo FastAPI y se declaró tzdata. Black se usó como herramienta local de formato, no dependencia de producción."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -m pytest tests/dashboard (incluido en la regresión final)",
+      "result": "passed",
+      "evidence": "87 casos nuevos: DTOs, endpoints, permisos, servicios con mocks, calendario/DST, ventanas 30 días, límites 7/28, consultas por lote, nulos y lectura bajo demanda."
+    },
+    {
+      "command": "python -m pytest -q --tb=no --ignore=tests/integration/test_fix_visitas_falsas_ot.py",
+      "result": "passed",
+      "evidence": "373 passed, 7 skipped, 7 warnings en 134.70 s. Advertencias existentes de Starlette HTTP 422; omisiones por binarios PostgreSQL locales ausentes."
+    },
+    {
+      "command": "python -m pytest -q (primer intento completo)",
+      "result": "failed",
+      "evidence": "374 passed, 7 skipped y 8 errores de configuración en el corrector antiguo de visitas: su guard rechazó la URL remota antes de conectar. No se desactivó esa protección ni se ejecutó el corrector contra Neon."
+    },
+    {
+      "command": "Verificación ASGI con conexión PostgreSQL dentro de SET TRANSACTION READ ONLY",
+      "result": "passed",
+      "evidence": "18 consultas principales y 11 consultas con filtros/selecciones/hito real respondieron HTTP 200. Normalización Unicode verificada. Sin lifespan, migraciones o siembras; rollback al cerrar."
+    },
+    {
+      "command": "python -m compileall -q app/modules/dashboard tests/dashboard; OpenAPI; git diff --check",
+      "result": "passed",
+      "evidence": "Módulo compila, once GET publicados sin body, modelos de entrada/salida tipados y diff sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar el consumidor frontend con la guía y revisar el cambio antes de publicar por GitFlow.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/dashboard",
+    "commit": null,
+    "baseCommit": "b0b9ea084748bb278ca2be0f5c42cde645f93aad",
+    "dirty": true
+  },
+  "notes": [
+    "No se modificaron los archivos del dashboard original ni .env.",
+    "Sin push, merge, despliegue ni commit automático.",
+    "Las respuestas separadas pueden observar cambios operacionales entre consultas; no se promete un corte común persistente."
+  ]
+}

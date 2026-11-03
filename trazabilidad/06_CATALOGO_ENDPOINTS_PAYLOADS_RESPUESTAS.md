@@ -1,5 +1,9 @@
 # Catálogo Exhaustivo de Endpoints, Payloads y Respuestas: Backend Taller Narbus
 
+## Dashboard — AV-0132
+
+Once rutas GET nuevas bajo `/api/v1/dashboard`, todas protegidas para Supervisor/Admin. Catálogo de rutas, parámetros y respuestas completo en [Guía frontend del dashboard](GUIA_FRONTEND_DASHBOARD.md), con once operaciones documentadas en OpenAPI (la guía agrupa las dos operaciones de fallas de bus). Sin body, endpoints de escritura, resultados almacenados ni exportaciones binarias.
+
 > **Documento Oficial de Especificación de Interfaz REST API**  
 > **Versión:** 2.5.0  
 > **Fecha de Actualización:** 2026-09-17  

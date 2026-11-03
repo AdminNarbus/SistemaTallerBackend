@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 135,
+  "id": "AV-0135",
+  "timestamp": "2026-10-27T14:17:40.686782+00:00",
+  "phase": "backend_local",
+  "milestone": {
+    "id": "LOCAL-DASHBOARD-SEED",
+    "name": "Carga de simulacion Dashboard mediante Alembic",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Snapshot simulado del Dashboard cargado en PostgreSQL local taller_narbus mediante revision 032 opcional.",
+  "scope": {
+    "planned": [
+      "Inspeccionar fuentes simuladas",
+      "Cargar con Alembic",
+      "Verificar relaciones y reversibilidad"
+    ],
+    "completed": [
+      "409 OT",
+      "1253 fallas",
+      "397 estadias",
+      "390 operaciones y ubicaciones",
+      "93 pruebas",
+      "Lectura de indicadores y seis series sobre PostgreSQL local"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Base remota",
+      "OT observacionales",
+      "Cambios de frontend",
+      "Reparar diferencias preexistentes del esquema"
+    ]
+  },
+  "changes": [
+    {
+      "path": "alembic/versions/032_dashboard_simulados_local.py",
+      "action": "created",
+      "summary": "Revision opt-in exclusiva local; downgrade selectivo y sincronizacion de secuencias"
+    },
+    {
+      "path": "alembic/data/dashboard_simulados_20261027.json.gz",
+      "action": "created",
+      "summary": "Snapshot con SHA-256 de fuentes, sin credenciales"
+    },
+    {
+      "path": "tests/unit/test_dashboard_simulados_migration.py",
+      "action": "created",
+      "summary": "Contrato de mapeo, integridad referencial, duplicados y control local"
+    },
+    {
+      "path": "docs/DATOS_SIMULADOS_LOCALES.md",
+      "action": "created",
+      "summary": "Comandos, adaptaciones, cantidades y limites"
+    },
+    {
+      "path": "README.md",
+      "action": "modified",
+      "summary": "Documentar carga local y verificacion"
+    },
+    {
+      "path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md",
+      "action": "modified",
+      "summary": "Documentar carga local y verificacion"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-135-001",
+      "title": "Carga local explicita",
+      "rationale": "El usuario solicita datos simulados solo en la base local.",
+      "consequences": "Requiere -x dashboard_simulados=1, loopback y dev_local; por defecto Alembic omite los datos."
+    },
+    {
+      "id": "DEC-135-002",
+      "title": "Resolver claves por maestros locales",
+      "rationale": "Los IDs del Dashboard no corresponden a los de la base local.",
+      "consequences": "Buses por numero, ciudades por codigo, roles por nombre; filas importadas usan ID fuente + 1000000 y ocho usuarios inactivos."
+    },
+    {
+      "id": "DEC-135-003",
+      "title": "Adaptacion explicita a restricciones vigentes",
+      "rationale": "Seis duplicados exactos de cuadrilla activa, origen SIMULACION y actores nulos no son compatibles con la base.",
+      "consequences": "Se omiten solo seis duplicados exactos; origen SUPERVISOR con comentario de simulacion y actor tecnico. Fuente preservada; 1451 asignaciones por falla completas."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic -x dashboard_simulados=1 upgrade head; downgrade 031; upgrade con opcion; upgrade repetido",
+      "result": "passed",
+      "evidence": "409 OT, 1253 fallas; downgrade conserva 128 usuarios y 93 buses originales; recarga sin duplicados."
+    },
+    {
+      "command": "pytest tests/unit/test_dashboard_simulados_migration.py tests/dashboard -q",
+      "result": "passed",
+      "evidence": "93 passed, 3 advertencias de deprecacion; ejecutado fuera de sandbox por bloqueo asincrono."
+    },
+    {
+      "command": "DashboardService indicators y seis series con sesion PostgreSQL local",
+      "result": "passed",
+      "evidence": "386 finalizadas, 12 pendientes, 4 en reparacion, 7 liberadas; talleres 232/82/76."
+    },
+    {
+      "command": "alembic check",
+      "result": "failed",
+      "evidence": "Diferencias previas: falta taller_correcciones_visitas, expresion de uq_ciudades_codigo_normalizado, nombre de unique operacion_id. Revision 032 solo inserta datos, no altera esquema."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Usar los datos desde la API local; resolver divergencias anteriores de modelos/migraciones en una tarea de esquema.",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "branch": "feature/dashboard",
+    "commit": "b0b9ea084748bb278ca2be0f5c42cde645f93aad",
+    "dirty": true
+  },
+  "notes": [
+    "Cambios preexistentes conservados.",
+    "No se modificaron archivos del Dashboard ni la base remota.",
+    "Datos sinteticos de septiembre 2026 a septiembre 2027; 50 buses de simulacion dentro de 93 locales."
+  ]
+}

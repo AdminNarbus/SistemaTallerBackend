@@ -2,6 +2,17 @@
 
 Proyecto backend para la gestión de taller desarrollado con **FastAPI**, **Python**, **PostgreSQL** y **SQLAlchemy 2.0** (Async & Sync support).
 
+## Dashboard de taller
+
+API de lectura bajo demanda en `/api/v1/dashboard`, protegida para Supervisor y Admin.
+Reutiliza la conexión existente, calcula en SQL y no guarda indicadores ni ejecuta tareas diarias.
+Contratos, filtros, ejemplos y matriz de controles en [Guía frontend del dashboard](trazabilidad/GUIA_FRONTEND_DASHBOARD.md).
+Pruebas aisladas: `python -m pytest tests/dashboard -q`.
+
+Datos de desarrollo: [Carga local de la simulación Dashboard](docs/DATOS_SIMULADOS_LOCALES.md).
+La revisión Alembic `032_dashboard_simulados_local` carga el snapshot solamente con
+`alembic -x dashboard_simulados=1 upgrade head`, en PostgreSQL local y `dev_local`.
+
 ---
 
 ## 🛠️ Tecnologías y Características

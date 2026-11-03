@@ -1,5 +1,9 @@
 # Contenido, Tecnologías y Alcance Técnico del Backend Narbus
 
+## Dashboard de taller bajo demanda
+
+Nuevo módulo de lectura con JWT y rol Supervisor/Admin, reutilizando Taller/Buses/Auth sin tablas propias. Calcula en SQL al consultar; no incluye interfaz, archivos del prototipo, almacenamiento de indicadores ni actualización diaria. La API proporciona datos paginados para gráficos, tabla, ficha y exportaciones. [Contrato y matriz de alcance](GUIA_FRONTEND_DASHBOARD.md).
+
 ## Tecnologías Utilizadas (Tech Stack)
 
 ### Core & Framework Web

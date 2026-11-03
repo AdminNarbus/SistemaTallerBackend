@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 134,
+  "id": "AV-0134",
+  "timestamp": "2026-10-27T13:44:19.633105Z",
+  "phase": "backend_local",
+  "milestone": {
+    "id": "LOCAL-POSTGRES",
+    "name": "Inicio de backend con PostgreSQL local",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Base taller_narbus creada en PostgreSQL local, migrada e integrada con backend dev_local.",
+  "scope": {
+    "planned": [
+      "Configurar .env local",
+      "Crear base y aplicar migraciones",
+      "Iniciar backend"
+    ],
+    "completed": [
+      "Conexion local configurada",
+      "Migraciones hasta 031_depuracion_supervision",
+      "Backend dev_local en 127.0.0.1:8000"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en base remota",
+      "Frontend"
+    ]
+  },
+  "changes": [
+    {
+      "path": ".env",
+      "action": "modified",
+      "summary": "Configuracion local y credenciales solicitadas; archivo ignorado por Git."
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Opcion SEED_ON_STARTUP, activa por defecto."
+    },
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Respeta SEED_ON_STARTUP para omitir siembra adicional."
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Documenta SEED_ON_STARTUP."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-134-001",
+      "title": "Esquema mediante Alembic",
+      "rationale": "Usar las migraciones oficiales sobre la base local nueva.",
+      "consequences": "25 tablas y datos iniciales incluidos por las migraciones."
+    },
+    {
+      "id": "DEC-134-002",
+      "title": "Siembra adicional desactivable",
+      "rationale": "Mantener dev_local sin ejecutar siembra de desarrollo adicional.",
+      "consequences": "SEED_ON_STARTUP=false en .env; comportamiento predeterminado preservado."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -m alembic upgrade head",
+      "result": "passed",
+      "evidence": "031_depuracion_supervision"
+    },
+    {
+      "command": "SELECT current_database(), inet_server_addr(), inet_server_port(); SELECT version_num FROM alembic_version",
+      "result": "passed",
+      "evidence": "taller_narbus, 127.0.0.1, 5432; revision 031_depuracion_supervision; 25 tablas."
+    },
+    {
+      "command": "HTTP GET /, /docs, /api/v1/openapi.json",
+      "result": "passed",
+      "evidence": "HTTP 200 en las tres rutas; startup confirma pool SQLAlchemy y siembra omitida."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir API local desde frontend.",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "branch": "feature/dashboard",
+    "commit": "b0b9ea084748bb278ca2be0f5c42cde645f93aad",
+    "dirty": true
+  },
+  "notes": [
+    "Cambios preexistentes conservados.",
+    "Migraciones incluyen usuarios y catalogos iniciales; no se ejecuto seed_initial_data.",
+    "Servidor iniciado en segundo plano, logs en logs/local-server.stdout.log y logs/local-server.stderr.log."
+  ]
+}

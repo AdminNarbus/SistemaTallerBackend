@@ -7,6 +7,7 @@ from app.modules.buses.api.router import router as buses_router
 from app.modules.formularios.api import formularios_router
 from app.modules.taller.api import router as taller_router
 from app.modules.supervision.api.router import router as supervision_router
+from app.modules.dashboard.api.router import router as dashboard_router
 
 api_router = APIRouter()
 
@@ -22,5 +23,6 @@ api_router.include_router(formularios_router, prefix="/formularios", tags=["Form
 api_router.include_router(taller_router, tags=["Operativa de Taller"])
 api_router.include_router(supervision_router, tags=["Supervisión y Auditoría"])
 api_router.include_router(publica_router)
+api_router.include_router(dashboard_router)
 
 

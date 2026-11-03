@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Perfil / Entorno de ejecución
     ENVIRONMENT: AppEnvironment = AppEnvironment.DEV_LOCAL
+    SEED_ON_STARTUP: bool = True
 
     # Host y Puerto
     HOST: Optional[str] = None

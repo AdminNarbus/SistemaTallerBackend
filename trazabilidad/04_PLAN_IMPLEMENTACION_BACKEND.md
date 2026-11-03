@@ -1,5 +1,9 @@
 # Plan de Implementación Backend
 
+## DASH-1 — Dashboard de consulta bajo demanda
+
+Implementación local en `feature/dashboard`: estructura modular, consultas SQL, autorización, DTOs, pruebas y contratos frontend. No se programó el corte diario de las 08:00: la decisión final es recalcular en cada consulta sin guardar resultados. El consumidor frontend debe reemplazar la carga de JSON por la API; ese trabajo y la publicación quedan fuera de esta entrega. Evidencias de validación en AV-0132 y [guía de integración](GUIA_FRONTEND_DASHBOARD.md).
+
 ## Fase 1: Arquitectura Base y Autenticación
 - [x] Configuración de FastAPI y conexión Async SQLAlchemy.
 - [x] Implementación de modelo 3NF y migraciones Alembic.

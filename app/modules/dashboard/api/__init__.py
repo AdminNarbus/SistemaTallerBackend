@@ -1,0 +1,1 @@
+"""Rutas autenticadas del dashboard."""

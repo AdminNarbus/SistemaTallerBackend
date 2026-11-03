@@ -16,6 +16,7 @@ from app.modules.taller.dtos.solicitud_dto import SolicitudDTO
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.taller.repository.buses_taller_repository import BusesTallerRepository
 from app.modules.taller.repository.taller_repository import TallerRepository, taller_repository
+from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
 from app.modules.taller.services.averias_service import AveriasService
 from app.modules.taller.services.mappers import orm_to_solicitud_dto
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
@@ -85,6 +86,10 @@ class BusesTallerService:
         es_nueva = solicitud is None
         if es_nueva:
             solicitud = await self._crear_ot(db, bus, registro.actor)
+        await aprobar_como_ot(db, solicitud, AprobacionOT(
+            registro.actor.id, registro.actor.nombre_completo,
+            "Atención iniciada desde Gestión de Buses",
+        ))
         payload = self._payload_falla(registro)
         solicitud = await self.averias.registrar_falla(db, solicitud.id, registro.actor.id, payload)
         logger.info("Falla registrada desde bus | bus_id=%s | ot_id=%s | nueva_ot=%s | autoasignar=%s",

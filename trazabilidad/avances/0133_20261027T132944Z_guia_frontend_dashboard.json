@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 133,
+  "id": "AV-0133",
+  "timestamp": "2026-10-27T13:29:44Z",
+  "phase": "backend_dashboard",
+  "milestone": {
+    "id": "DASHBOARD-FRONTEND-GUIDE",
+    "name": "Guía de consumo frontend del dashboard",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Ampliación de la guía frontend con las once rutas implementadas, payloads GET de ruta/query y respuestas completas de diecinueve variantes; filtros, selección, exportación paginada y ejemplos fetch.",
+  "scope": {
+    "planned": [
+      "Contrastar router, DTOs y reglas con el contrato documentado",
+      "Documentar endpoint, payload y respuesta para frontend"
+    ],
+    "completed": [
+      "Índice de once rutas y ejemplos de seis series y cuatro catálogos",
+      "Diecinueve entradas y respuestas completas con metadata y data",
+      "Filtros generales/locales, hitos, paginación, errores y actualización bajo demanda",
+      "Funciones JavaScript de consumo y recorrido de páginas para exportar",
+      "Validación documental contra DTOs y cobertura de rutas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios del frontend",
+      "Cambios de lógica backend",
+      "Consultas o escrituras en base de datos",
+      "Commit, push, merge y despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_DASHBOARD.md",
+      "action": "modified",
+      "summary": "Guía ampliada con contratos consumibles desde frontend y ejemplos completos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-133-001",
+      "title": "GET sin body y payload representado como path/query",
+      "rationale": "Todas las rutas implementadas reciben variables de ruta y DTOs de query; enviar un body JSON no corresponde al contrato.",
+      "consequences": "Los ejemplos muestran serialización de listas como parámetros repetidos y un helper fetch reutilizable."
+    },
+    {
+      "id": "DEC-133-002",
+      "title": "Respuestas ilustrativas validadas contra modelos reales",
+      "rationale": "La guía debe describir el backend implementado sin presentar ejemplos como datos reales de Neon.",
+      "consequences": "Se validaron diecinueve queries y diecinueve envelopes de respuesta sin acceder a la base."
+    },
+    {
+      "id": "DEC-133-003",
+      "title": "Conservar una guía única y reglas de integración acordadas",
+      "rationale": "La guía existente ya contenía matriz de controles, reglas de indicadores y diferencias del prototipo.",
+      "consequences": "Se amplió el documento existente manteniendo cálculo bajo demanda, filtros y exportación en el cliente."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Validación documental local Python/Pydantic y cobertura AST del router",
+      "result": "passed",
+      "evidence": "19 queries y 19 respuestas válidas; 42 bloques JSON legibles; 11 rutas, 6 series y 4 catálogos cubiertos; sin acceso a base de datos."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace en cambios rastreados."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar el frontend separado con los contratos documentados y validar su consumo autenticado.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/dashboard",
+    "commit": "b0b9ea084748bb278ca2be0f5c42cde645f93aad",
+    "dirty": true
+  },
+  "notes": [
+    "Esta tarea documental conserva la implementación pendiente de commit de la tarea anterior.",
+    "Los datos de ejemplo son ficticios y no contienen credenciales."
+  ]
+}

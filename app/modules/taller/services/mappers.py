@@ -113,7 +113,7 @@ def dict_to_solicitud_dto(
             )
         autores = vigente.get("mecanicos_resolvieron") or [] if vigente else []
         detalle["mecanicos_avance"] = autores if vigente and vigente.get("estado_nuevo") == "INCOMPLETA" else []
-        if vigente and vigente.get("estado_nuevo") == "RESUELTA":
+        if vigente and vigente.get("estado_nuevo") == "RESUELTA" and autores:
             detalle["mecanicos_resolvieron"] = autores
             detalle["mecanico_resolvio_nombre"] = ", ".join(
                 autor.get("nombre", "") for autor in autores if autor.get("nombre")
@@ -455,15 +455,16 @@ def orm_to_solicitud_dto(
                 )
 
         if det.resuelto:
-            if resultado_actual:
+            autores_resultado = _get_rel(evento_resultado, "mecanicos_resolutores") or []
+            if resultado_actual and autores_resultado:
                 mecanicos_resolvieron = [
                     MecanicoResumenDTO(
                         id=getattr(item, "mecanico_id", None) or 0,
                         nombre=getattr(item, "mecanico_nombre_snapshot", "No registrado"),
                     )
-                    for item in (_get_rel(evento_resultado, "mecanicos_resolutores") or [])
+                    for item in autores_resultado
                 ]
-            elif not mecanicos_resolvieron and det.mecanico_resolvio_id:
+            if not mecanicos_resolvieron and det.mecanico_resolvio_id:
                 u_res = _get_rel(det, "mecanico_resolvio")
                 nom_res = u_res.nombre_completo if u_res else (mec_resolvio_nombre or f"Mecánico #{det.mecanico_resolvio_id}")
                 mecanicos_resolvieron.append(
@@ -534,6 +535,9 @@ def orm_to_solicitud_dto(
                 falla=falla_dto,
                 descripcion_personalizada=det.descripcion_personalizada,
                 estado=getattr(det, "estado", None) or ("RESUELTA" if det.resuelto else "PENDIENTE"),
+                estado_revision=getattr(det, "estado_revision", None) or "PENDIENTE",
+                revisado_por_id=getattr(det, "revisado_por_id", None),
+                fecha_revision=getattr(det, "fecha_revision", None),
                 motivo_incompleto=getattr(det, "motivo_incompleto", None),
                 resuelto=det.resuelto,
                 reportado_por_id=getattr(det, "reportado_por_id", None),

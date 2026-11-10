@@ -44,6 +44,10 @@ from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, r
 
 from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
 
+from app.modules.taller.services.revision_falla_service import (
+    aprobar_detalle, exigir_falla_aprobada, puede_aprobar_reporte,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,12 +126,21 @@ class AveriasService:
         u = await self.repo.get_usuario_by_id(db, mecanico_id)
         mec_nombre = u.nombre_completo if u else "Mecánico"
 
+        rol_reportante = (getattr(getattr(u, "rol_rel", None), "nombre", None) or "").upper().strip()
+        revision_automatica = await puede_aprobar_reporte(
+            db, (self.repo, solicitud.id, mecanico_id, rol_reportante)
+        )
+
+        if rol_reportante == "MECANICO" and dto.autoasignar:
+            revision_automatica = True
+
         # 3. Crear nuevo detalle de falla
         nuevo_detalle = TallerSolicitudDetalle(
             solicitud_id=solicitud.id,
             falla_id=falla_id,
             descripcion_personalizada=texto,
             estado=EstadoFalla.PENDIENTE.value,
+            estado_revision="PENDIENTE",
             motivo_incompleto=None,
             resuelto=False,
             falta_repuesto=False,
@@ -136,6 +149,8 @@ class AveriasService:
             reportado_por_id=mecanico_id,
             asignaciones=[],
         )
+        if revision_automatica:
+            aprobar_detalle(nuevo_detalle, AprobacionOT(mecanico_id, mec_nombre, "Revisión automática", now))
         if f_obj:
             nuevo_detalle.falla = f_obj
         self.repo.add_detalle(db, nuevo_detalle)
@@ -226,7 +241,7 @@ class AveriasService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
-            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now))
+            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
             if solicitud.estado in [
                 EstadoSolicitud.PENDIENTE.value,
@@ -237,7 +252,7 @@ class AveriasService:
                     self.repo, db, solicitud, now
                 )
         else:
-            debe_autoasignar = dto.autoasignar and not es_supervisor
+            debe_autoasignar = dto.autoasignar and not es_supervisor and revision_automatica
             if debe_autoasignar:
                 nueva_asig = TallerAsignacionFalla(
                     solicitud_id=solicitud.id,
@@ -277,7 +292,7 @@ class AveriasService:
                     self.repo.add_mecanico(db, nueva_presencia)
                     attach_mecanico_safe(solicitud, nueva_presencia)
 
-                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now))
+                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
                 if solicitud.estado in [
                     EstadoSolicitud.PENDIENTE.value,
@@ -407,6 +422,7 @@ class AveriasService:
                 raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException("Detalle de falla no encontrado")
 
+        exigir_falla_aprobada(detalle_target)
         now = datetime.now(timezone.utc)
         estado_anterior = detalle_target.estado
         is_resuelta = target_estado == EstadoFalla.RESUELTA
@@ -605,6 +621,7 @@ class AveriasService:
                 f"Detalle con ID {detalle_id} no encontrado en la solicitud"
             )
 
+        exigir_falla_aprobada(detalle)
         if dto.falta_repuesto and getattr(detalle, "resuelto", False):
             raise BusinessRuleException(
                 "No se puede reportar falta de repuesto en una falla que ya fue marcada como resuelta. "
@@ -721,6 +738,7 @@ class AveriasService:
                 "Detalle de falla no encontrado en la orden de taller"
             )
 
+        exigir_falla_aprobada(detalle_target)
         now = datetime.now(timezone.utc)
         fecha_cambio_estado = dto.fecha_cambio_estado or now
         estado_anterior = detalle_target.estado
@@ -948,6 +966,10 @@ class AveriasService:
             raise BusinessRuleException(
                 "No se puede eliminar una falla que ya ha sido marcada como resuelta. Debe reabrirla previamente si desea descartarla."
             )
+
+        from app.modules.taller.repository.repuesto_repository import repuesto_repository
+        if await repuesto_repository.existe_uso(db, detalle_id):
+            raise BusinessRuleException("No se puede eliminar una falla con repuestos registrados")
 
         falla_nom = (
             detalle.descripcion_personalizada

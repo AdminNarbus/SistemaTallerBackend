@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 152,
+  "id": "AV-0152",
+  "timestamp": "2026-11-06T16:38:30.913971Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "AUTH-VISUAL-1",
+    "name": "Búsqueda flexible y rol visual",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "AV-0152: búsqueda por palabras en nombre/apellido/username compartida por usuarios y mecánicos. Rol VISUAL con consultas habilitadas y escrituras bloqueadas (403), incluidas rutas de autenticación opcional; login y refresh permitidos. Migración 040 y guía docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md. Implementación local; pendiente aplicación al entorno de despliegue e integración del frontend.",
+  "scope": {
+    "planned": [
+      "Búsqueda por primer nombre y apellido",
+      "Rol de solo lectura"
+    ],
+    "completed": [
+      "Filtro por términos compartido con mecánicos y conteos",
+      "Rol VISUAL y permisos de consulta",
+      "Protección global contra escrituras autenticadas como VISUAL",
+      "Migración 040 y pruebas locales"
+    ],
+    "pending": [
+      "Aplicar migración al desplegar"
+    ],
+    "outOfScope": [
+      "Cambios en el repositorio frontend",
+      "Despliegue de producción"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/auth/repository/user_repository.py",
+      "action": "modified",
+      "summary": "AND de palabras sobre nombre, apellido o username; comodines escapados."
+    },
+    {
+      "path": "app/api/deps.py",
+      "action": "modified",
+      "summary": "Acceso VISUAL por método HTTP y guardia global de escritura."
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Aplicación transversal de la guardia VISUAL."
+    },
+    {
+      "path": "app/modules/auth/constants.py",
+      "action": "modified",
+      "summary": "Nuevo rol reconocido por DTO y creación administrativa."
+    },
+    {
+      "path": "app/core/realtime/router.py",
+      "action": "modified",
+      "summary": "Recepción de eventos para VISUAL."
+    },
+    {
+      "path": "alembic/versions/040_rol_visual.py",
+      "action": "created",
+      "summary": "Alta idempotente del rol y reversión protegida por FK."
+    },
+    {
+      "path": "docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md",
+      "action": "created",
+      "summary": "Contrato de búsqueda, permisos y requisitos frontend."
+    },
+    {
+      "path": "tests/integration/test_visual_and_user_search.py",
+      "action": "created",
+      "summary": "Consultas, búsquedas, conteos, login, refresh y denegación de escrituras."
+    },
+    {
+      "path": "tests/unit/test_visual_permissions.py",
+      "action": "created",
+      "summary": "Pruebas de dependencias con resolución de usuario simulada."
+    },
+    {
+      "path": "tests/migrations/test_rol_visual_migration.py",
+      "action": "created",
+      "summary": "Ciclo de upgrade/downgrade/re-upgrade en SQLite temporal."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Todos los términos deben coincidir",
+      "rationale": "Permite omitir segundos nombres y apellidos sin mezclar usuarios que solo comparten una palabra.",
+      "consequences": "Lista, conteo y autocompletado usan el mismo filtro SQL."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Defensa común en el backend",
+      "rationale": "Ocultar botones no impide escrituras directas y existen rutas de autenticación opcional.",
+      "consequences": "VISUAL autenticado recibe 403 en escrituras; login y refresh continúan disponibles."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Consultas conservan sus filtros",
+      "rationale": "El nuevo rol modifica autorización, no semántica de consultas personales.",
+      "consequences": "mis-trabajos sigue filtrando por la cuenta autenticada; frontend requiere integración aparte."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest: credenciales + búsquedas/VISUAL + unitarias permisos + migración",
+      "result": "passed",
+      "evidence": "34 passed sobre SQLite temporal local."
+    },
+    {
+      "command": "pytest: test_auth_api.py + test_auth_service.py + test_buses_api.py",
+      "result": "passed",
+      "evidence": "32 passed sobre SQLite temporal local."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de espacios."
+    },
+    {
+      "command": "Suite conjunta de los siete archivos de pruebas afectados",
+      "result": "passed",
+      "evidence": "66 passed, 5 advertencias de dependencias/deprecación; 33.71 s. Contador de login aislado en fixture VISUAL."
+    },
+    {
+      "command": "ScriptDirectory.get_heads()",
+      "result": "passed",
+      "evidence": "Única revisión final: 040_rol_visual."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar backend con alembic upgrade head e integrar VISUAL en el frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "commit": null,
+    "dirty": true
+  },
+  "notes": [
+    "Sin cambios a datos de producción. Ciclo probado sobre la revisión 040 aislada, no sobre toda la cadena histórica.",
+    "Pruebas asíncronas ejecutadas fuera del aislamiento por bloqueo del event loop de Windows."
+  ]
+}

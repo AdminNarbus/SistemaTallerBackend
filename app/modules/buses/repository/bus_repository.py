@@ -17,6 +17,16 @@ class BusRepository:
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_horas_taller_totales(self, db: AsyncSession, bus_id: int) -> float:
+        """Agrega todas las OTs y sus visitas en SQL, sin cargar el historial ORM."""
+        from app.modules.taller.repository.telemetria_sql import horas_taller_por_solicitud
+        from app.modules.taller.models.taller_solicitud import TallerSolicitud
+        horas = horas_taller_por_solicitud(db)
+        stmt = select(func.coalesce(func.sum(horas), 0)).where(
+            TallerSolicitud.bus_id == bus_id, TallerSolicitud.es_ot.is_(True)
+        )
+        return round(float((await db.execute(stmt)).scalar_one()), 1)
+
     async def get_by_n_bus(self, db: AsyncSession, n_bus: str) -> Optional[Bus]:
         """Obtiene un bus por su número de máquina único."""
         stmt = select(Bus).where(func.lower(func.trim(Bus.n_bus)) == n_bus.strip().lower())

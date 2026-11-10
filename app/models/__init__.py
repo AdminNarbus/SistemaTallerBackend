@@ -1,8 +1,11 @@
 from app.core.base import Base, TimestampMixin
+from app.modules.taller.models.repuesto import Repuesto
+from app.modules.taller.models.taller_repuesto_utilizado import TallerRepuestoUtilizado
 from app.modules.taller.models.taller_consolidacion_archivo import TallerConsolidacionArchivo
 from app.modules.taller.models.taller_correccion_visita import TallerCorreccionVisita
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
+from app.modules.auth.models.conductor_sync import ConductorSync
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.categoria_falla import CategoriaFalla
 from app.modules.taller.models.falla_taller import FallaTaller

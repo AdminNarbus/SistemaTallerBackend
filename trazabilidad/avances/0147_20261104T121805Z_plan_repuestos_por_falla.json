@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 147,
+  "id": "AV-0147",
+  "timestamp": "2026-11-04T12:18:05Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REP-1-PLAN",
+    "name": "Planificar catálogo y registro de repuestos utilizados por falla",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Se documentó el plan de implementación backend para seleccionar artículos de un catálogo y registrar su uso en una falla concreta de OT. El diseño deriva OT y bus desde el detalle existente y conserva autor, fecha y anulaciones. La implementación de REP-1 permanece pendiente.",
+  "scope": {
+    "planned": [
+      "Revisar relaciones OT, falla y bus y los permisos existentes",
+      "Definir modelo, contratos, reglas e importación inicial",
+      "Documentar fases y criterios de aceptación"
+    ],
+    "completed": [
+      "Revisión del código de taller, permisos, bitácora, borrado de fallas y migraciones",
+      "Plan de dos tablas dentro del módulo taller con asociación al detalle concreto",
+      "Contratos API, carga de catálogo, fases y verificación documentados",
+      "Dependencia de dos heads de Alembic confirmada en el repositorio",
+      "Referencia REP-1 añadida al plan global"
+    ],
+    "pending": [
+      "Preparar rama de implementación y resolver la divergencia del grafo Alembic",
+      "Implementar modelos, migraciones, servicios, repositorios, DTOs y API",
+      "Preparar y ejecutar carga inicial y pruebas locales"
+    ],
+    "outOfScope": [
+      "Cantidades, stock, bodegas, ubicaciones, costos y compras",
+      "Cambios de código o de bases de datos durante esta tarea de planificación",
+      "Asociar por inferencia consumos históricos de Excel a fallas de la aplicación",
+      "Implementación frontend, commits, publicación y despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "trazabilidad/PLAN_IMPLEMENTACION_REPUESTOS_POR_FALLA.md",
+      "action": "created",
+      "summary": "Plan técnico de catálogo y trazabilidad por falla, con alcance mínimo y criterios verificables"
+    },
+    {
+      "path": "trazabilidad/04_PLAN_IMPLEMENTACION_BACKEND.md",
+      "action": "modified",
+      "summary": "Añadir REP-1 como planificado y enlazar el plan específico"
+    },
+    {
+      "path": "trazabilidad/avances/0147_20261104T121805Z_plan_repuestos_por_falla.json",
+      "action": "created",
+      "summary": "Registrar planificación, decisiones y dependencias pendientes"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Registrar uso sin inventario ni cantidades",
+      "rationale": "El usuario pidió únicamente una lista de artículos seleccionables y su vinculación a una falla.",
+      "consequences": "Los conteos reflejan asociaciones a fallas y no unidades consumidas ni existencias."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Vincular al detalle de falla concreto",
+      "rationale": "TallerSolicitudDetalle ya pertenece a una OT que identifica el bus; FallaTaller es solo el catálogo general.",
+      "consequences": "Se evitan bus_id y solicitud_id redundantes en la nueva tabla; también se admiten fallas personalizadas."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar usos mediante anulación y referencias restrictivas",
+      "rationale": "La trazabilidad no debe perderse al corregir una selección, desactivar un artículo o depurar una falla.",
+      "consequences": "Se proponen snapshots de identidad, una asociación vigente por falla/artículo y bloqueo del borrado de detalles que tengan usos incluso anulados."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Reutilizar el módulo taller y sus reglas operacionales",
+      "rationale": "El flujo se ejecuta sobre una falla de OT y ya existen autorización, bloqueo de OT y bitácora.",
+      "consequences": "El plan propone servicios específicos en taller, asignación activa para mecánico y acceso de supervisión; conserva el endpoint existente de falta de repuesto."
+    },
+    {
+      "id": "DEC-005",
+      "title": "Usar los maestros Excel para catálogo con reconciliación previa",
+      "rationale": "Los consumos históricos no identifican una falla concreta de esta aplicación.",
+      "consequences": "Se planifica vista previa y carga repetible por código, con conflictos explícitos y sin asociaciones históricas inventadas."
+    },
+    {
+      "id": "DEC-007",
+      "title": "Conservar recibos idempotentes sin añadir pasos manuales",
+      "rationale": "La unicidad de asociaciones vigentes no impide que un reintento tardío vuelva a crear un uso ya anulado.",
+      "consequences": "Se propone operacion_id técnico y reutilizar taller_resultado_operaciones para devolver el recibo original, rechazar UUID con distinto contenido y evitar reactivar usos por reintento."
+    },
+    {
+      "id": "DEC-006",
+      "title": "Resolver el grafo Alembic antes de agregar el esquema",
+      "rationale": "alembic heads confirmó 035_merge_dashboard_simulados y 036_estado_neumaticos como revisiones finales simultáneas.",
+      "consequences": "La implementación deberá revisar/unificar ambas ramas antes de fijar down_revision; no se cambian migraciones durante la planificación."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv/Scripts/python.exe -m alembic heads",
+      "result": "passed",
+      "evidence": "Inspección sin conexión a BD: dos heads, 035_merge_dashboard_simulados y 036_estado_neumaticos. Es una dependencia pendiente de implementación."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace en archivos rastreados al preparar el plan."
+    },
+    {
+      "command": "Validación PowerShell de contenido UTF-8, alcance, criterios y enlace del plan",
+      "result": "passed",
+      "evidence": "Plan marcado como implementación pendiente, modelo y criterios presentes, enlace desde plan global válido y sin espacios al final de línea."
+    },
+    {
+      "command": "pytest y ciclo de migraciones",
+      "result": "not_run",
+      "evidence": "Tarea de documentación y planificación: no se modificó código ni se aplicaron migraciones. Las pruebas necesarias se especifican en el plan."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar REP-1 por fases, comenzando por una rama feature y la revisión del grafo Alembic; después crear modelos y catálogo.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "main",
+    "commit": "fed8a323c4bd13737de08145c3e72396581a8a9f",
+    "dirty": true
+  },
+  "notes": [
+    "Los cinco archivos con modificaciones locales previas a la tarea se conservaron.",
+    "La planificación fue contrastada mediante dos revisiones paralelas de solo lectura sobre relaciones, permisos, contratos y migraciones.",
+    "Se documentó un plan; los endpoints, tablas e importador descritos aún no existen."
+  ]
+}

@@ -80,17 +80,23 @@ class UserRepository:
             stmt = stmt.join(Usuario.rol_rel).where(func.upper(Rol.nombre) == rol.upper().strip())
         if is_active is not None:
             stmt = stmt.where(Usuario.is_active == is_active)
-        if q and q.strip():
-            term = f"%{q.strip().lower()}%"
-            stmt = stmt.where(
-                or_(
-                    func.lower(Usuario.nombre).ilike(term),
-                    func.lower(Usuario.apellido).ilike(term),
-                    func.lower(Usuario.username).ilike(term),
-                    func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(term),
-                )
-            )
+        filtro_q = self._construir_filtro_usuario_q(q)
+        if filtro_q is not None:
+            stmt = stmt.where(filtro_q)
         return stmt
+
+    def _construir_filtro_usuario_q(self, q: Optional[str]):
+        """Busca todos los términos entre nombres, apellidos y username, sin exigir orden."""
+        if not q or not q.strip():
+            return None
+        return and_(*(
+            or_(
+                Usuario.nombre.icontains(term, autoescape=True),
+                Usuario.apellido.icontains(term, autoescape=True),
+                Usuario.username.icontains(term, autoescape=True),
+            )
+            for term in q.split()
+        ))
 
     async def get_all(
         self,
@@ -193,16 +199,8 @@ class UserRepository:
         return user
 
     def _construir_filtro_mecanico_q(self, q: Optional[str]):
-        """Construye condición de búsqueda para mecánicos por término q."""
-        if not q or not q.strip():
-            return None
-        pattern = f"%{q.strip()}%"
-        return or_(
-            Usuario.username.ilike(pattern),
-            Usuario.nombre.ilike(pattern),
-            Usuario.apellido.ilike(pattern),
-            func.concat(func.coalesce(Usuario.nombre, ""), " ", func.coalesce(Usuario.apellido, "")).ilike(pattern),
-        )
+        """Comparte la búsqueda flexible de usuarios con el autocompletado de mecánicos."""
+        return self._construir_filtro_usuario_q(q)
 
     def _construir_stmt_mecanicos(
         self, q: Optional[str] = None, exclude_id: Optional[int] = None

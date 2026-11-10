@@ -11,7 +11,7 @@ from app.modules.taller.dtos.estado_visible_dto import EstadoVisibleDTO
 class BusesMecanicoFiltroDTO(BaseModel):
     skip: int = Field(0, ge=0)
     limit: int = Field(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT)
-    q: Optional[str] = Field(None, max_length=100)
+    q: Optional[str] = Field(None, max_length=100, description="Prefijo del número de bus o patente; no busca coincidencias intermedias.")
     solo_activos: bool = True
 
 

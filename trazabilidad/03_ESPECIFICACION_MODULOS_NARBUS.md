@@ -1,5 +1,17 @@
 # Especificación de Módulos y Arquitectura Narbus Taller
 
+AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.
+
+AV-0152: búsqueda por palabras en nombre/apellido/username compartida por usuarios y mecánicos. Rol VISUAL con consultas habilitadas y escrituras bloqueadas (403), incluidas rutas de autenticación opcional; login y refresh permitidos. Migración 040 y guía docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md. Implementación local; pendiente aplicación al entorno de despliegue e integración del frontend.
+
+AV-0151: regla explícita del usuario para automático y script: el último registro devuelto por API para cada RUT determina estado, nombre y apellido. Existente con `activo=false` queda `is_active=false`; con `activo=true` se habilita. Si falta, se crea con ese estado. DTO incorpora contadores `habilitados` e `inhabilitados`. Se omiten únicamente registros inactivos cuyo RUT no permite construir una identidad válida; los duplicados de la fuente se consolidan.
+
+AV-0150: `python -m scripts.incorporar_conductores_neon --aplicar` usa `NEON_DATABASE_URL` o `--conexion-desde ARCHIVO` (lectura AST, sin ejecutar mantenimiento). Solo altas; omite identidades contradictorias e inactivos con RUT inválido. Apellido ausente se guarda vacío para compatibilidad con Neon NOT NULL.
+
+CON-SYNC-1: `POST /api/v1/interno/conductores/sincronizar`, protegido con `X-Conductores-Sync-Key`, devuelve periodo, estado y contadores. Crea y actualiza conductores por RUT; username sin puntos y con guion, contraseña bcrypt de primeros cuatro dígitos. [Contrato y reglas](../docs/SINCRONIZACION_CONDUCTORES.md).
+
+REP-1: catálogo de repuestos vacío y registro de cantidades informativas por falla, con bitácora y anulación trazable. Sin importación Excel ni stock. Ver [contratos de repuestos](GUIA_FRONTEND_REPUESTOS_POR_FALLA.md). Migraciones 037 y 038 pendientes de aplicación al entorno correspondiente.
+
 ## Dashboard
 
 `app/modules/dashboard` sigue Router → Service → Repository y DTOs Pydantic. Prefijo `/api/v1/dashboard`, once rutas GET parametrizadas para indicadores, series, externos, solicitudes, resumen/fallas de bus, cronología/detalles/resumen y filtros. Modelos operacionales reutilizados; sin escrituras ni migraciones. [Payloads, respuestas y reglas](GUIA_FRONTEND_DASHBOARD.md).
@@ -103,3 +115,21 @@
 - **Operación Servidor a Servidor:** I/O asíncrono no bloqueante con `asyncio.to_thread`.
 - **Modo Local:** Fallback automático a `./uploads/` cuando `STORAGE_PROVIDER=local`.
 - **Cero Cuellos de Botella:** Procesamiento en 1 solo request HTTP multipart en los endpoints de negocio sin endpoints previos de upload.
+
+
+## Revisión individual de fallas (2026-11-09)
+
+Implementados `estado_revision`, `revisado_por_id` y `fecha_revision`, aprobación individual por supervisión y aprobación de fallas seleccionadas al asignarse. Reportar sin asignación previa ni autoasignación deja revisión pendiente. Migración 041 preparada, pendiente de aplicar al entorno de despliegue. Contrato y reglas: [Revisión individual de fallas](../docs/REVISION_INDIVIDUAL_FALLAS.md).
+
+
+## Revisión completa de repuestos (2026-11-09)
+
+Verificados 42 casos de repuestos y 120 de regresión relacionada, sin fallos finales. Migración 038 y concurrencia verificadas en PostgreSQL temporal, sin diferencias entre sus tablas y los modelos. Corregidos edición con ID cero, consistencia UTC, validación de rol actual y aprobación de fallas en la conversión inicial a OT, manteniendo el alcance selectivo al asignarse. No se aplicaron migraciones a bases externas. Evidencias y límites: [Informe de revisión](../docs/REVISION_REPUESTOS_20261109.md).
+
+
+Guía de integración pendiente en frontend: [Revisión individual de fallas](GUIA_FRONTEND_REVISION_FALLAS.md), con contrato, aprobación selectiva, permisos, manejo de caché y checklist de aceptación. Documentada el 2026-11-09.
+
+
+### Permanencia física en taller — 2026-11-10
+
+Auditoría expone tiempo_taller, horas_en_taller y horas_taller_acumuladas con suma de visitas físicas y congelación de OTs cerradas. La ficha de bus incluye horas_taller_totales agregado en SQL sobre todas sus OTs. Sin migraciones. Contrato: docs/HORAS_REALES_TALLER.md. Verificación: 61 pruebas aprobadas.

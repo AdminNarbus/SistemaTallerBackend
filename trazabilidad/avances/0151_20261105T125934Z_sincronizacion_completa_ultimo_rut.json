@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 151,
+  "id": "AV-0151",
+  "timestamp": "2026-11-05T12:59:34Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "CON-SYNC-COMPLETO", "name": "Sincronización completa con último registro por RUT", "statusBefore": "pending", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Automático y script comparten resolución del último registro de API por RUT. Script ahora actualiza existentes y crea faltantes. Aplicación remota confirmada y verificada: 21 nuevos, 49 actualizados, 15 deshabilitados.",
+  "scope": {
+    "planned": ["Actualizar estado de conductores existentes y crear faltantes según la API", "Aplicar la regla del último registro por RUT tanto al automático como al script"],
+    "completed": ["Preparación compartida: última ocurrencia por RUT normalizado", "Script con sincronización completa predeterminada y --solo-nuevos opcional", "Contadores habilitados e inhabilitados", "43 pruebas aprobadas", "Neon: 21 creados, 49 actualizados, 283 sin cambios, 15 deshabilitados", "Verificación remota de solo lectura: 353 coincidentes, 128 activos, 225 inactivos, cero faltantes o diferencias"],
+    "pending": ["Corregir en fuente 9 registros inactivos sin RUT válido", "Desplegar y activar job mensual"],
+    "outOfScope": ["Inventar RUT ausentes o incompletos", "Modificar otros roles", "Cambiar esquema o ejecutar migraciones en Neon"]
+  },
+  "changes": [
+    {"path": "app/modules/auth/services/conductor_source.py", "action": "modified", "summary": "Preparación compartida de fuente, última ocurrencia por RUT e incidencias"},
+    {"path": "app/modules/auth/services/conductor_sync_service.py", "action": "modified", "summary": "Sincronización inmediata completa, revisión con rollback y contadores de estado"},
+    {"path": "app/modules/auth/dtos/conductor_sync_dto.py", "action": "modified", "summary": "Contadores de habilitaciones e inhabilitaciones"},
+    {"path": "scripts/incorporar_conductores_neon.py", "action": "modified", "summary": "Modo predeterminado completo y misma regla de duplicados que el automático"},
+    {"path": "tests", "action": "modified", "summary": "Último registro activo/inactivo, reactivación/desactivación y persistencia PostgreSQL"},
+    {"path": "docs/SINCRONIZACION_CONDUCTORES.md", "action": "modified", "summary": "Contrato corregido y resultado aplicado en Neon"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Último registro devuelto por API prevalece", "rationale": "El usuario eligió explícitamente esta política para los RUT repetidos y la extendió al automático y al script", "consequences": "48 registros repetidos consolidados en 353 identidades procesables; no se omiten grupos por contradicciones de estado"},
+    {"id": "DEC-002", "title": "Sincronización completa por defecto", "rationale": "El usuario aclaró que deben actualizarse los estados de existentes además de crear los faltantes", "consequences": "Se corrige el alcance limitado de la carga anterior; --solo-nuevos permanece como opción explícita"},
+    {"id": "DEC-003", "title": "No inventar RUT inválidos", "rationale": "9 registros inactivos carecen de un RUT utilizable como identidad y username normalizado", "consequences": "Se identifican en el informe; el resto de la sincronización continúa y no se bloquea por ellos"}
+  ],
+  "verification": [
+    {"command": "python -m pytest tests/unit/test_incorporar_conductores_neon.py tests/unit/test_conductor_sync_service.py tests/integration/test_conductor_sync_api.py tests/migrations/test_conductor_sync_migration.py -q", "result": "passed", "evidence": "43 passed in 7.84s"},
+    {"command": "python -m scripts.incorporar_conductores_neon --conexion-desde scripts/sanear_estadias_duplicadas.py --informe .tmp/sincronizacion_completa_neon_revision_20261105.json", "result": "passed", "evidence": "Revisión: 21 nuevos, 49 actualizados, 15 deshabilitaciones; sin commit"},
+    {"command": "python -m scripts.incorporar_conductores_neon --conexion-desde scripts/sanear_estadias_duplicadas.py --aplicar --informe .tmp/sincronizacion_completa_neon_aplicada_20261105.json", "result": "passed", "evidence": "Commit confirmado: recibidos=353, creados=21, actualizados=49, habilitados=0, inhabilitados=15, sin_cambios=283"},
+    {"command": "Verificación SELECT en transacción READ ONLY contra último padrón de API", "result": "passed", "evidence": ".tmp/sincronizacion_completa_neon_verificacion_20261105.json: ruts_fuente=353, faltantes=0, estados_distintos=0, datos_distintos=0, activos=128, inactivos=225, registros_reemplazados=48, rut_invalido=9"}
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar y activar el servicio mensual con la regla ya implementada; revisar los 9 RUT inválidos de fuente.",
+  "git": {"repository": "BackendTallerNarbus", "commit": null, "dirty": true},
+  "notes": ["No se ejecutaron migraciones ni cambios de configuración remota.", "La regla del último registro se aplica al orden recibido: no se ordena el padrón antes de consolidarlo.", "Conductores ausentes de la respuesta y usuarios de otros roles conservan su estado."]
+}

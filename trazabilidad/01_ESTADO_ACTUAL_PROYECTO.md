@@ -1,5 +1,17 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.
+
+AV-0152: búsqueda por palabras en nombre/apellido/username compartida por usuarios y mecánicos. Rol VISUAL con consultas habilitadas y escrituras bloqueadas (403), incluidas rutas de autenticación opcional; login y refresh permitidos. Migración 040 y guía docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md. Implementación local; pendiente aplicación al entorno de despliegue e integración del frontend.
+
+AV-0151: sincronización completa corregida en automático y script por instrucción del usuario: último registro de API por RUT prevalece; se actualizan existentes y se crean faltantes. Aplicado en Neon: 21 nuevos, 49 actualizados, 15 deshabilitados. Verificación: 353 coincidentes (128 activos, 225 inactivos), cero faltantes o diferencias. Solo 9 RUT inválidos omitidos; los duplicados ya no bloquean ni se omiten. 43 pruebas aprobadas. Activación del job mensual pendiente.
+
+AV-0150: carga urgente aplicada a Neon el 05-11-2026: 207 conductores nuevos, 100 cuentas existentes conservadas. Verificación posterior: cero altas pendientes entre 307 RUT procesables. Se omitieron 103 registros de origen por RUT inválido o duplicados contradictorios. Script `scripts/incorporar_conductores_neon.py`; 37 pruebas aprobadas.
+
+CON-SYNC-1: sincronización mensual de conductores implementada para el día 6 a las 23:59 en America/Santiago, con RUT normalizado y clave de cuatro dígitos. Registro mensual atómico y protección ante reintentos. Pendiente despliegue, migración 039, secreto y activación de Cloud Scheduler. Ver [guía operativa](../docs/SINCRONIZACION_CONDUCTORES.md).
+
+REP-1: catálogo de repuestos vacío y registro de cantidades informativas por falla, con bitácora y anulación trazable. Sin importación Excel ni stock. Ver [contratos de repuestos](GUIA_FRONTEND_REPUESTOS_POR_FALLA.md). Migraciones 037 y 038 pendientes de aplicación al entorno correspondiente.
+
 ## Validación para publicación Git Flow (AV-0146)
 
 - Cambios agrupados en `feature/bitacora-buses-pauta-supervision`: bitácora y cierre de cuadrilla, vínculo de buses y solicitudes, y pauta preventiva con múltiples revisores.
@@ -356,3 +368,21 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
   - **Guía Técnica de Frontend:** Publicada en `trazabilidad/GUIA_FRONTEND_RESOLUCION_GRUPAL_FALLAS.md`.
   - **100% de la Suite de Pruebas Aprobada:** 199 de 199 tests automatizados pasando exitosamente en 69.59s (100% de éxito).
 
+
+
+## Revisión individual de fallas (2026-11-09)
+
+Implementados `estado_revision`, `revisado_por_id` y `fecha_revision`, aprobación individual por supervisión y aprobación de fallas seleccionadas al asignarse. Reportar sin asignación previa ni autoasignación deja revisión pendiente. Migración 041 preparada, pendiente de aplicar al entorno de despliegue. Contrato y reglas: [Revisión individual de fallas](../docs/REVISION_INDIVIDUAL_FALLAS.md).
+
+
+## Revisión completa de repuestos (2026-11-09)
+
+Verificados 42 casos de repuestos y 120 de regresión relacionada, sin fallos finales. Migración 038 y concurrencia verificadas en PostgreSQL temporal, sin diferencias entre sus tablas y los modelos. Corregidos edición con ID cero, consistencia UTC, validación de rol actual y aprobación de fallas en la conversión inicial a OT, manteniendo el alcance selectivo al asignarse. No se aplicaron migraciones a bases externas. Evidencias y límites: [Informe de revisión](../docs/REVISION_REPUESTOS_20261109.md).
+
+
+Guía de integración pendiente en frontend: [Revisión individual de fallas](GUIA_FRONTEND_REVISION_FALLAS.md), con contrato, aprobación selectiva, permisos, manejo de caché y checklist de aceptación. Documentada el 2026-11-09.
+
+
+### Permanencia física en taller — 2026-11-10
+
+Auditoría expone tiempo_taller, horas_en_taller y horas_taller_acumuladas con suma de visitas físicas y congelación de OTs cerradas. La ficha de bus incluye horas_taller_totales agregado en SQL sobre todas sus OTs. Sin migraciones. Contrato: docs/HORAS_REALES_TALLER.md. Verificación: 61 pruebas aprobadas.

@@ -1,5 +1,43 @@
 # Plan de Implementación Backend
 
+AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.
+
+AV-0152: búsqueda por palabras en nombre/apellido/username compartida por usuarios y mecánicos. Rol VISUAL con consultas habilitadas y escrituras bloqueadas (403), incluidas rutas de autenticación opcional; login y refresh permitidos. Migración 040 y guía docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md. Implementación local; pendiente aplicación al entorno de despliegue e integración del frontend.
+
+## AV-0151 — Sincronización completa y último registro por RUT
+
+- [x] Compartir preparación de la fuente entre automático y script; prevalece última ocurrencia.
+- [x] Cambiar el script a altas y actualización de existentes por defecto.
+- [x] Aplicar a Neon: 21 nuevos, 49 actualizados, 15 deshabilitados.
+- [x] Verificar 353 RUT coincidentes, cero faltantes y cero diferencias de estado/datos.
+- [x] Aprobar 43 pruebas, incluidas reactivación/desactivación en ambos modos y PostgreSQL temporal.
+- [ ] Corregir en la fuente los 9 registros sin RUT válido; los duplicados ya están resueltos por regla explícita.
+- [ ] Desplegar y activar el job mensual conforme a la guía operativa.
+
+## AV-0150 — Altas urgentes en Neon
+
+- [x] Script de revisión y aplicación sin esperar al calendario mensual.
+- [x] 207 altas confirmadas el 05-11-2026; 100 cuentas existentes intactas.
+- [x] Verificación remota posterior: 307 cuentas procesables existentes, cero nuevas pendientes.
+- [x] 37 pruebas de importador, sincronización, API y PostgreSQL temporal aprobadas.
+- [ ] Resolver en la fuente 9 RUT inválidos y 94 registros en grupos duplicados contradictorios antes de activar la sincronización mensual estricta.
+
+## CON-SYNC-1 — Sincronización mensual de conductores
+
+- [x] Fuente HTTP validada, servicio y repositorio con commit único y lock PostgreSQL.
+- [x] Credenciales por RUT y actualización de estados sin afectar otros roles.
+- [x] Pruebas unitarias, API y migración/persistencia en PostgreSQL temporal (23 aprobadas).
+- [ ] Desplegar código y migración 039; configurar secreto y activar Cloud Scheduler (`59 23 6 * *`, America/Santiago).
+- Guía: [sincronización de conductores](../docs/SINCRONIZACION_CONDUCTORES.md).
+
+## REP-1 — Repuestos utilizados por falla
+
+- [x] Preparar el [plan específico de implementación](PLAN_IMPLEMENTACION_REPUESTOS_POR_FALLA.md) para catálogo y trazabilidad de artículos vinculados a una falla concreta de OT.
+- [x] Unificar los heads de Alembic y preparar la migración de repuestos.
+- [x] Implementar catálogo vacío, registro/anulación de uso, permisos y pruebas; sin importación Excel.
+
+Alcance acordado: identificar el repuesto utilizado, la cantidad declarada, la falla, el autor y la fecha; OT y bus se derivan de relaciones existentes. La cantidad es informativa, sin control de stock ni bodegas; el catálogo incluye precio neto e IVA informativos. La implementación local y sus contratos se describen en la guía de repuestos. Las migraciones aún deben aplicarse al entorno correspondiente.
+
 ## DASH-1 — Dashboard de consulta bajo demanda
 
 Implementación local en `feature/dashboard`: estructura modular, consultas SQL, autorización, DTOs, pruebas y contratos frontend. No se programó el corte diario de las 08:00: la decisión final es recalcular en cada consulta sin guardar resultados. El consumidor frontend debe reemplazar la carga de JSON por la API; ese trabajo y la publicación quedan fuera de esta entrega. Evidencias de validación en AV-0132 y [guía de integración](GUIA_FRONTEND_DASHBOARD.md).
@@ -78,3 +116,21 @@ Implementación local en `feature/dashboard`: estructura modular, consultas SQL,
 
 
 
+
+
+## Revisión individual de fallas (2026-11-09)
+
+Implementados `estado_revision`, `revisado_por_id` y `fecha_revision`, aprobación individual por supervisión y aprobación de fallas seleccionadas al asignarse. Reportar sin asignación previa ni autoasignación deja revisión pendiente. Migración 041 preparada, pendiente de aplicar al entorno de despliegue. Contrato y reglas: [Revisión individual de fallas](../docs/REVISION_INDIVIDUAL_FALLAS.md).
+
+
+## Revisión completa de repuestos (2026-11-09)
+
+Verificados 42 casos de repuestos y 120 de regresión relacionada, sin fallos finales. Migración 038 y concurrencia verificadas en PostgreSQL temporal, sin diferencias entre sus tablas y los modelos. Corregidos edición con ID cero, consistencia UTC, validación de rol actual y aprobación de fallas en la conversión inicial a OT, manteniendo el alcance selectivo al asignarse. No se aplicaron migraciones a bases externas. Evidencias y límites: [Informe de revisión](../docs/REVISION_REPUESTOS_20261109.md).
+
+
+Guía de integración pendiente en frontend: [Revisión individual de fallas](GUIA_FRONTEND_REVISION_FALLAS.md), con contrato, aprobación selectiva, permisos, manejo de caché y checklist de aceptación. Documentada el 2026-11-09.
+
+
+### Permanencia física en taller — 2026-11-10
+
+Auditoría expone tiempo_taller, horas_en_taller y horas_taller_acumuladas con suma de visitas físicas y congelación de OTs cerradas. La ficha de bus incluye horas_taller_totales agregado en SQL sobre todas sus OTs. Sin migraciones. Contrato: docs/HORAS_REALES_TALLER.md. Verificación: 61 pruebas aprobadas.

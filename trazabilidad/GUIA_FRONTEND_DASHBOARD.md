@@ -60,7 +60,7 @@ Omitir significa Todos; no enviar `all`, listas JSON ni valores separados por co
 GET /api/v1/dashboard/indicadores?meses=9&meses=10&anios=2026&estados=PENDIENTE&estados=EN_REPARACION
 ```
 
-Los payloads de query son DTOs con parámetros adicionales prohibidos. Bus/OT globales son exactos; las sugerencias son por prefijo. La OT local de tabla admite coincidencia parcial.
+Los payloads de query son DTOs con parámetros adicionales prohibidos. Bus/OT globales son exactos; las sugerencias son por prefijo. Los filtros locales tabla_ot y tabla_n_bus buscan por prefijo; escribir 1 incluye 1, 10 y 123, y excluye 21 y 315.
 
 ## Matriz de controles, cálculos y fuentes
 
@@ -1182,8 +1182,8 @@ Filtros generales y estos filtros locales adicionales:
 
 | Query | Regla |
 |---|---|
-| `tabla_n_bus` | Número exacto normalizado. |
-| `tabla_ot` | Subcadena del número de OT, con prefijo # opcional. |
+| `tabla_n_bus` | Prefijo del número normalizado de bus. |
+| `tabla_ot` | Prefijo del número de solicitud/OT, con # opcional. |
 | `tabla_estados` | Estados repetibles. |
 | `tabla_periodos` | Períodos YYYY-MM repetibles. |
 | `tabla_anios` | Años repetibles. |
@@ -1369,3 +1369,8 @@ Si un middleware rechaza el origen antes de ejecutar la ruta, su respuesta puede
 Las solicitudes y respuestas ilustrativas de las 19 variantes de este documento se validan contra los DTOs implementados. Las 19 variantes cubren once rutas: seis series comparten una ruta y cuatro catálogos comparten otra. La validación documental no consulta la base de datos ni sustituye una prueba de integración del frontend.
 
 Fuentes: `app/modules/dashboard/api/router.py`, `app/modules/dashboard/dtos/` y servicios/repositorios del módulo. OpenAPI publica los modelos de entrada y respuesta. Para integrar, comprobar autorización, arrays repetidos, cambio de filtros, paginación, cancelación de cargas, valores nulos y la igualdad entre selección del gráfico y tabla. Actualizar repite las consultas visibles manteniendo filtros.
+
+
+### Búsqueda en consola de mecánicos
+
+`GET /api/v1/taller/buses?q=1` filtra por inicio del número de bus o patente, sin distinguir mayúsculas y minúsculas. No coincide con números que solo contienen el término en posiciones intermedias. Se mantienen `skip`, `limit`, `solo_activos` y `X-Total-Count`. `pendientes` y `mis-trabajos` no exponen parámetros de búsqueda textual en su contrato actual.

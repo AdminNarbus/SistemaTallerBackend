@@ -222,6 +222,9 @@ class SolicitudDetalleDTO(BaseModel):
     falla: Optional[FallaTallerDTO] = None
     descripcion_personalizada: Optional[str] = None
     estado: str = EstadoFalla.PENDIENTE.value
+    estado_revision: str = "PENDIENTE"
+    revisado_por_id: Optional[int] = None
+    fecha_revision: Optional[datetime] = None
     motivo_incompleto: Optional[str] = None
     resuelto: bool
     reportado_por_id: Optional[int] = None

@@ -44,7 +44,7 @@ class UsuarioBaseDTO(BaseModel):
 
 
 class UsuarioCreateDTO(UsuarioBaseDTO):
-    password: str = Field(..., min_length=6, max_length=100)
+    password: str = Field(..., min_length=4, max_length=100)
 
     @field_validator("password", mode="before")
     @classmethod
@@ -58,13 +58,20 @@ class UsuarioCreateDTO(UsuarioBaseDTO):
 
 
 class UsuarioUpdateDTO(BaseModel):
-    """Campos personales editables mediante actualización parcial."""
+    """Datos personales y credenciales editables mediante actualización parcial."""
 
+    username: Optional[str] = Field(None, min_length=3, max_length=100)
+    password: Optional[str] = Field(None, min_length=4, max_length=100)
     nombre: Optional[str] = Field(None, max_length=100)
     apellido: Optional[str] = Field(None, max_length=100)
     telefono: Optional[str] = Field(None, max_length=30)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("username", "password", mode="before")
+    @classmethod
+    def normalizar_credenciales(cls, v: Any) -> Optional[str]:
+        return v.strip() if isinstance(v, str) else v
 
     @field_validator("nombre", "apellido", "telefono", mode="before")
     @classmethod

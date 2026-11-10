@@ -3,7 +3,7 @@ import os
 from enum import Enum
 from typing import Final, List, Optional, Union
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 30
@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Perfil / Entorno de ejecución
     ENVIRONMENT: AppEnvironment = AppEnvironment.DEV_LOCAL
     SEED_ON_STARTUP: bool = True
+
+    CONDUCTORES_SYNC_URL: str = "https://backendnarbus-100590754321.us-east4.run.app/api/v1/publico/conductores"
+    CONDUCTORES_SYNC_SECRET: Optional[SecretStr] = None
 
     # Host y Puerto
     HOST: Optional[str] = None

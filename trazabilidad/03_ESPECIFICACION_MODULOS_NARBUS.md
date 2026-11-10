@@ -103,3 +103,10 @@
 - **Operación Servidor a Servidor:** I/O asíncrono no bloqueante con `asyncio.to_thread`.
 - **Modo Local:** Fallback automático a `./uploads/` cuando `STORAGE_PROVIDER=local`.
 - **Cero Cuellos de Botella:** Procesamiento en 1 solo request HTTP multipart en los endpoints de negocio sin endpoints previos de upload.
+
+
+## Control de mantenciones y odómetro — 10 de noviembre de 2026
+
+Módulo backend independiente `control_mantenciones`, desarrollado en `feature/control-mantenciones-odometro`. Reutiliza buses y usuarios, agrega tres tablas y el intervalo opcional en buses mediante Alembic 037/038. Revisión de Excel sin persistencia, confirmación idempotente, mantenciones, kilometrajes, comentarios, panel, gráfico, proyección y exportaciones. Acceso Supervisor/Admin. Inicio sin datos del módulo; no se migró SQLite ni se conectó el frontend. Contratos y matriz de pruebas: [Guía del módulo](GUIA_FRONTEND_CONTROL_MANTENCIONES.md).
+
+Validación: 26 pruebas del módulo y 172 en regresión conjunta; ciclo Alembic reversible en PostgreSQL temporal y migración aplicada en dev_local con respaldo previo. `alembic check` del módulo sin diferencias; el check global conserva diferencias ajenas preexistentes documentadas en la guía.

@@ -147,3 +147,8 @@ Para aplicar las migraciones pendientes a la base de datos:
 ```bash
 alembic upgrade head
 ```
+
+
+## Control de mantenciones
+
+API protegida en `/api/v1/control-mantenciones`. Contratos, migraciones y pruebas en [la guía del módulo](trazabilidad/GUIA_FRONTEND_CONTROL_MANTENCIONES.md). La revisión de Excel permanece en el navegador hasta confirmar; este módulo no almacena adjuntos ni el Excel original.

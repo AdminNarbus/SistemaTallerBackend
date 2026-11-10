@@ -62,8 +62,8 @@ class SeriesQueryDTO(PageQueryDTO):
 
 
 class SolicitudesQueryDTO(SeriesQueryDTO):
-    tabla_n_bus: str | None = Field(None, max_length=50)
-    tabla_ot: str | None = Field(None, max_length=30)
+    tabla_n_bus: str | None = Field(None, max_length=50, description="Prefijo del número de bus para la tabla.")
+    tabla_ot: str | None = Field(None, max_length=30, description="Prefijo del número de solicitud/OT; 1 encuentra 1, 10 y 123, no 21.")
     tabla_estados: list[EstadoSolicitud | Literal["SOLICITADO"]] = Field(default_factory=list, max_length=6)
     tabla_periodos: list[Period] = Field(default_factory=list, max_length=MAX_LIMIT)
     tabla_anios: list[Year] = Field(default_factory=list, max_length=MAX_LIMIT)

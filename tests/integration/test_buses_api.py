@@ -120,7 +120,7 @@ async def test_egreso_conserva_motivo_y_cierra_estadia(
     await db_session.flush()
     solicitud = TallerSolicitud(
         es_ot=True,
-        n_bus=bus.n_bus, bus_id=bus.id, estado="EN_REPARACION",
+        n_bus=bus.n_bus, bus_id=bus.id, estado="PENDIENTE",
         fecha_creacion=ingreso, horas_taller_acumuladas=3,
     )
     db_session.add(solicitud)
@@ -149,7 +149,33 @@ async def test_egreso_conserva_motivo_y_cierra_estadia(
     assert estadia.motivo_salida == (motivo or "MOVIMIENTO_FISICO")
     assert float(estadia.horas_estadia) == pytest.approx(2, abs=0.1)
     assert float(solicitud.horas_taller_acumuladas) == pytest.approx(5, abs=0.1)
+    assert solicitud.estado == "PENDIENTE"
+
+
+@pytest.mark.asyncio
+async def test_no_permite_egreso_con_orden_en_reparacion(client, db_session, auth_headers_supervisor):
+    ingreso = datetime.now(timezone.utc) - timedelta(hours=2)
+    bus = Bus(n_bus="EGRESO-BLOQUEADO", patente="EG-0052", en_taller=True, is_active=True)
+    db_session.add(bus)
+    await db_session.flush()
+    solicitud = TallerSolicitud(es_ot=True, n_bus=bus.n_bus, bus_id=bus.id,
+                                estado="EN_REPARACION", fecha_creacion=ingreso)
+    db_session.add(solicitud)
+    await db_session.flush()
+    estadia = TallerSolicitudEstadia(solicitud_id=solicitud.id, numero_visita=1, fecha_ingreso=ingreso)
+    db_session.add(estadia)
+    await db_session.commit()
+
+    response = await client.patch(f"/api/v1/buses/{bus.id}/en-taller",
+                                  json={"en_taller": False}, headers=auth_headers_supervisor)
+
+    assert response.status_code == 422
+    await db_session.refresh(bus)
+    await db_session.refresh(solicitud)
+    await db_session.refresh(estadia)
+    assert bus.en_taller is True
     assert solicitud.estado == "EN_REPARACION"
+    assert estadia.fecha_salida is None
 
 
 @pytest.mark.asyncio

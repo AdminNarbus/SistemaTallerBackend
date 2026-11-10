@@ -123,8 +123,10 @@ class SolicitudResumenDTO(EstadoVisibleDTO):
         None, description="Nombre del conductor/usuario que generó la OT (usuario_creador_nombre)"
     )
     tiempo_taller: Optional[float] = Field(
-        None, description="Antigüedad de la OT en horas desde fecha_creacion hasta ahora. Nombre del campo conservado por compatibilidad con los listados."
+        None, description="Antigüedad de la OT en horas desde fecha_creacion hasta ahora. En auditoría representa permanencia física real."
     )
+    horas_en_taller: Optional[float] = Field(None, description="Permanencia física real acumulada en auditoría")
+    horas_taller_acumuladas: Optional[float] = Field(None, description="Horas físicas acumuladas en auditoría")
     numero_fallas: int = Field(
         0, description="Número de fallas contextual: en pendientes son las disponibles sin resolver, en mis trabajos son las asignadas al mecánico"
     )

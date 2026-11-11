@@ -176,9 +176,9 @@ class OrderQueries:
     def _table_conditions(self, filters):
         c, clauses = self.o.c, []
         if filters.tabla_n_bus:
-            clauses.append(BusKey(c.n_bus) == filters.tabla_n_bus)
+            clauses.append(BusKey(c.n_bus).startswith(filters.tabla_n_bus, autoescape=True))
         if filters.tabla_ot:
-            clauses.append(cast(c.id, String).contains(filters.tabla_ot, autoescape=True))
+            clauses.append(cast(c.id, String).startswith(filters.tabla_ot, autoescape=True))
         if filters.tabla_estados:
             clauses.append(c.estado.in_(filters.tabla_estados))
         if filters.tabla_periodos:

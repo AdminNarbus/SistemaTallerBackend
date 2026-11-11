@@ -2,6 +2,8 @@
 
 Proyecto backend para la gestión de taller desarrollado con **FastAPI**, **Python**, **PostgreSQL** y **SQLAlchemy 2.0** (Async & Sync support).
 
+Sincronización mensual de conductores: [configuración y activación con Cloud Scheduler](docs/SINCRONIZACION_CONDUCTORES.md).
+
 ## Dashboard de taller
 
 API de lectura bajo demanda en `/api/v1/dashboard`, protegida para Supervisor y Admin.

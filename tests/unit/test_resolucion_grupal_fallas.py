@@ -212,6 +212,11 @@ async def test_resolver_falla_supervisora_con_lista_mecanicos(db_session, seed_t
     )
     det_id = solicitud.detalles[0].id
 
+    from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_solicitud
+    await aprobar_solicitud(db_session, solicitud.id, AprobacionOT(
+        supervisor.id, supervisor.nombre_completo, "Autorizar fallas antes de registrar resultados"
+    ))
+
     # --- ACT: Supervisora resuelve indicando 2 mecánicos explícitamente ---
     dto = CheckFallaDTO(
         estado="RESUELTA",
@@ -258,6 +263,9 @@ async def test_resolver_falla_supervisora_con_lista_mecanicos(db_session, seed_t
         ),
         conductor.id,
     )
+    await aprobar_solicitud(db_session, solicitud2.id, AprobacionOT(
+        supervisor.id, supervisor.nombre_completo, "Autorizar fallas antes de registrar resultados"
+    ))
     det2_id = solicitud2.detalles[0].id
     dto_singular = CheckFallaDTO(mecanico_id=mecanico1.id)
     res2 = await taller_service.averias_srv.resolver_falla_supervisora(

@@ -38,6 +38,8 @@ from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, r
 from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
 from app.modules.taller.services.solicitud_service import SolicitudService
 
+from app.modules.taller.services.revision_falla_service import aprobar_detalle
+
 logger = logging.getLogger(__name__)
 
 
@@ -578,7 +580,9 @@ class CuadrillaService:
                 attach_mecanico_safe(solicitud, nueva_presencia)
                 presencias_activas_existentes.add(m_id)
 
-        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", fecha_evento=now))
+        for d_id in dict.fromkeys(dto.detalles_ids):
+            aprobar_detalle(sol_detalles_map[d_id], AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", now))
+        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", fecha_evento=now, detalles_ids=tuple(dto.detalles_ids)))
 
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,
@@ -726,7 +730,9 @@ class CuadrillaService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
-        await aprobar_como_ot(db, solicitud, AprobacionOT(supervisor_id, sup_nom, "Asignación por supervisión", fecha_evento=now))
+        for d_id in dict.fromkeys(dto.detalles_ids):
+            aprobar_detalle(sol_detalles_map[d_id], AprobacionOT(supervisor_id, sup_nom, "Asignación por supervisión", now))
+        await aprobar_como_ot(db, solicitud, AprobacionOT(supervisor_id, sup_nom, "Asignación por supervisión", fecha_evento=now, detalles_ids=tuple(dto.detalles_ids)))
 
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,

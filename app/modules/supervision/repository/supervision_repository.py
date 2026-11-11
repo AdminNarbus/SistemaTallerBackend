@@ -617,7 +617,13 @@ class SupervisionRepository:
                            ), 0) as reincidencias_30d
                     FROM taller_solicitudes s
                     WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
-                      AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                      AND (
+                          CAST(:estado AS VARCHAR) IS NULL
+                          OR (CAST(:estado AS VARCHAR) IN ('SOLICITUD', 'REPORTADO')
+                              AND (s.es_ot = false OR s.estado IS NULL))
+                          OR (CAST(:estado AS VARCHAR) NOT IN ('SOLICITUD', 'REPORTADO')
+                              AND s.es_ot = true AND s.estado = CAST(:estado AS VARCHAR))
+                      )
                       AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                       AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
                       AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
@@ -809,7 +815,11 @@ class SupervisionRepository:
         if n_bus and n_bus.strip():
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))
         if estado and estado.strip():
-            stmt = stmt.where(TallerSolicitud.estado == estado.upper().strip())
+            estado_norm = estado.strip().upper()
+            if estado_norm in ("SOLICITUD", "REPORTADO"):
+                stmt = stmt.where(or_(TallerSolicitud.es_ot.is_(False), TallerSolicitud.estado.is_(None)))
+            else:
+                stmt = stmt.where(TallerSolicitud.es_ot.is_(True), TallerSolicitud.estado == estado_norm)
         if fecha_desde:
             stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
         if fecha_hasta:
@@ -899,7 +909,13 @@ class SupervisionRepository:
                 SELECT COUNT(*)::int
                 FROM taller_solicitudes s
                 WHERE (CAST(:n_bus AS VARCHAR) IS NULL OR s.n_bus ILIKE CAST(:n_bus_pattern AS VARCHAR))
-                  AND (CAST(:estado AS VARCHAR) IS NULL OR s.estado = CAST(:estado AS VARCHAR))
+                  AND (
+                          CAST(:estado AS VARCHAR) IS NULL
+                          OR (CAST(:estado AS VARCHAR) IN ('SOLICITUD', 'REPORTADO')
+                              AND (s.es_ot = false OR s.estado IS NULL))
+                          OR (CAST(:estado AS VARCHAR) NOT IN ('SOLICITUD', 'REPORTADO')
+                              AND s.es_ot = true AND s.estado = CAST(:estado AS VARCHAR))
+                      )
                   AND (CAST(:fecha_desde AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion >= CAST(:fecha_desde AS TIMESTAMPTZ))
                   AND (CAST(:fecha_hasta AS TIMESTAMPTZ) IS NULL OR s.fecha_actualizacion <= CAST(:fecha_hasta AS TIMESTAMPTZ))
                   AND (CAST(:mecanico_nombre AS VARCHAR) IS NULL OR EXISTS (
@@ -936,7 +952,11 @@ class SupervisionRepository:
         if n_bus and n_bus.strip():
             stmt = stmt.where(TallerSolicitud.n_bus.ilike(f"%{n_bus.strip()}%"))
         if estado and estado.strip():
-            stmt = stmt.where(TallerSolicitud.estado == estado.upper().strip())
+            estado_norm = estado.strip().upper()
+            if estado_norm in ("SOLICITUD", "REPORTADO"):
+                stmt = stmt.where(or_(TallerSolicitud.es_ot.is_(False), TallerSolicitud.estado.is_(None)))
+            else:
+                stmt = stmt.where(TallerSolicitud.es_ot.is_(True), TallerSolicitud.estado == estado_norm)
         if fecha_desde:
             stmt = stmt.where(TallerSolicitud.fecha_actualizacion >= fecha_desde)
         if fecha_hasta:

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 160,
+  "id": "AV-0160",
+  "timestamp": "2026-11-11T13:29:01.372819+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CONDUCTORES-TIMER",
+    "name": "Timer interno de conductores",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Sustituir propuesta de scheduler externo por timer interno solicitado por el usuario.",
+  "scope": {
+    "planned": [
+      "Timer en lifespan",
+      "Retirar propuesta GitHub Actions",
+      "Pruebas aisladas"
+    ],
+    "completed": [
+      "Timer mensual production con recuperación y reintentos",
+      "Cancelación al apagar y sesiones propias",
+      "Workflow descartado y documentación actualizada",
+      "32 pruebas aprobadas"
+    ],
+    "pending": [
+      "Despliegue"
+    ],
+    "outOfScope": [
+      "Cambios de recursos Cloud Run",
+      "Ejecución en producción"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/main.py",
+      "action": "modified",
+      "summary": "Gestionar ciclo de vida del timer"
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Habilitación configurable"
+    },
+    {
+      "path": "docs/SINCRONIZACION_CONDUCTORES.md",
+      "action": "modified",
+      "summary": "Documentar timer interno"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Usar temporizador interno",
+      "rationale": "Petición explícita del usuario de evitar schedulers externos.",
+      "consequences": "La ejecución depende de instancia y CPU activas; recupera pendiente al reiniciar."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Reutilizar servicio mensual",
+      "rationale": "Conservar lock distribuido e idempotencia persistente.",
+      "consequences": "No se duplican cambios entre procesos; secreto requerido solo para la ruta manual opcional."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_conductor_sync_timer.py tests/unit/test_conductor_sync_service.py tests/integration/test_conductor_sync_api.py -q",
+      "result": "passed",
+      "evidence": "32 passed in 1.05s; sin llamadas a producción"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar backend con las migraciones aplicadas.",
+  "notes": [
+    "Sin modificaciones de infraestructura externa."
+  ]
+}

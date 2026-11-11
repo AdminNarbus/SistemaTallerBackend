@@ -117,6 +117,13 @@ class BusFleetService:
                     "Finalice o cierre las OTs primero, o envíe 'forzar=true'."
                 )
 
+        solicitud = await self.taller_repo.get_solicitud_activa_por_bus(db, bus_id, None)
+        if solicitud and solicitud.estado == "EN_REPARACION":
+            raise BusinessRuleException(
+                "No se puede dar de baja un bus con una orden en reparación. "
+                "Libere o finalice la orden primero."
+            )
+
         now = datetime.now(timezone.utc)
         bus.is_active = False
         bus.en_taller = False

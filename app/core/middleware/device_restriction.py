@@ -16,6 +16,8 @@ EXCLUDED_PATHS: Set[str] = {
     "/",
     "/health",
     f"{settings.API_V1_STR}/health",
+    # Autenticación independiente por secreto; Cloud Scheduler no envía Origin.
+    f"{settings.API_V1_STR}/interno/conductores/sincronizar",
     "/docs",
     "/redoc",
     "/openapi.json",

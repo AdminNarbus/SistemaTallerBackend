@@ -386,3 +386,8 @@ Guía de integración pendiente en frontend: [Revisión individual de fallas](GU
 ### Permanencia física en taller — 2026-11-10
 
 Auditoría expone tiempo_taller, horas_en_taller y horas_taller_acumuladas con suma de visitas físicas y congelación de OTs cerradas. La ficha de bus incluye horas_taller_totales agregado en SQL sobre todas sus OTs. Sin migraciones. Contrato: docs/HORAS_REALES_TALLER.md. Verificación: 61 pruebas aprobadas.
+
+
+### Temporizador interno de conductores — 2026-11-11
+
+Sincronización mensual dentro del lifespan FastAPI en production, habilitada por defecto con CONDUCTORES_SYNC_TIMER_ENABLED. Comprueba cada 60 s, recupera el último período vencido al iniciar y reintenta errores a los 300 s. Reutiliza lock y deduplicación mensual PostgreSQL. Sin Cloud Scheduler ni GitHub Actions; el secreto HTTP no es necesario para el timer. Cloud Run requiere una instancia activa y CPU disponible para trabajar sin tráfico. 32 pruebas aprobadas. Detalle: docs/SINCRONIZACION_CONDUCTORES.md.

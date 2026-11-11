@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 161,
+  "id": "AV-0161",
+  "timestamp": "2026-11-11T13:36:50.462239+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "RELEASE-2026-11-11",
+    "name": "Release conductores y repuestos",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Preparar publicación autorizada en GitHub y main mediante release GitFlow.",
+  "scope": {
+    "planned": [
+      "Integrar timer en develop",
+      "Publicar release a main y sincronizar develop"
+    ],
+    "completed": [
+      "Feature de timer integrada con merge explícito",
+      "256 pruebas aprobadas",
+      "Alembic con head único 041_revision_fallas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Ejecución manual de migraciones en producción",
+      "Configuración de recursos Cloud Run"
+    ]
+  },
+  "changes": [
+    {
+      "path": "Git: release/2026.11.11-conductores-repuestos",
+      "action": "modified",
+      "summary": "Release de funcionalidades pendientes y timer interno"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Usar rama release entre develop y main",
+      "rationale": "Publicación explícitamente solicitada por el usuario respetando GitFlow.",
+      "consequences": "Conservar historial de features y sincronizar main de vuelta en develop."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest: 26 archivos de pruebas de funcionalidades, timer, servicios, API y migraciones",
+      "result": "passed",
+      "evidence": "256 passed, 12 warnings in 105.46s"
+    },
+    {
+      "command": "alembic heads",
+      "result": "passed",
+      "evidence": "041_revision_fallas (head)"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Publicar las ramas y verificar hashes remotos.",
+  "notes": [
+    "El push y hashes finales se comprueban en la sesión Git."
+  ]
+}

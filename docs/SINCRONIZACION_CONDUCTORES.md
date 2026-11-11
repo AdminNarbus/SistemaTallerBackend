@@ -6,7 +6,7 @@ registro de cada RUT en la API. Resultado de esta ejecución: 21 cuentas creadas
 353 RUT coincidentes, 128 activos y 225 inactivos, sin faltantes ni diferencias
 de estado/datos. Se consolidaron 48 registros repetidos y se omitieron solo 9
 registros inactivos sin RUT válido. La misma regla está implementada en el servicio
-mensual; su despliegue y activación en Cloud Scheduler siguen pendientes.
+mensual; su despliegue con el temporizador interno sigue pendiente.
 
 ## Sincronización inmediata en Neon
 
@@ -57,8 +57,7 @@ bcrypt de sus primeros cuatro dígitos.
 
 ## Servicio mensual
 
-Estado mensual: implementado y verificable localmente. No se ha desplegado ni
-creado el job de Cloud Scheduler. La primera carga urgente del 5 de noviembre de 2026
+Estado mensual: implementado y verificable localmente. El timer interno está preparado; requiere desplegar la versión actual. La primera carga urgente del 5 de noviembre de 2026
 sí se ejecutó en Neon: 207 cuentas nuevas, 100 existentes conservadas y 103
 registros de origen omitidos (9 con RUT inválido y 94 en grupos contradictorios).
 La revisión de esa primera carga encontró cero altas pendientes entre los 307 RUT
@@ -83,49 +82,34 @@ que procesó. Ese filtro inicial de duplicados quedó reemplazado por la regla d
 
 ## Programación y autenticación
 
-Cloud Scheduler debe llamar mediante POST a
-`/api/v1/interno/conductores/sincronizar` del **backend de taller** (la URL de
-destino no es necesariamente la URL del backend que publica la lista).
+## Temporizador interno del backend
 
-Cron: `59 23 6 * *`, zona `America/Santiago`: día 6 de cada mes a las 23:59,
-con cambios de horario de Chile. Configuración según la
-[documentación oficial de Cloud Scheduler](https://docs.cloud.google.com/scheduler/docs/configuring/cron-job-schedules).
-No se usa un temporizador dentro de FastAPI: Cloud Scheduler despierta el servicio.
+La sincronización automática se ejecuta dentro de FastAPI, sin Cloud Scheduler
+ni GitHub Actions. Se inicia con el lifespan únicamente en `production`, con
+`CONDUCTORES_SYNC_TIMER_ENABLED=true` (valor predeterminado).
 
-Configurar `CONDUCTORES_SYNC_SECRET` con un secreto aleatorio de al menos 32 bytes
-en el entorno del backend, preferentemente desde Secret Manager. No usar la clave
-JWT ni la clave del frontend. El job envía el mismo valor en
-`X-Conductores-Sync-Key`. Sin configuración o con clave incorrecta devuelve 403.
-La excepción de validación de Origin aplica solo a esta ruta, que exige su propio secreto.
+Comprueba el período cada 60 segundos. Al vencer el día 6 a las 23:59 de
+America/Santiago, ejecuta la sincronización mensual. Al arrancar recupera el
+último período vencido si no está completado. Los errores se reintentan a los
+300 segundos. El apagado cancela la tarea y cierra su sesión de base de datos.
+El lock PostgreSQL y el registro mensual existentes evitan duplicados entre
+instancias. Los meses ya completados no vuelven a modificar cuentas.
 
-Aplicar `alembic upgrade head` mediante el procedimiento habitual de despliegue.
-La revisión `039_conductor_sync` depende de la `038_repuestos_por_falla` existente.
-El contenedor actual aplica las migraciones al arrancar si `RUN_MIGRATIONS=true`.
+Solo hace falta `CONDUCTORES_SYNC_URL` (ya tiene URL por defecto); no requiere
+configurar `CONDUCTORES_SYNC_SECRET` ni un encabezado para el temporizador.
+El endpoint HTTP existente queda como alternativa manual opcional: sigue
+exigiendo secreto y devuelve 403 si no está configurado. No se abre al público.
 
-Una vez desplegado el código y configurado el secreto, ejecutar en PowerShell
-con Google Cloud CLI autenticado (reemplazar proyecto y URL de taller):
+Aplicar las migraciones antes de iniciar la nueva versión. Para desactivar el
+timer, usar `CONDUCTORES_SYNC_TIMER_ENABLED=false`.
 
-```powershell
-$schedulerProject = 'ID_PROYECTO'
-$tallerBackendUrl = 'https://URL_BACKEND_TALLER'
-# Cargar en esta sesión CONDUCTORES_SYNC_SECRET desde el gestor de secretos.
-gcloud services enable cloudscheduler.googleapis.com --project=$schedulerProject
-gcloud scheduler jobs create http sincronizar-conductores-mensual `
-  --project=$schedulerProject --location=us-east4 `
-  --schedule='59 23 6 * *' --time-zone='America/Santiago' `
-  --uri="$tallerBackendUrl/api/v1/interno/conductores/sincronizar" `
-  --http-method=POST `
-  --headers="X-Conductores-Sync-Key=$env:CONDUCTORES_SYNC_SECRET" `
-  --attempt-deadline=600s --max-retry-attempts=5 `
-  --min-backoff=60s --max-backoff=3600s --max-retry-duration=86400s
-```
-
-Si Cloud Run exige IAM, agregar `--oidc-service-account-email=CUENTA_SERVICIO`
-y `--oidc-token-audience=$tallerBackendUrl` y dar a esa cuenta `roles/run.invoker`.
-Mantener también el secreto de aplicación. Ajustar timeout de Cloud Run a 600s:
-la comprobación y generación bcrypt de cientos de cuentas puede tardar varios minutos.
-Los parámetros se documentan en la
-[referencia oficial de gcloud](https://docs.cloud.google.com/sdk/gcloud/reference/scheduler/jobs/create/http).
+En Cloud Run, el timer no puede despertar un contenedor escalado a cero ni
+avanzar mientras no se le asigne CPU. Para ejecutarlo sin depender del tráfico,
+configurar al menos una instancia mínima y CPU disponible durante toda la vida
+de la instancia (facturación por instancia). Esto puede aumentar el costo del
+servicio. Con escalado a cero recupera lo pendiente al volver a arrancar, sin
+garantizar ejecución a la hora programada. Las pausas del proceso también
+pueden retrasar el timer. No se han cambiado recursos de Google Cloud.
 
 ## Reintentos, ejecución manual y auditoría
 

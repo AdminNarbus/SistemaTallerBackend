@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     CONDUCTORES_SYNC_URL: str = "https://backendnarbus-100590754321.us-east4.run.app/api/v1/publico/conductores"
     CONDUCTORES_SYNC_SECRET: Optional[SecretStr] = None
+    CONDUCTORES_SYNC_TIMER_ENABLED: bool = True
 
     # Host y Puerto
     HOST: Optional[str] = None

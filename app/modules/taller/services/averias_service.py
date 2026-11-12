@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.core.exceptions import BusinessRuleException, NotFoundException, PermissionException
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.auth.constants import RolUsuario
 from app.modules.taller.constants import EstadoSolicitud, EstadoFalla, TipoEventoFalla
@@ -49,6 +49,20 @@ from app.modules.taller.services.revision_falla_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def resolver_fecha_reporte(
+    dto: AgregarFallaDTO, rol_reportante: str, ahora: datetime,
+) -> datetime:
+    """Valida el reporte histórico sin modificar las fechas de auditoría."""
+    if dto.fecha_reporte is None:
+        return ahora
+    if rol_reportante not in (RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value):
+        raise PermissionException("Solo supervisores y administradores pueden indicar fecha_reporte")
+    fecha_reporte = dto.fecha_reporte.astimezone(timezone.utc)
+    if fecha_reporte > ahora:
+        raise BusinessRuleException("La fecha de reporte no puede ser futura")
+    return fecha_reporte
 
 
 class AveriasService:
@@ -127,6 +141,7 @@ class AveriasService:
         mec_nombre = u.nombre_completo if u else "Mecánico"
 
         rol_reportante = (getattr(getattr(u, "rol_rel", None), "nombre", None) or "").upper().strip()
+        fecha_reporte = resolver_fecha_reporte(dto, rol_reportante, now)
         revision_automatica = await puede_aprobar_reporte(
             db, (self.repo, solicitud.id, mecanico_id, rol_reportante)
         )
@@ -145,7 +160,7 @@ class AveriasService:
             resuelto=False,
             falta_repuesto=False,
             fecha_creacion=now,
-            fecha_reporte=now,
+            fecha_reporte=fecha_reporte,
             reportado_por_id=mecanico_id,
             asignaciones=[],
         )
@@ -164,7 +179,7 @@ class AveriasService:
             actor_nombre=mec_nombre,
             estado_anterior=None,
             estado_nuevo=EstadoFalla.PENDIENTE.value,
-            fecha_evento=now,
+            fecha_evento=fecha_reporte,
             comentario=texto,
         )
 

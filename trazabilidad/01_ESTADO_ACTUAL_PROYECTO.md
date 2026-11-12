@@ -1,5 +1,12 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+AV-0167: creación de fallas desde supervisión admite `fecha_reporte` opcional
+con zona horaria, solo para SUPERVISOR/ADMIN y sin fechas futuras. Se conserva
+`fecha_creacion` automática; el evento REPORTADA usa la fecha reportada y su
+registro conserva la fecha de auditoría. Sin migración ni despliegue.
+67 pruebas aprobadas. Contrato y ejemplos para frontend en
+[fecha de reporte](../docs/FECHA_REPORTE_FALLAS_FRONTEND.md).
+
 AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.
 
 AV-0152: búsqueda por palabras en nombre/apellido/username compartida por usuarios y mecánicos. Rol VISUAL con consultas habilitadas y escrituras bloqueadas (403), incluidas rutas de autenticación opcional; login y refresh permitidos. Migración 040 y guía docs/ROL_VISUAL_Y_BUSQUEDA_USUARIOS.md. Implementación local; pendiente aplicación al entorno de despliegue e integración del frontend.

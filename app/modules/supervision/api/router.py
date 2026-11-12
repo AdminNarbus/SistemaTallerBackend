@@ -316,7 +316,12 @@ async def get_solicitud_supervision(
     response_model=SolicitudDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Añadir falla a una OT desde el panel de supervisión",
-    description="Permite a la supervisora agregar una avería a una OT existente, con opción de dejarla pendiente, asignarla de inmediato a un mecánico o registrarla como ya resuelta.",
+    description=(
+        "Permite a la supervisora agregar una avería a una OT existente, con opción de dejarla "
+        "pendiente, asignarla de inmediato a un mecánico o registrarla como ya resuelta. "
+        "Admite fecha_reporte opcional con zona horaria, actual o anterior; "
+        "fecha_creacion conserva el momento de ingreso al sistema."
+    ),
 )
 async def agregar_falla_supervision(
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),

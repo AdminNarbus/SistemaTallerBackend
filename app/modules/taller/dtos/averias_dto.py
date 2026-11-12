@@ -71,6 +71,11 @@ class AgregarFallaDTO(BaseModel):
     mecanico_id: Optional[int] = None
     usuario_id: Optional[int] = None
     resuelto: bool = False
+    fecha_reporte: Optional[AwareDatetime] = Field(
+        None,
+        description="Fecha real del reporte, con zona horaria, solo para SUPERVISOR/ADMIN. "
+        "No admite fechas futuras; omitida o null usa la fecha actual. No cambia fecha_creacion.",
+    )
 
     @property
     def texto_falla(self) -> str:

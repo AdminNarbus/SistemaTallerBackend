@@ -377,6 +377,12 @@ El backend de **Narbus Taller** es una API REST construida en FastAPI con base d
 
 
 
+## Control de mantenciones y odómetro — 10 de noviembre de 2026
+
+Módulo backend independiente `control_mantenciones`, desarrollado en `feature/control-mantenciones-odometro`. Reutiliza buses y usuarios, agrega tres tablas y el intervalo opcional en buses mediante Alembic 037/038. Revisión de Excel sin persistencia, confirmación idempotente, mantenciones, kilometrajes, comentarios, panel, gráfico, proyección y exportaciones. Acceso Supervisor/Admin. Inicio sin datos del módulo; no se migró SQLite ni se conectó el frontend. Contratos y matriz de pruebas: [Guía del módulo](GUIA_FRONTEND_CONTROL_MANTENCIONES.md).
+
+Validación: 26 pruebas del módulo y 172 en regresión conjunta; ciclo Alembic reversible en PostgreSQL temporal y migración aplicada en dev_local con respaldo previo. `alembic check` del módulo sin diferencias; el check global conserva diferencias ajenas preexistentes documentadas en la guía.
+
 ## Revisión individual de fallas (2026-11-09)
 
 Implementados `estado_revision`, `revisado_por_id` y `fecha_revision`, aprobación individual por supervisión y aprobación de fallas seleccionadas al asignarse. Reportar sin asignación previa ni autoasignación deja revisión pendiente. Migración 041 preparada, pendiente de aplicar al entorno de despliegue. Contrato y reglas: [Revisión individual de fallas](../docs/REVISION_INDIVIDUAL_FALLAS.md).

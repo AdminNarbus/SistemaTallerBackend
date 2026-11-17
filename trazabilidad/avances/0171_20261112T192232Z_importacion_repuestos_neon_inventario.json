@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 171,
+  "id": "AV-0171",
+  "timestamp": "2026-11-12T19:22:32.494499+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEON-IMPORTACION-REPUESTOS-INVENTARIO",
+    "name": "Cargar catálogo de repuestos desde inventario Excel",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Importados 1403 repuestos del Excel proporcionado por el usuario a public.repuestos de Neon, utilizando únicamente columnas existentes y convirtiendo cuatro juegos de pastillas a unidades individuales según confirmación de cuatro pastillas por juego.",
+  "scope": {
+    "planned": ["Leer inventario y revisar esquema de Neon", "Mapear columnas compatibles", "Convertir pastillas a unidades individuales", "Respaldar, importar y verificar"],
+    "completed": ["Catálogo inicialmente vacío confirmado", "1403 códigos únicos validados con RepuestoCrearDTO", "594 filas de códigos de reserva sin descripción omitidas", "Importación atómica por código Python y asyncpg", "Comparación de todos los campos importados antes y después del commit mediante conexión nueva"],
+    "pending": [],
+    "outOfScope": ["Agregar columnas o cambiar el esquema", "Importar stock, ubicaciones, fabricante o totales no soportados", "Cambiar el Excel original", "Modificar o publicar los pendientes de WhatsApp"]
+  },
+  "changes": [
+    {
+      "path": "Neon: taller/public.repuestos",
+      "action": "modified",
+      "summary": "Catálogo de cero a 1403 repuestos activos, sin duplicados ni nombres vacíos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Respetar las columnas del catálogo vigente",
+      "rationale": "El usuario solicitó importar solo columnas soportadas por la base de datos.",
+      "consequences": "Cod. se asigna a codigo; Descripcion a nombre; Parte a parte; Unidad a unidad; $ Unit a precio; Iva a iva; Clasificacion General a clasificacion; Clasificacion 1 a clasificacion_1 y Modelo a modelo. is_active usa el valor true y los campos internos son generados por la base."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Convertir cada referencia de pastillas a una unidad individual",
+      "rationale": "El usuario pidió pastillas por unidad y confirmó que cada juego contiene cuatro.",
+      "consequences": "Los códigos 1423, 1424, 1425 y 2175 conservan su identificación y parte, usan descripción PASTILLA DE FRENO y unidad UN. Precio e IVA del juego se dividen entre cuatro; no se crean cuatro artículos repetidos."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Omitir códigos reservados y conservar importes exactos",
+      "rationale": "594 filas solo contienen un código sin descripción ni otros datos. El IVA del archivo es un importe calculado al 19 por ciento, no una tasa almacenada en el catálogo.",
+      "consequences": "Se omiten las filas sin artículo y se calculan los importes de IVA mediante Decimal siguiendo las fórmulas originales, contrastados con sus valores cacheados y ajustados a Numeric(16,4). Se preservan los ceros reales y las referencias textuales con ceros iniciales."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Respaldar y validar bajo bloqueo transaccional",
+      "rationale": "Evitar duplicados, cambios concurrentes y cargas parciales.",
+      "consequences": "Se comprueba que el catálogo siga vacío y sin triggers de usuario, se respalda su estado previo, se carga mediante COPY y se verifica cada columna contra los datos preparados antes de confirmar la transacción."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Inspección del esquema, restricciones, triggers y catálogo de Neon",
+      "result": "passed",
+      "evidence": "Tabla repuestos con las columnas previstas; cero repuestos y cero consumos antes de la importación; sin triggers de usuario."
+    },
+    {
+      "command": "Validación del archivo y preparación del payload",
+      "result": "passed",
+      "evidence": "Hoja fractall: 1403 artículos válidos y 594 códigos reservados. SHA-256 del Excel: 5772210454454fbb98603ce70d772c3f9581b746beb7457bf5bbb2de1e91f347; SHA-256 del payload: 7d014ad96ee6e2de3cf76dcf7b4261faf936eb26fb6695caef2ee3a12af42a26."
+    },
+    {
+      "command": "Respaldo con fsync y comprobación de bytes",
+      "result": "passed",
+      "evidence": "backups/repuestos_inventario_20261112/20261112T192222369291Z_neon_antes_importacion.json; SHA-256 e3487db34e80d19f70724e78eb24db681c129554a0bf060b3753c50513ab6577."
+    },
+    {
+      "command": "COPY y comparación completa de columnas antes y después del commit",
+      "result": "passed",
+      "evidence": "COPY 1403. Conexión nueva confirma 1403 filas, 1403 códigos únicos, cero nombres vacíos y cero inactivos; todos los campos coinciden con el payload."
+    },
+    {
+      "command": "Verificación de las cuatro referencias de pastillas",
+      "result": "passed",
+      "evidence": "1423: precio unitario 4364.2500 e IVA 829.2075; 1424 y 1425: ambos importes cero según Excel; 2175: precio unitario 29666.2500 e IVA 5636.5875. Todas con unidad UN y descripción individual."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Actualizar el catálogo de repuestos en la interfaz para consultar los artículos importados.",
+  "notes": ["No se modificaron .env, esquema, datos de consumo ni el archivo Excel original.", "Los errores de fórmula encontrados en la columna $ Total no afectan la carga: esa columna no existe en el catálogo y fue excluida.", "Respaldos y archivos intermedios permanecen locales e ignorados por Git; este registro no contiene credenciales."]
+}

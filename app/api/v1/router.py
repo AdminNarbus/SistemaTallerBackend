@@ -11,6 +11,8 @@ from app.modules.taller.api import router as taller_router
 from app.modules.supervision.api.router import router as supervision_router
 from app.modules.dashboard.api.router import router as dashboard_router
 
+from app.modules.control_mantenciones.api.router import router as control_mantenciones_router
+
 api_router = APIRouter(dependencies=[Depends(enforce_visual_read_only)])
 api_router.include_router(conductor_sync_router)
 
@@ -29,3 +31,5 @@ api_router.include_router(publica_router)
 api_router.include_router(dashboard_router)
 
 
+
+api_router.include_router(control_mantenciones_router, prefix="/control-mantenciones", tags=["Control de mantenciones"])

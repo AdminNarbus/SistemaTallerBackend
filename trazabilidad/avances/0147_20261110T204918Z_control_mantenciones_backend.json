@@ -1,0 +1,229 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 147,
+  "id": "AV-0147",
+  "timestamp": "2026-11-10T20:49:18.608170+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "CONTROL-MANT-1",
+    "name": "Control de mantenciones y kilometraje semanal",
+    "statusBefore": "planned",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "API backend independiente con revisión temporal sin persistencia, tres tablas y columna de intervalo en buses.",
+  "scope": {
+    "planned": [
+      "API y reglas preventivas",
+      "Alembic",
+      "Pruebas y documentación"
+    ],
+    "completed": [
+      "Módulo y contratos",
+      "Migraciones locales con respaldo",
+      "26 pruebas propias y 172 de regresión conjunta"
+    ],
+    "pending": [
+      "Conectar frontend en una etapa posterior"
+    ],
+    "outOfScope": [
+      "Migrar SQLite",
+      "Adjuntos",
+      "Guardar Excel original",
+      "Deploy y merge a main"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/control_mantenciones/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/api/router.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/api/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/dtos/contracts.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/dtos/serialization.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/dtos/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/models/entities.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/models/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/repository/queries.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/repository/records.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/repository/screens.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/repository/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/domain.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/exports.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/imports.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/operations.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/queries.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/transactions.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/control_mantenciones/services/__init__.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "alembic/versions/037_unificar_cabeceras.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "alembic/versions/038_control_mantenciones.py",
+      "action": "created",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/modules/buses/models/bus.py",
+      "action": "modified",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/api/v1/router.py",
+      "action": "modified",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/models/__init__.py",
+      "action": "modified",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Implementación del módulo según alcance acordado"
+    },
+    {
+      "path": "requirements.txt",
+      "action": "modified",
+      "summary": "Implementación del módulo según alcance acordado"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-CONTROL-001",
+      "title": "Tres tablas y catálogo compartido",
+      "rationale": "Evitar duplicar buses, configuración y archivos; preservar trazabilidad y cargas mediante eventos.",
+      "consequences": "Se agregan control_mantenciones, control_kilometrajes, control_mantenciones_eventos y buses.intervalo_mantencion_km."
+    },
+    {
+      "id": "DEC-CONTROL-002",
+      "title": "Revisión temporal e idempotencia",
+      "rationale": "El navegador mantiene borradores; el backend revalida al confirmar.",
+      "consequences": "Sin escrituras durante previsualización/validación; bloqueo por clave y bus en confirmación."
+    },
+    {
+      "id": "DEC-CONTROL-003",
+      "title": "No absorber diferencias de esquema ajenas",
+      "rationale": "Alembic detectó diferencias anteriores en tablas e índices del taller.",
+      "consequences": "La migración nueva se revisó para excluirlas; comparación específica del módulo pasa y check global queda documentado."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/control_mantenciones -q",
+      "result": "passed",
+      "evidence": "26 pruebas aprobadas con PostgreSQL temporal."
+    },
+    {
+      "command": "pytest módulo + buses + buses_mecanicos + dashboard",
+      "result": "passed",
+      "evidence": "172 pruebas aprobadas, 4 advertencias de deprecación de Starlette."
+    },
+    {
+      "command": "Alembic upgrade / downgrade -1 / upgrade",
+      "result": "passed",
+      "evidence": "Clúster PostgreSQL temporal; comparación de metadata del módulo sin diferencias."
+    },
+    {
+      "command": "alembic check",
+      "result": "failed",
+      "evidence": "Diferencias previas ajenas: taller_correcciones_visitas, índice de ciudades y restricción de taller_resultado_ubicaciones."
+    },
+    {
+      "command": "SELECT local de versión y tablas del módulo",
+      "result": "passed",
+      "evidence": "038_control_mantenciones; las tres tablas nuevas tienen cero filas."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integración futura del frontend mediante los contratos documentados.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/control-mantenciones-odometro",
+    "commit": "d98e116",
+    "dirty": true
+  },
+  "notes": [
+    "Cambios previos no confirmados en dashboard preservados y excluidos de los commits del módulo.",
+    "Respaldo previo: C:/Users/Usuario/Documents/CodexBackups/SistemaTallerBackend/antes-control-mantenciones-20261110T204010Z.dump",
+    "El upgrade local aplicó también las revisiones previas pendientes 035_comentarios_neumaticos y 036_estado_neumaticos.",
+    "Implementacion confirmada en d98e116; pruebas y documentacion en commits separados. API local expone el modulo en OpenAPI y exige autenticacion."
+  ]
+}

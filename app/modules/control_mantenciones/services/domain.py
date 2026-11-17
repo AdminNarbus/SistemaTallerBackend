@@ -60,11 +60,11 @@ def intervalo(
 def estado_km(restantes: Decimal | None) -> str:
     if restantes is None:
         return "Sin datos suficientes para calcular"
-    if restantes <= 0:
+    if restantes < 0:
         return "Vencida"
-    if restantes <= 5000:
+    if restantes <= 8000:
         return "Crítica"
-    return "Próxima" if restantes <= 25000 else "Al día"
+    return "Próxima" if restantes <= 20000 else "Al día"
 
 
 def estado_mantencion(datos: dict) -> str:

@@ -30,6 +30,7 @@ class Filtros(DTO):
     desde: date | None = None
     hasta: date | None = None
     estado: str | None = None
+    estados_panel: str = Field(default="", max_length=100)
     tipo: Literal["todos", "mantencion", "kilometraje"] = "todos"
     area: Literal["panel", "historial", "eventos", "cargas"] = "historial"
     ordenar: Literal["bus", "restantes", "fecha"] = "bus"

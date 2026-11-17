@@ -258,7 +258,7 @@ async def eventos(filtros: Filtro, db: AsyncSession = SessionDep) -> dict:
     },
 )
 async def reporte(filtros: Filtro, db: AsyncSession = SessionDep) -> Response:
-    contenido = await exportar(db, filtros, filtros.area)
+    contenido = await exportar(db, filtros, filtros.area, filtros.estados_panel)
     return Response(
         content=contenido,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

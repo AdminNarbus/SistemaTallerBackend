@@ -75,7 +75,7 @@ def finalizar(libro: Any) -> bytes:
     return salida.getvalue()
 
 
-async def exportar(db: Any, filtros: Any, area: str) -> bytes:
+async def exportar(db: Any, filtros: Any, area: str, estados_panel: str = "") -> bytes:
     from openpyxl import Workbook
 
     servicio = ReadRepository(db)
@@ -89,14 +89,33 @@ async def exportar(db: Any, filtros: Any, area: str) -> bytes:
         )
     else:
         consulta = historial_consulta(filtros)
+    if area == "panel":
+        from sqlalchemy import select
+        estados = [x for x in estados_panel.split(",") if x in {"Vencida", "Crítica", "Próxima", "Al día"}]
+        if estados_panel and len(estados) != len(estados_panel.split(",")):
+            raise ValueError("Filtro de estados inválido")
+        base = consulta.subquery()
+        consulta = select(base.c.numero_bus, base.c.marca, base.c.patente,
+                          base.c.servicio, base.c.ultima_lectura, base.c.kilometraje_actual)
+        if estados:
+            consulta = consulta.where(base.c.estado_kilometraje.in_(estados)).order_by(base.c.restantes.asc().nullslast(), base.c.numero_bus, base.c.bus_id)
+        else:
+            consulta = consulta.order_by(base.c.numero_bus, base.c.bus_id)
     libro = Workbook(write_only=True)
     hoja = libro.create_sheet("Reporte")
     resultado = await db.stream(consulta)
-    await asyncio.to_thread(
-        agregar,
-        hoja,
-        [[TITULOS.get(k, k.replace("_", " ").capitalize()) for k in resultado.keys()]],
-    )
+    if area == "panel":
+        from openpyxl.cell import WriteOnlyCell
+        from openpyxl.styles import Font, PatternFill
+        encabezado = []
+        for titulo in ("Número de bus", "Marca", "Patente", "Ruta", "Última lectura", "Kilometraje actual"):
+            celda_titulo = WriteOnlyCell(hoja, value=titulo)
+            celda_titulo.fill = PatternFill(fill_type="solid", fgColor="FFFF00")
+            celda_titulo.font = Font(bold=True)
+            encabezado.append(celda_titulo)
+        hoja.append(encabezado)
+    else:
+        await asyncio.to_thread(agregar, hoja, [[TITULOS.get(k, k.replace("_", " ").capitalize()) for k in resultado.keys()]])
     while filas := await resultado.fetchmany(1000):
         await asyncio.to_thread(agregar, hoja, filas)
     return await asyncio.to_thread(finalizar, libro)

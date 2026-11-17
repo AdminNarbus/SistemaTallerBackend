@@ -22,7 +22,6 @@ from app.modules.control_mantenciones.models.entities import (
 )
 from app.modules.control_mantenciones.repository.records import RecordsRepository
 from app.modules.control_mantenciones.services.domain import (
-    estado_mantencion,
     hoy,
     motivos_secuencia,
 )
@@ -72,7 +71,7 @@ class OperationsService:
     async def crear_mantencion(self, datos: MantencionCrear) -> dict:
         await self.bus(datos.bus_id)
         valores = datos.model_dump()
-        valores["estado"] = valores["estado"] or estado_mantencion(valores)
+        valores["estado"] = "incompleta"
         registro = Mant(
             **valores,
             usuario_creacion_id=self.actor_id,
@@ -251,10 +250,6 @@ class OperationsService:
         registro = await self.requerido(Km, identificador)
         await self.resolver_bus_lectura(registro)
         self.verificar_version(registro, datos.version)
-        if registro.estado == "aceptado":
-            raise BusinessRuleException(
-                "La lectura está aceptada. Registre una corrección adicional."
-            )
         anterior = snapshot(registro)
         cambios = datos.model_dump(exclude_unset=True, exclude={"version"})
         valores = {

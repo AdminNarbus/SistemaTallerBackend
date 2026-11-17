@@ -228,9 +228,9 @@ def estados_panel(base: Any, hoy: Any, dias_recientes: Any) -> Any:
     restantes = base.c.restantes
     estado_km = case(
         (restantes.is_(None), "Sin datos suficientes para calcular"),
-        (restantes <= 0, "Vencida"),
-        (restantes <= 5000, "Crítica"),
-        (restantes <= 25000, "Próxima"),
+        (restantes < 0, "Vencida"),
+        (restantes <= 8000, "Crítica"),
+        (restantes <= 20000, "Próxima"),
         else_="Al día",
     )
     antigua = or_(

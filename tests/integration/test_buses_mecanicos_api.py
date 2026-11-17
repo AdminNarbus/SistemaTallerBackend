@@ -7,6 +7,7 @@ from sqlalchemy import event, func, select
 from app.core.exceptions import BusinessRuleException
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
+from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_estado_evento import TallerSolicitudEstadoEvento
 from app.modules.taller.models.taller_solicitud_detalle import TallerSolicitudDetalle
 from app.modules.taller.repository.buses_taller_repository import BusesTallerRepository
@@ -51,6 +52,18 @@ async def test_falla_crea_ot_y_autoasigna_solo_si_se_solicita(
     assert eventos[0].usuario_actor_id == 2
     assert eventos[-1].estado_nuevo == (ot["estado"] or "PENDIENTE")
     assert ot["es_ot"] is bool(autoasignar)
+    comentarios = (await db_session.scalars(
+        select(TallerSolicitudComentario).where(TallerSolicitudComentario.solicitud_id == ot["id"])
+    )).all()
+    aprobaciones = [c for c in comentarios if c.tipo == "SISTEMA"]
+    assert len(aprobaciones) == (1 if autoasignar else 0)
+    reporte = next(c for c in comentarios if c.tipo != "SISTEMA")
+    assert reporte.comentario.startswith("Nueva falla: Ruido en el motor")
+    if autoasignar:
+        assert reporte.tipo == "ASIGNACION"
+        assert "Tomó la falla para trabajar" in reporte.comentario
+    else:
+        assert "Queda pendiente de asignación" in reporte.comentario
 
 
 @pytest.mark.parametrize("estado", ["PENDIENTE", "EN_REPARACION", "LIBERADO"])

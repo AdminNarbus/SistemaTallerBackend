@@ -232,6 +232,7 @@ class AveriasService:
             )
             nueva_asig.mecanico = u_asig
             nueva_asig.asignado_por = u
+            tipo_bitacora = "ASIGNACION"
             self.repo.add_asignacion_falla(db, nueva_asig)
             nuevo_detalle.asignaciones.append(nueva_asig)
             if (
@@ -256,7 +257,7 @@ class AveriasService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
-            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
+            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Supervisión asignó la nueva falla a un mecánico.", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
             if solicitud.estado in [
                 EstadoSolicitud.PENDIENTE.value,
@@ -307,7 +308,8 @@ class AveriasService:
                     self.repo.add_mecanico(db, nueva_presencia)
                     attach_mecanico_safe(solicitud, nueva_presencia)
 
-                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
+                tipo_bitacora = "ASIGNACION"
+                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "El mecánico tomó la nueva falla para trabajar.", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
                 if solicitud.estado in [
                     EstadoSolicitud.PENDIENTE.value,
@@ -322,11 +324,7 @@ class AveriasService:
             solicitud.detalles.append(nuevo_detalle)
 
         # 5. Registrar en bitácora inmutable
-        desc_pers = (
-            dto.descripcion_personalizada.strip()
-            if dto.descripcion_personalizada
-            else None
-        )
+        desc_pers = (dto.descripcion_personalizada or texto or "").strip()
         nom_falla_o_cat = None
         if f_obj:
             nom_falla_o_cat = f_obj.nombre
@@ -346,11 +344,12 @@ class AveriasService:
             if u_resolutor:
                 texto_bitacora = formatear_reparacion(falla_txt, [u_resolutor.nombre_completo])
             elif u_asig:
-                texto_bitacora = f"Nueva falla: {falla_txt}. Asignación: {u_asig.nombre_completo}"
+                texto_bitacora = f"Nueva falla: {falla_txt}. Asignada a {u_asig.nombre_completo} para trabajar."
             else:
-                texto_bitacora = f"Nueva falla: {falla_txt}"
+                texto_bitacora = f"Nueva falla: {falla_txt}. Queda pendiente de asignación."
         else:
-            texto_bitacora = f"Nueva falla: {falla_txt}"
+            accion = "Tomó la falla para trabajar." if debe_autoasignar else "Queda pendiente de asignación."
+            texto_bitacora = f"Nueva falla: {falla_txt}. {accion}"
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,

@@ -77,6 +77,55 @@ async def test_terminar_avance_conserva_fallas_pendientes(
         mensajes = [c for c in datos["comentarios"] if nota in c["comentario"]]
         assert len(mensajes) == 1
         assert mensajes[0]["tipo"] == "ENTREGA_TURNO"
+        assert mensajes[0]["comentario"].startswith("Entrega de turno.")
+        assert "Fallas pendientes: Puerta cabina, Vigias" in mensajes[0]["comentario"]
+        assert f"Nota: {nota}" in mensajes[0]["comentario"]
+        assert "Fallas reparadas:" not in mensajes[0]["comentario"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resueltas", [[0], [0, 1]])
+async def test_entrega_turno_distingue_reparadas_de_pendientes(
+    client, solicitud_bitacora, auth_headers_mecanico1, taller_resultado, resueltas,
+):
+    # Arrange: un equipo comparte dos fallas y repara una o ambas.
+    url = f"/api/v1/taller/{solicitud_bitacora['id']}"
+    detalles = solicitud_bitacora["detalles"]
+    asignacion = await client.post(
+        url + "/autoasignar", headers=auth_headers_mecanico1,
+        json={"detalles_ids": [d["id"] for d in detalles], "colaboradores_ids": [3]},
+    )
+    assert asignacion.status_code == 200, asignacion.text
+    for indice in resueltas:
+        payload = await taller_resultado["payload"](
+            solicitud_bitacora["id"], detalles[indice]["id"], "RESUELTA", mecanicos_ids=[2, 3],
+        )
+        reparacion = await client.patch(
+            url + f"/detalles/{detalles[indice]['id']}/check",
+            headers=auth_headers_mecanico1, json=payload,
+        )
+        assert reparacion.status_code == 200, reparacion.text
+
+    # Act: entregar el turno sin nota libre.
+    respuesta = await client.post(url + "/terminar-avance", headers=auth_headers_mecanico1, json={})
+    assert respuesta.status_code == 200, respuesta.text
+    ficha = await client.get(url, headers=auth_headers_mecanico1)
+    assert ficha.status_code == 200, ficha.text
+
+    # Assert: el mensaje conserva el resultado real de cada falla, sin duplicar el equipo.
+    for datos in (respuesta.json(), ficha.json()):
+        mensajes = [c for c in datos["comentarios"] if c["tipo"] == "ENTREGA_TURNO"]
+        assert len(mensajes) == 1
+        texto = mensajes[0]["comentario"]
+        assert texto.startswith("Entrega de turno. Equipo:")
+        assert texto.count("Puerta cabina") == 1
+        assert texto.count("Vigias") == 1
+        assert "Nota:" not in texto
+        if len(resueltas) == 1:
+            assert "Fallas reparadas: Puerta cabina. Fallas pendientes: Vigias" in texto
+        else:
+            assert "Fallas reparadas: Puerta cabina, Vigias" in texto
+            assert "Fallas pendientes:" not in texto
 
 
 @pytest.mark.asyncio

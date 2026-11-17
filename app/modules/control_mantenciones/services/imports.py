@@ -37,6 +37,30 @@ from app.modules.control_mantenciones.services.transactions import atomic
 MAX_BYTES = 20 * 1024 * 1024
 MAX_EXPANDIDO = 200 * 1024 * 1024
 MAX_FILAS = 100000
+MAX_KM_POR_DIA = 2000
+MAX_KM_POR_SEMANA = 10000
+DIAS_POR_SEMANA = 7
+
+
+def motivo_aumento_excesivo(
+    fecha: date | None, kilometraje: Decimal | None, anterior: dict
+) -> str | None:
+    fecha_anterior = anterior.get("anterior_fecha")
+    km_anterior = anterior.get("anterior_km")
+    if (
+        fecha is None or kilometraje is None or fecha_anterior is None or km_anterior is None
+    ):
+        return None
+    dias = (fecha - fecha_anterior).days
+    if dias <= 0:
+        return None
+    semanas, dias_restantes = divmod(dias, DIAS_POR_SEMANA)
+    limite = semanas * MAX_KM_POR_SEMANA + min(
+        dias_restantes * MAX_KM_POR_DIA, MAX_KM_POR_SEMANA
+    )
+    if kilometraje - km_anterior <= limite:
+        return None
+    return "El aumento de kilometraje supera el límite posible para el período entre lecturas."
 
 
 def leer_excel(nombre: str, contenido: bytes) -> Borrador:
@@ -217,6 +241,9 @@ class ImportService(OperationsService):
             "misma_fecha_distinta": any(k != km for k in contexto.get("mismos") or []),
         }
         motivos.extend(motivos_secuencia(fecha, km, referencia))
+        motivo_aumento = motivo_aumento_excesivo(fecha, km, contexto)
+        if motivo_aumento:
+            motivos.append(motivo_aumento)
         if fecha and len(filas.get((fila.numero_bus, fecha), set())) > 1:
             motivos.append("Hay kilometrajes distintos en la misma fecha del archivo.")
         return motivos

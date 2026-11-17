@@ -121,3 +121,48 @@ async def test_revision_servicio_sin_escrituras():
     db.commit.assert_not_awaited()
     db.flush.assert_not_awaited()
     db.execute.assert_not_awaited()
+
+@pytest.mark.parametrize(
+    "dias,nuevo,estado",
+    [
+        (1, "542000", "aceptado"),
+        (1, "542000.01", "pendiente"),
+        (3, "546000", "aceptado"),
+        (6, "550000.01", "pendiente"),
+        (7, "550000", "aceptado"),
+        (7, "550000.01", "pendiente"),
+        (7, "1300000", "pendiente"),
+        (8, "552000", "aceptado"),
+        (14, "560000.01", "pendiente"),
+        (None, "1300000", "aceptado"),
+    ],
+)
+def test_revision_excel_detecta_aumentos_excesivos(dias, nuevo, estado):
+    servicio = ImportService(AsyncMock(), 1)
+    fecha = hoy() - timedelta(days=1)
+    fila = FilaBorrador(
+        fila=2, numero_bus="354", fecha=fecha.isoformat(), kilometraje=nuevo
+    )
+    anterior = (
+        {"anterior_fecha": fecha - timedelta(days=dias), "anterior_km": Decimal("540000")}
+        if dias is not None
+        else {}
+    )
+    contexto = {
+        "buses": {"354": 1},
+        "indices": {fila.id: 0},
+        "contextos": {0: anterior},
+        "por_fecha": {},
+        "duplicados": set(),
+    }
+
+    resultado = servicio.resultado(fila, contexto)
+
+    assert resultado.estado == estado
+    assert servicio.estado_confirmado(resultado) == estado
+    if estado == "pendiente":
+        assert len(resultado.motivos) == 1
+        assert "límite posible" in resultado.motivos[0]
+        assert not any(caracter.isdigit() for caracter in resultado.motivos[0])
+    else:
+        assert resultado.motivos == []

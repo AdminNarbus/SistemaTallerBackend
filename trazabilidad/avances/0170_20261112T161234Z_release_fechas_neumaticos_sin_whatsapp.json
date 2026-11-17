@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 170,
+  "id": "AV-0170",
+  "timestamp": "2026-11-12T16:12:34Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "RELEASE-2026-11-12-FECHAS-NEUMATICOS",
+    "name": "Preparar publicación GitFlow excluyendo WhatsApp",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Preparación de la publicación autorizada de fechas históricas de reporte y documentación de neumáticos y Neon, con exclusión de todos los cambios locales de WhatsApp.",
+  "scope": {
+    "planned": ["Separar los cambios de WhatsApp", "Validar el contenido a publicar", "Preparar feature, develop y release para publicación en main"],
+    "completed": ["Respaldo completo de los 36 archivos originales y stash local", "Tres commits separados para fechas, neumáticos y Neon", "Feature integrada a develop mediante merge explícito", "Release creada desde develop", "81 pruebas aprobadas sin el módulo WhatsApp", "Migración final confirmada en 041_revision_fallas"],
+    "pending": [],
+    "outOfScope": ["Publicar código, migración, configuración, pruebas o documentación de WhatsApp", "Publicar respaldos o secretos locales", "Ejecutar migraciones en producción durante esta publicación"]
+  },
+  "changes": [
+    {"path": "Git: feature/fecha-reporte-y-contexto-neumaticos", "action": "created", "summary": "Commits c4bf91f, 2470dd5 y 3c45120 con 12 archivos de alcance autorizado."},
+    {"path": "Git: develop", "action": "modified", "summary": "Integración de la feature mediante merge --no-ff."},
+    {"path": "Git: release/2026.11.12-fechas-neumaticos", "action": "created", "summary": "Release intermedia para integrar en main y sincronizar después develop."}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Separar por lista explícita de archivos y por secciones del documento compartido",
+      "rationale": "El usuario autorizó subir todos los pendientes salvo WhatsApp. El documento de estado mezclaba ambas funcionalidades.",
+      "consequences": "Solo se publica la sección de fecha de reporte del estado; los archivos y notas de WhatsApp se conservan localmente."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Conservar una copia íntegra antes de separar",
+      "rationale": "Las modificaciones pendientes incluyen trabajo previo del usuario que debe permanecer recuperable.",
+      "consequences": "Respaldo local de archivos con SHA-256 y stash a7017edd26e3463c67d79424f6812b56e24c820b; ninguno se publica en GitHub."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Publicar mediante feature, develop, release y main",
+      "rationale": "El usuario solicitó expresamente GitFlow y el repositorio prohíbe integrar features directamente en main.",
+      "consequences": "Se conserva la historia de integración y se sincroniza main de vuelta en develop."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_fecha_reporte_reglas.py tests/integration/test_fecha_reporte_falla.py tests/integration/test_revision_fallas.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/unit/test_supervision_service.py tests/unit/test_neumaticos_service.py tests/integration/test_neumaticos_api.py -q --tb=short --show-capture=no -p no:cacheprovider",
+      "result": "passed",
+      "evidence": "81 passed, 3 advertencias de deprecación existentes de Starlette, en 26.79s; SQLite en memoria, entorno local y almacenamiento local."
+    },
+    {"command": "alembic heads", "result": "passed", "evidence": "041_revision_fallas (head); la migración 042 de WhatsApp no está incluida."},
+    {"command": "git diff --check y validación JSON de avances", "result": "passed", "evidence": "Sin errores de whitespace; registros de trazabilidad con decisions presentes."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar release a main, sincronizar develop, publicar las cuatro ramas y verificar sus hashes remotos antes de restaurar los pendientes de WhatsApp.",
+  "notes": ["La validación inicial restringida se interrumpió al bloquearse en pruebas asíncronas; la ejecución con acceso ampliado completó satisfactoriamente las 81 pruebas.", "El resultado del push y los hashes remotos se verifican en la sesión Git."]
+}

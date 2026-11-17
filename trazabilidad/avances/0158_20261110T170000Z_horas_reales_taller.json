@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 158,
+  "id": "AV-0158",
+  "timestamp": "2026-11-10T16:56:05.443792+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "HORAS-REALES-TALLER",
+    "name": "Permanencia física e histórico por bus",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Corregir horas físicas en auditoría y exponer el total histórico del bus.",
+  "scope": {
+    "planned": [
+      "Auditoría sin horas posteriores al cierre",
+      "Total histórico SQL por bus"
+    ],
+    "completed": [
+      "Cálculo centralizado y campos de resumen",
+      "Agregación SQL de todas las OTs",
+      "Documentación y 61 pruebas aprobadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios frontend",
+      "Modificación de datos existentes"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/utils.py",
+      "action": "modified",
+      "summary": "Centralizar permanencia física"
+    },
+    {
+      "path": "app/modules/supervision/services/supervision_service.py",
+      "action": "modified",
+      "summary": "Usar permanencia en resumen y detalle"
+    },
+    {
+      "path": "app/modules/buses/services/bus_catalog_service.py",
+      "action": "modified",
+      "summary": "Exponer total histórico de ficha"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Priorizar visitas físicas",
+      "rationale": "La antigüedad de creación incluye espera fuera del taller.",
+      "consequences": "OT cerrada sin fecha de salida no crece hacia la fecha actual."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Agregar histórico en SQL sin columna persistida",
+      "rationale": "Evitar N+1 y duplicar acumulados almacenados.",
+      "consequences": "No requiere migración; el total se calcula en consultas de ficha."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_horas_reales_taller.py tests/unit/test_supervision_service.py tests/unit/test_bus_service.py tests/integration/test_supervision_auditoria_estado.py tests/integration/test_buses_api.py -q",
+      "result": "passed",
+      "evidence": "61 passed in 15.32s; SQLite en memoria y entorno dev_local"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de espacios"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Consumir horas_taller_totales en el frontend.",
+  "notes": [
+    "Sin modificaciones directas de bases externas.",
+    "Pruebas PostgreSQL de ejecución no realizadas."
+  ]
+}

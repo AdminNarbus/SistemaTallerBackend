@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 149,
+  "id": "AV-0149",
+  "timestamp": "2026-11-05T12:24:28Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "CON-SYNC-1", "name": "Sincronización mensual de conductores", "statusBefore": "pending", "statusAfter": "in_progress"},
+  "type": "implementation_completed",
+  "summary": "Servicio mensual de actualización de conductores por RUT con registro atómico, exclusión mutua y endpoint interno autenticado; activación de infraestructura pendiente.",
+  "scope": {
+    "planned": ["Consultar padrón externo y actualizar usuarios el día 6 al final del día de Chile"],
+    "completed": ["Verificación GET del contrato real: 410 registros", "Creación y actualización de conductores con credenciales indicadas", "Endpoint, DTO, servicio, repositorio, modelo y migración 039", "Pruebas unitarias, API y PostgreSQL temporal", "Guía de activación Cloud Scheduler"],
+    "pending": ["Desplegar código y migración 039", "Configurar CONDUCTORES_SYNC_SECRET en backend y Scheduler", "Crear job mensual con URL de destino de taller"],
+    "outOfScope": ["Cambios de producción en esta sesión", "Frontend"]
+  },
+  "changes": [
+    {"path": "app/modules/auth", "action": "created", "summary": "Integración y sincronización de conductores por capas"},
+    {"path": "alembic/versions/039_conductor_sync.py", "action": "created", "summary": "Un registro por periodo mensual"},
+    {"path": "docs/SINCRONIZACION_CONDUCTORES.md", "action": "created", "summary": "Contrato, reglas y comandos de activación"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Cloud Scheduler con horario America/Santiago", "rationale": "Cloud Run puede estar suspendido; un temporizador de proceso no garantiza ejecución", "consequences": "Job externo día 6 23:59 y secreto independiente de aplicación"},
+    {"id": "DEC-002", "title": "Credenciales RUT según instrucción explícita", "rationale": "Usuario sin puntos y con guion; contraseña de los cuatro primeros dígitos para todos los conductores", "consequences": "Se restablecen claves de conductores existentes durante cada sincronización mensual; bcrypt fuera del event loop"},
+    {"id": "DEC-003", "title": "Commit conjunto y lock transaccional PostgreSQL", "rationale": "Evitar duplicación por reintentos y ejecuciones concurrentes", "consequences": "Registro mensual se confirma junto con usuarios; fallo revierte ambos"},
+    {"id": "DEC-004", "title": "No inferir bajas por ausencia", "rationale": "La fuente entrega el estado explícito activo y una ausencia no demuestra baja", "consequences": "Solo se desactivan conductores presentes con activo=false; otros roles se omiten"}
+  ],
+  "verification": [
+    {"command": "python -m pytest tests/unit/test_conductor_sync_service.py tests/integration/test_conductor_sync_api.py tests/migrations/test_conductor_sync_migration.py -q", "result": "passed", "evidence": "23 passed in 7.45s; PostgreSQL temporal local, sin cambios en BD de aplicación"},
+    {"command": "python -m alembic heads", "result": "passed", "evidence": "039_conductor_sync (head)"}
+  ],
+  "blockers": [],
+  "nextStep": "Activar en infraestructura siguiendo docs/SINCRONIZACION_CONDUCTORES.md con proyecto y URL de taller.",
+  "git": {"repository": "BackendTallerNarbus", "commit": null, "dirty": true},
+  "notes": ["Se preservaron cambios preexistentes de repuestos y buses.", "tzdata ya declarado en requirements.txt se instaló en venv para verificar horario en Windows."]
+}

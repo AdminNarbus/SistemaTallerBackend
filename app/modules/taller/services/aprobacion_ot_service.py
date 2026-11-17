@@ -24,11 +24,13 @@ class AprobacionOT:
     actor_nombre: Optional[str]
     motivo: str
     fecha_evento: Optional[datetime] = None
+    detalles_ids: Optional[tuple[int, ...]] = None
 
 
 async def aprobar_como_ot(db: AsyncSession, solicitud: TallerSolicitud, aprobacion: AprobacionOT) -> bool:
     if solicitud.es_ot:
         return False
+    await _aprobar_fallas_iniciales(db, (solicitud.id, aprobacion))
     now = aprobacion.fecha_evento or datetime.now(timezone.utc)
     solicitud.es_ot = True
     solicitud.fecha_actualizacion = now
@@ -58,3 +60,11 @@ async def aprobar_solicitud(db: AsyncSession, solicitud_id: int, aprobacion: Apr
             action="approved", actor_id=aprobacion.actor_id, version=solicitud.fecha_actualizacion,
         ))
     return resultado
+
+
+async def _aprobar_fallas_iniciales(db: AsyncSession, contexto) -> None:
+    from app.modules.taller.services.revision_falla_service import aprobar_detalle
+    solicitud_id, aprobacion = contexto
+    for detalle in await taller_repository.get_detalles_pendientes_revision(db, solicitud_id):
+        if aprobacion.detalles_ids is None or detalle.id in aprobacion.detalles_ids:
+            aprobar_detalle(detalle, aprobacion)

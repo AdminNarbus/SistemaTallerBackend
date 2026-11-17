@@ -17,6 +17,11 @@ class EstadoFalla(str, Enum):
     RESUELTA = "RESUELTA"
 
 
+class EstadoRevisionFalla(str, Enum):
+    PENDIENTE = "PENDIENTE"
+    APROBADA = "APROBADA"
+
+
 class TipoEventoFalla(str, Enum):
     """Eventos inmutables que describen el ciclo de vida de una falla."""
 

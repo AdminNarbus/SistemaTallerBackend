@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 157,
+  "id": "AV-0157",
+  "timestamp": "2026-11-10T11:55:11.796898+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "OT-REPARADORES-HISTORICOS",
+    "name": "Nombres de reparadores en exportacion de OT",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Conservar los nombres de reparadores de fallas antiguas cuyos eventos RESUELTA no tienen autores asociados.",
+  "scope": {
+    "planned": [
+      "Corregir consultas PostgreSQL y mapeo SQL/ORM",
+      "Verificar regresion en PostgreSQL local"
+    ],
+    "completed": [
+      "Recuperar asignaciones de reparacion o mecanico_resolvio_id cuando faltan autores del evento",
+      "Conservar equipos explicitos y ausencia de reparadores tras reapertura",
+      "11 pruebas aprobadas"
+    ],
+    "pending": [
+      "Desplegar backend y verificar exportacion en produccion"
+    ],
+    "outOfScope": [
+      "Cambios frontend",
+      "Modificacion de datos historicos o esquema Neon"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Priorizar evento de resolucion solo si contiene mecanicos autores; de otro modo utilizar fallback existente."
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Evitar que un evento sin autores borre el equipo recuperado de las asignaciones o el reparador de la falla."
+    },
+    {
+      "path": "tests/migrations/test_reparadores_historicos_postgresql.py",
+      "action": "created",
+      "summary": "Regresiones SQL y ORM: autor directo, asignaciones grupales, evento explicito y reapertura."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Resolver compatibilidad historica en lectura",
+      "rationale": "Los datos conservan el reparador pero algunos eventos historicos carecen de autores. No es necesario alterar el historial inmutable.",
+      "consequences": "Los mismos campos del contrato entregan nombres completos al PDF sin cambios frontend ni migraciones."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Mantener prioridad del equipo explicito",
+      "rationale": "Un evento con autores constituye evidencia especifica de la reparacion; el fallback se limita a eventos sin autores.",
+      "consequences": "Se conserva la autoria grupal y no se muestran reparadores en fallas reabiertas."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv/Scripts/python.exe -m pytest tests/migrations/test_reparadores_historicos_postgresql.py tests/unit/test_resolucion_grupal_fallas.py tests/unit/test_avances_falla_mapper.py -q --basetemp=.tmp/pytest_reparadores_verificado",
+      "result": "passed",
+      "evidence": "11 passed in 29.43s; PostgreSQL local desechable y SQLite en memoria. Ejecucion fuera del sandbox por permisos de initdb."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar backend y volver a exportar OT 27 bus 407 y OT 8 bus 425.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/repuestos-por-falla",
+    "commit": "5505627",
+    "dirty": true
+  },
+  "notes": [
+    "No se modificaron datos de Neon ni se desplego produccion.",
+    "Se preservaron cambios de trabajo preexistentes en repositorio, mappers y otros archivos."
+  ]
+}

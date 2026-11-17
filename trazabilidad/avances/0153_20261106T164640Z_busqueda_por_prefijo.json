@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 153,
+  "id": "AV-0153",
+  "timestamp": "2026-11-06T16:46:40.083625Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BUSQUEDA-PREFIJO-1",
+    "name": "Búsqueda por inicio de número",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.",
+  "scope": {
+    "planned": [
+      "Coincidencias al inicio de números de solicitud/OT y bus"
+    ],
+    "completed": [
+      "Prefijo tabla_ot y tabla_n_bus",
+      "Prefijo q en buses de taller",
+      "Pruebas API y documentación"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Agregar buscadores nuevos a pendientes/mis-trabajos",
+      "Frontend",
+      "Despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/dashboard/repository/order_queries.py",
+      "action": "modified",
+      "summary": "Prefijos escapados en filtros de tabla."
+    },
+    {
+      "path": "app/modules/dashboard/dtos/filtros_dto.py",
+      "action": "modified",
+      "summary": "Documentación de prefijos en OpenAPI."
+    },
+    {
+      "path": "app/modules/taller/repository/buses_taller_repository.py",
+      "action": "modified",
+      "summary": "Número/patente por inicio sin distinguir caso."
+    },
+    {
+      "path": "app/modules/taller/dtos/bus_mecanico_dto.py",
+      "action": "modified",
+      "summary": "Descripción del contrato q."
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_DASHBOARD.md",
+      "action": "modified",
+      "summary": "Contrato actualizado de búsqueda."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Prefijo en filtros de búsqueda locales",
+      "rationale": "Evita que 1 coincida con 21 o 315. Los filtros globales por identificador mantienen igualdad exacta.",
+      "consequences": "Tablas y conteos usan el mismo WHERE; el autocompletado ya empleaba prefijo."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Alcance a bus y solicitud/OT",
+      "rationale": "La petición menciona búsqueda de solicitud/OT y ejemplifica números de bus. Se consultó preferencia sin respuesta y se aplicó el criterio a ambos.",
+      "consequences": "tabla_n_bus pasa de igualdad a prefijo; q de taller aplica prefijo a número y patente."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest dashboard/test_search_prefix.py dashboard/test_dashboard_api.py integration/test_taller_bus_prefix.py integration/test_buses_mecanicos_api.py",
+      "result": "passed",
+      "evidence": "82 passed; ocho casos con error de fixture por dos OTs activas en el mismo bus corregidos y reejecutados."
+    },
+    {
+      "command": "pytest tests/dashboard/test_search_prefix.py",
+      "result": "passed",
+      "evidence": "8 passed, 2 warnings. Se conserva 315 como OT finalizada para probar exclusión de coincidencias intermedias."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar o desplegar los filtros del backend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "dirty": true
+  },
+  "notes": [
+    "Pruebas sobre SQLite temporal; sin cambios de datos de producción ni migración de esquema."
+  ]
+}

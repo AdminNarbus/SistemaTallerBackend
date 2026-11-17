@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 169,
+  "id": "AV-0169",
+  "timestamp": "2026-11-12T13:58:24Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEUMATICOS-MOTIVOS-FRONTEND",
+    "name": "Documentar motivos rápidos y texto libre para frontend",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Contexto solicitado para frontend: Reventó, Se desinfló y Pinchazo como opciones rápidas, y Otro con texto libre utilizando el campo motivo existente.",
+  "scope": {
+    "planned": ["Revisar el contrato vigente", "Entregar contexto de integración al frontend"],
+    "completed": ["Confirmado motivo como string opcional y envío multipart", "Documentadas opciones, texto libre y compatibilidad con Reventón histórico"],
+    "pending": [],
+    "outOfScope": ["Implementar el selector en el repositorio frontend", "Modificar registros de Neon", "Cambiar validaciones del backend"]
+  },
+  "changes": [
+    {
+      "path": "docs/MOTIVOS_NEUMATICOS_FRONTEND.md",
+      "action": "created",
+      "summary": "Guía de interfaz, contrato HTTP, valores enviados y criterios de aceptación."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Conservar motivo como texto libre",
+      "rationale": "El usuario pidió tres motivos rápidos y que los demás se escriban libremente.",
+      "consequences": "El selector se resuelve en frontend y envía un único string en el contrato existente."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Documentar la equivalencia visual del motivo histórico",
+      "rationale": "El registro conservado usa Reventón y la nueva etiqueta solicitada es Reventó.",
+      "consequences": "Se documenta una equivalencia exacta para presentación y filtros, sin alterar Neon durante esta tarea de contexto."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Revisión de routers y ReporteNeumaticoBaseDTO",
+      "result": "passed",
+      "evidence": "POST /api/v1/formularios/neumaticos; motivo: Optional[str] = Form(None) y Optional[str] en DTO."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar la guía en el repositorio frontend.",
+  "notes": ["Cambio documental; no se ejecutan pruebas de aplicación ni escrituras en Neon."]
+}

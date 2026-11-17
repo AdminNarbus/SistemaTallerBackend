@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 168,
+  "id": "AV-0168",
+  "timestamp": "2026-11-12T13:54:01.839895+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEON-LIMPIEZA-NEUMATICOS",
+    "name": "Conservar únicamente el reporte de neumático más reciente",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Por solicitud explícita del usuario, eliminar seis reportes antiguos de Neon y conservar intacto el ID 513: bus 377, rueda 6, usuario 151.",
+  "scope": {
+    "planned": ["Identificar el reporte más reciente", "Respaldar y eliminar los demás reportes", "Verificar persistencia"],
+    "completed": ["Respaldo local verificado antes del borrado", "Eliminados los IDs 1, 2, 3, 4, 5 y 512", "Conservado el ID 513 sin cambios en ninguna columna", "Verificación posterior al commit mediante una conexión nueva: una sola fila"],
+    "pending": [],
+    "outOfScope": ["Cambios de esquema", "Eliminar imágenes del almacenamiento", "Modificar la configuración de conexión local"]
+  },
+  "changes": [
+    {
+      "path": "Neon: taller/public.reportes_neumaticos",
+      "action": "modified",
+      "summary": "De siete reportes a uno; conservado el reporte del 12 de noviembre de 2026 a las 10:46:40 de America/Santiago."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Validar el conjunto exacto de filas y preservar el registro completo",
+      "rationale": "La petición identifica tanto el orden temporal como el bus, rueda y usuario del reporte que debe conservarse.",
+      "consequences": "La operación valida los siete IDs bajo bloqueo transaccional y compara todas las columnas del reporte conservado antes y después del borrado."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Respaldo previo y eliminación transaccional respetando claves foráneas",
+      "rationale": "El reporte 512 referencia al 1 mediante ON DELETE RESTRICT; no existen comentarios ni triggers de usuario en las tablas revisadas.",
+      "consequences": "Se respalda el contenido completo, se elimina primero el reporte 512 y luego los otros cinco antiguos en la misma transacción, sin alterar restricciones."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Inspección de reportes, claves foráneas, triggers y comentarios en Neon",
+      "result": "passed",
+      "evidence": "Siete reportes, cero comentarios; el más reciente es ID 513, bus 377, ruedas [6], usuario 151."
+    },
+    {
+      "command": "Respaldo local con fsync y verificación de bytes",
+      "result": "passed",
+      "evidence": "backups/neumaticos/20261112T135358180908Z_antes_conservar_513.json; SHA-256 a3e62eb791f5b581f060515377a21e55df68f94c8abdbbad07de93fdb196306b."
+    },
+    {
+      "command": "Borrado mediante código Python/asyncpg dentro de una transacción",
+      "result": "passed",
+      "evidence": "DELETE 1 y DELETE 5; fila ID 513 íntegramente idéntica al registro anterior."
+    },
+    {
+      "command": "SELECT desde una conexión nueva después del commit",
+      "result": "passed",
+      "evidence": "Una fila persistida: ID 513; comparación completa del registro satisfactoria."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Actualizar el listado del frontend para reflejar la limpieza.",
+  "notes": ["No se modificó .env ni se incluyeron credenciales en este registro."]
+}

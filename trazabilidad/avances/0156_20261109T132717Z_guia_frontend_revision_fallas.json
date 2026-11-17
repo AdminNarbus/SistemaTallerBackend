@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 156,
+  "id": "AV-0156",
+  "timestamp": "2026-11-09T13:27:17.844295+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REV-FALLAS-FRONT-GUIA",
+    "name": "Contrato de integración frontend de revisión de fallas",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Guía para implementar revisión individual de fallas en frontend, contrastada con DTOs, endpoints, servicios y rutas actuales de ProtoNeumaticos.",
+  "scope": {
+    "planned": [
+      "Documentar contrato y reglas de revisión para frontend"
+    ],
+    "completed": [
+      "Tipos, payloads, respuestas, permisos, estados, manejo de errores y checklist",
+      "Referencias a componentes actuales y advertencia de autoasignar=true por defecto"
+    ],
+    "pending": [
+      "Implementación en el repositorio frontend"
+    ],
+    "outOfScope": [
+      "Cambios funcionales backend",
+      "Despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_REVISION_FALLAS.md",
+      "action": "created",
+      "summary": "Guía implementable del contrato y comportamiento de revisión por falla"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Separar autorización de reparación y aceptación de OT",
+      "rationale": "Los tres estados tienen significados distintos y no deben inferirse entre sí.",
+      "consequences": "Tipos y distintivos independientes, contadores de revisión calculados solo sobre detalle completo."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Mantener autoasignación como aprobación válida",
+      "rationale": "Regla explícita del usuario: asignarse fallas aprueba las seleccionadas.",
+      "consequences": "Pendientes no se excluyen del selector y no se requiere llamada previa de aprobación."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Inspección de DTOs, servicios, routers y tipos/componentes actuales de frontend",
+      "result": "passed",
+      "evidence": "Contratos cotejados sin modificar código del frontend."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Implementar la guía en ProtoNeumaticos y ejecutar su checklist visual.",
+  "notes": [
+    "Cambio exclusivamente documental; no se ejecutaron pruebas funcionales nuevas."
+  ]
+}

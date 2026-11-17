@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 154,
+  "id": "AV-0154",
+  "timestamp": "2026-11-09T12:02:20.533706+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REV-FALLAS",
+    "name": "Revisión individual de fallas",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Revisión por falla independiente de es_ot; aprobación de las fallas seleccionadas al autoasignarse y aprobación automática de reportes de mecánicos ya asignados.",
+  "scope": {
+    "planned": [
+      "Estado y autor de revisión",
+      "Conservar aprobación por asignación"
+    ],
+    "completed": [
+      "Modelo, DTOs y proyecciones SQL",
+      "Migración 041 con conservación histórica",
+      "Reglas para reportes y asignaciones",
+      "Endpoint de aprobación individual",
+      "Bloqueo de resultados y repuestos sin revisión",
+      "Documentación y pruebas"
+    ],
+    "pending": [
+      "Aplicar migración 041 en el entorno de despliegue"
+    ],
+    "outOfScope": [
+      "Cambios en frontend",
+      "Despliegue o modificación de bases externas"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/revision_falla_service.py",
+      "action": "created",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "alembic/versions/041_revision_fallas.py",
+      "action": "created",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/models/taller_solicitud_detalle.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/cuadrilla_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/aprobacion_ot_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/resultado_falla_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/repuesto_service.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/repository/taller_repository.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "app/modules/taller/services/mappers.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "docs/REVISION_INDIVIDUAL_FALLAS.md",
+      "action": "created",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "tests/integration/test_revision_fallas.py",
+      "action": "created",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "tests/migrations/test_revision_fallas_migration.py",
+      "action": "created",
+      "summary": "Revisión individual y validación de fallas"
+    },
+    {
+      "path": "tests/unit/test_resolucion_grupal_fallas.py",
+      "action": "modified",
+      "summary": "Revisión individual y validación de fallas"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Separar autorización y reparación",
+      "rationale": "es_ot aprueba la cabecera y no acredita el visto bueno de reportes posteriores.",
+      "consequences": "estado_revision independiente del estado operativo; autor y fecha de aprobación por falla."
+    },
+    {
+      "id": "DEC-002",
+      "title": "La asignación seleccionada constituye aprobación",
+      "rationale": "Regla confirmada por el usuario: autoasignarse debe aprobar las fallas seleccionadas incluso sin asignaciones previas.",
+      "consequences": "Reportes sin autoasignación y sin asignación activa previa quedan pendientes; no se aprueban fallas no seleccionadas."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar historial sin atribuciones ficticias",
+      "rationale": "Las fallas existentes de OT aceptadas eran operativas antes de incorporar revisión individual.",
+      "consequences": "Backfill APROBADA solo en OT aceptadas, sin inventar aprobador ni fecha."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_revision_fallas.py tests/integration/test_aprobacion_solicitudes.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/migrations/test_revision_fallas_migration.py tests/unit/test_taller_ubicacion_resultados.py tests/unit/test_resolucion_grupal_fallas.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "36 passed y 1 fallo de preparación de la prueba de resolución grupal; corregida para aprobar ambas solicitudes antes de resolver. Reejecución del archivo: 3 passed; total de 37 casos verificados."
+    },
+    {
+      "command": "python -m alembic heads",
+      "result": "passed",
+      "evidence": "041_revision_fallas (head)"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de espacios."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar la migración en despliegue y consumir estado_revision en el frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/repuestos-por-falla",
+    "commit": "55056270fb92eb9e4f6c35e5401d5b51568e5c78",
+    "dirty": true
+  },
+  "notes": [
+    "Pruebas locales con SQLite en memoria, ENVIRONMENT=dev_local y STORAGE_PROVIDER=local.",
+    "El sandbox de Windows bloquea socketpair de asyncio; pruebas ejecutadas con escalación autorizada.",
+    "Cambios previos del usuario preservados."
+  ]
+}

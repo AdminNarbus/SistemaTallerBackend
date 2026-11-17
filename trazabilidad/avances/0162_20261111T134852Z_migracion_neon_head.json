@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 162,
+  "id": "AV-0162",
+  "timestamp": "2026-11-11T13:48:52.448299+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "NEON-MIGRACIONES-041",
+    "name": "Actualizar esquema Neon a head",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Aplicar migraciones pendientes de Neon por petición explícita del usuario y restaurar .env original.",
+  "scope": {
+    "planned": [
+      "Cambiar temporalmente .env a Neon",
+      "Ejecutar alembic upgrade head",
+      "Restaurar .env"
+    ],
+    "completed": [
+      "Migraciones aplicadas hasta 041_revision_fallas",
+      "Confirmación de tablas repuestos, taller_repuestos_utilizados y conductor_sync",
+      "Confirmación de columnas estado_revision, revisado_por_id y fecha_revision",
+      "Restauración byte a byte de .env verificada por SHA-256"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Prueba autenticada en frontend",
+      "Cambios de configuración Cloud Run"
+    ]
+  },
+  "changes": [
+    {
+      "path": "Neon: taller / esquema Alembic",
+      "action": "modified",
+      "summary": "De 036_estado_neumaticos a 041_revision_fallas mediante Alembic"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Ejecutar las migraciones versionadas",
+      "rationale": "El código desplegado consultaba tablas y columnas ausentes y el usuario autorizó migrar Neon expresamente.",
+      "consequences": "Esquema actualizado sin DDL manual; simulación dashboard omitida."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Restaurar configuración local con finally",
+      "rationale": "El usuario pidió conservar el .env original después de migrar.",
+      "consequences": "La conexión local original queda intacta; no se guardan credenciales en trazabilidad."
+    }
+  ],
+  "verification": [
+    {
+      "command": "alembic upgrade head",
+      "result": "passed",
+      "evidence": "Upgrade completado; snapshot simulado omitido"
+    },
+    {
+      "command": "alembic current",
+      "result": "passed",
+      "evidence": "041_revision_fallas (head)"
+    },
+    {
+      "command": "SELECT alembic_version e information_schema",
+      "result": "passed",
+      "evidence": "Tablas y tres columnas nuevas presentes"
+    },
+    {
+      "command": "Comparación SHA-256 .env antes/después",
+      "result": "passed",
+      "evidence": "Coincidencia exacta"
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Revalidar en frontend las rutas de detalle y repuestos de OT.",
+  "notes": [
+    "Sin cambios persistentes en .env."
+  ]
+}

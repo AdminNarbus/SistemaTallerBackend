@@ -14,7 +14,7 @@ from app.modules.auth.constants import RolUsuario
 from app.modules.auth.services.auth_service import auth_service
 
 router = APIRouter(tags=["Tiempo real"])
-ALLOWED_ROLES = {RolUsuario.MECANICO.value, RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value}
+ALLOWED_ROLES = {RolUsuario.MECANICO.value, RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value, RolUsuario.VISUAL.value}
 
 
 def _origin_allowed(origin: str) -> bool:

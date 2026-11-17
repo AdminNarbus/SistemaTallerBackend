@@ -5,7 +5,7 @@
 ### Endpoint
 
 ```http
-GET https://sistematallerfront-100590754321.southamerica-east1.run.app/api/v1/publica/solicitudes
+GET https://sistematallerbackend-100590754321.europe-west1.run.app/api/v1/publica/solicitudes
 ```
 
 ### Payload
@@ -47,7 +47,7 @@ La cabecera `X-Total-Count` contiene la cantidad de solicitudes devueltas.
 ### Endpoint
 
 ```http
-GET https://sistematallerfront-100590754321.southamerica-east1.run.app/api/v1/publica/buses-en-taller
+GET https://sistematallerbackend-100590754321.europe-west1.run.app/api/v1/publica/buses-en-taller
 ```
 
 ### Payload

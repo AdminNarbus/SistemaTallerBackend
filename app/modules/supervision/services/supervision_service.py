@@ -6,7 +6,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
-from app.modules.taller.utils import calcular_horas_en_taller, calcular_telemetria_estadias
+from app.modules.taller.utils import calcular_horas_reales_taller
 from app.modules.taller.services.taller_service import (
     TallerService,
     taller_service,
@@ -72,10 +72,13 @@ class SupervisionService:
                 fecha_ingreso=getattr(item, "fecha_primer_ingreso_taller", None) or item.fecha_creacion,
                 fecha_actualizacion=getattr(item, "fecha_actualizacion", None) or item.fecha_creacion,
                 chofer=item.creador.nombre_completo if getattr(item, "creador", None) else None,
-                tiempo_taller=calcular_horas_en_taller(item.fecha_creacion),
+                tiempo_taller=calcular_horas_reales_taller(item),
+                horas_en_taller=calcular_horas_reales_taller(item),
+                horas_taller_acumuladas=calcular_horas_reales_taller(item),
                 numero_fallas=sum(1 for d in getattr(item, "detalles", []) if not getattr(d, "resuelto", False)),
             )
-        return res
+        horas = calcular_horas_reales_taller(item)
+        return res.model_copy(update={"tiempo_taller": horas, "horas_en_taller": horas, "horas_taller_acumuladas": horas})
 
     def _mapear_dict_a_solicitud_resumen_dto(self, data: dict) -> SolicitudResumenDTO:
         fecha_ingreso = data.get("fecha_primer_ingreso_taller") or data.get("fecha_creacion")
@@ -90,7 +93,7 @@ class SupervisionService:
                     detalles_raw = []
             conteo_fallas = sum(1 for d in detalles_raw if not d.get("resuelto"))
 
-        horas_desde_creacion = calcular_horas_en_taller(data.get("fecha_creacion"))
+        horas_desde_creacion = calcular_horas_reales_taller(data)
 
         return SolicitudResumenDTO(
             id=data["id"],
@@ -100,6 +103,8 @@ class SupervisionService:
             fecha_actualizacion=fecha_actualizacion,
             chofer=data.get("usuario_creador_nombre"),
             tiempo_taller=horas_desde_creacion,
+            horas_en_taller=horas_desde_creacion,
+            horas_taller_acumuladas=horas_desde_creacion,
             numero_fallas=conteo_fallas,
         )
 
@@ -139,11 +144,7 @@ class SupervisionService:
         estadias_raw = data.get("estadias") or data.get("estadias_json") or []
         if isinstance(estadias_raw, str):
             estadias_raw = json.loads(estadias_raw)
-        horas_taller, _ = calcular_telemetria_estadias(
-            estadias=estadias_raw,
-            horas_taller_acumuladas_db=data.get("horas_taller_acumuladas"),
-            en_taller=bool(data.get("bus_en_taller", False)),
-        )
+        horas_taller = calcular_horas_reales_taller(data)
 
         return SolicitudAuditoriaDTO(
             id=data["id"],
@@ -240,10 +241,7 @@ class SupervisionService:
         if getattr(sol, "mecanico_cierre", None):
             mecanico_cierre_nom = f"{sol.mecanico_cierre.nombre} {sol.mecanico_cierre.apellido}".strip()
 
-        horas_taller, _ = calcular_telemetria_estadias(
-            estadias=sol.__dict__.get("estadias") or [],
-            horas_taller_acumuladas_db=getattr(sol, "horas_taller_acumuladas", None),
-        )
+        horas_taller = calcular_horas_reales_taller(sol)
 
         return SolicitudAuditoriaDTO(
             id=sol.id,

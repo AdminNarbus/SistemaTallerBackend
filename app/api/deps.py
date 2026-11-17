@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,8 @@ from app.modules.auth.user_cache import (
 )
 
 SessionDep = Depends(get_db)
+
+READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False
@@ -60,11 +62,37 @@ async def require_current_user(
     return user
 
 
+async def enforce_visual_read_only(
+    request: Request,
+    db: AsyncSession = SessionDep,
+    token: Optional[str] = Depends(reusable_oauth2),
+) -> None:
+    """Bloquea escrituras de VISUAL incluso en rutas con autenticación opcional."""
+    if request.method in READ_METHODS:
+        return
+    if request.url.path in {
+        f"{settings.API_V1_STR}/auth/login",
+        f"{settings.API_V1_STR}/auth/login/token",
+        f"{settings.API_V1_STR}/auth/refresh",
+    }:
+        return
+    user = await get_current_user(db=db, token=token) if token else None
+    if user and user.rol == RolUsuario.VISUAL.value:
+        raise PermissionException("El rol VISUAL solo permite consultar información.")
+
+
+def _visual_read_allowed(request: Request, user: UsuarioResponseDTO) -> bool:
+    return user.rol == RolUsuario.VISUAL.value and request.method in READ_METHODS
+
+
 async def require_supervisor_or_admin(
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> UsuarioResponseDTO:
-    """Exige que el usuario autenticado sea SUPERVISOR o ADMIN; lanza PermissionException (403)."""
+    """Exige SUPERVISOR/ADMIN; permite a VISUAL únicamente consultar (403 si no)."""
     rol_upper = (current_user.rol or "").upper().strip()
+    if _visual_read_allowed(request, current_user):
+        return current_user
     if rol_upper not in [RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value]:
         raise PermissionException(
             "Acceso denegado: Se requieren permisos de SUPERVISOR o ADMIN."
@@ -73,10 +101,13 @@ async def require_supervisor_or_admin(
 
 
 async def require_mecanico_or_admin(
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> UsuarioResponseDTO:
-    """Exige que el usuario autenticado sea MECÁNICO o ADMIN; lanza PermissionException (403)."""
+    """Exige MECÁNICO/ADMIN; permite a VISUAL únicamente consultar (403 si no)."""
     rol_upper = (current_user.rol or "").upper().strip()
+    if _visual_read_allowed(request, current_user):
+        return current_user
     if rol_upper not in [RolUsuario.MECANICO.value, RolUsuario.ADMIN.value]:
         raise PermissionException(
             "Acceso denegado: Se requieren permisos de MECÁNICO o ADMIN."
@@ -85,10 +116,13 @@ async def require_mecanico_or_admin(
 
 
 async def require_conductor_or_admin(
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> UsuarioResponseDTO:
-    """Exige que el usuario autenticado sea CONDUCTOR o ADMIN; lanza PermissionException (403)."""
+    """Exige CONDUCTOR/ADMIN; permite a VISUAL únicamente consultar (403 si no)."""
     rol_upper = (current_user.rol or "").upper().strip()
+    if _visual_read_allowed(request, current_user):
+        return current_user
     if rol_upper not in [RolUsuario.CONDUCTOR.value, RolUsuario.ADMIN.value]:
         raise PermissionException(
             "Acceso denegado: Se requieren permisos de CONDUCTOR o ADMIN."
@@ -97,10 +131,13 @@ async def require_conductor_or_admin(
 
 
 async def require_conductor_or_supervisor_or_admin(
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> UsuarioResponseDTO:
-    """Exige que el usuario autenticado sea CONDUCTOR, SUPERVISOR o ADMIN; lanza PermissionException (403)."""
+    """Exige CONDUCTOR/SUPERVISOR/ADMIN o VISUAL para consultas (403 si no)."""
     rol_upper = (current_user.rol or "").upper().strip()
+    if _visual_read_allowed(request, current_user):
+        return current_user
     if rol_upper not in [
         RolUsuario.CONDUCTOR.value,
         RolUsuario.SUPERVISOR.value,
@@ -113,10 +150,13 @@ async def require_conductor_or_supervisor_or_admin(
 
 
 async def require_mecanico_or_supervisor_or_admin(
+    request: Request,
     current_user: UsuarioResponseDTO = Depends(require_current_user),
 ) -> UsuarioResponseDTO:
-    """Exige que el usuario autenticado sea MECÁNICO, SUPERVISOR o ADMIN; lanza PermissionException (403)."""
+    """Exige MECÁNICO/SUPERVISOR/ADMIN o VISUAL para consultas (403 si no)."""
     rol_upper = (current_user.rol or "").upper().strip()
+    if _visual_read_allowed(request, current_user):
+        return current_user
     if rol_upper not in [
         RolUsuario.MECANICO.value,
         RolUsuario.SUPERVISOR.value,

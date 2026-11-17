@@ -395,6 +395,11 @@ class SolicitudService:
                 solicitud.bus_id,
             )
 
+        from app.modules.taller.services.revision_falla_service import puede_aprobar_reporte
+        revision_automatica = await puede_aprobar_reporte(
+            db, (self.repo, solicitud.id if not es_nueva_ot else None, creador_id, (creador_rol or "").upper())
+        )
+
         # Registrar una avería no acredita el ingreso físico del bus, sea cual
         # sea el rol del reportante. El ingreso inmediato debe ser explícito.
         debe_marcar_en_taller = dto.ingreso_inmediato_taller is True
@@ -503,6 +508,9 @@ class SolicitudService:
                     fecha_creacion=now,
                     fecha_reporte=now,
                     reportado_por_id=creador_id,
+                    estado_revision="APROBADA" if revision_automatica else "PENDIENTE",
+                    revisado_por_id=creador_id if revision_automatica else None,
+                    fecha_revision=now if revision_automatica else None,
                 )
                 if es_nueva_ot:
                     solicitud.detalles.append(detalle)

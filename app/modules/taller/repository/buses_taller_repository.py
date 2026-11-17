@@ -41,8 +41,8 @@ class BusesTallerRepository:
         if filtros["solo_activos"]:
             consulta = consulta.where(Bus.is_active.is_(True))
         if filtros.get("q"):
-            consulta = consulta.where(or_(Bus.n_bus.icontains(filtros["q"], autoescape=True),
-                                          Bus.patente.icontains(filtros["q"], autoescape=True)))
+            consulta = consulta.where(or_(Bus.n_bus.istartswith(filtros["q"], autoescape=True),
+                                          Bus.patente.istartswith(filtros["q"], autoescape=True)))
         return consulta
 
     def _nombre_creador(self):

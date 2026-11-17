@@ -4,7 +4,7 @@ from sqlalchemy import CheckConstraint, UniqueConstraint, Index, text, Boolean, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
-from app.modules.taller.constants import EstadoFalla
+from app.modules.taller.constants import EstadoFalla, EstadoRevisionFalla
 from app.modules.taller.models.falla_taller import FallaTaller
 
 if TYPE_CHECKING:
@@ -27,6 +27,8 @@ class TallerSolicitudDetalle(Base):
         UniqueConstraint("id", "solicitud_id", name="uq_detalles_id_solicitud"),
         CheckConstraint("estado IN ('PENDIENTE','INCOMPLETA','RESUELTA')", name="ck_detalles_estado"),
         CheckConstraint("resuelto = (estado = 'RESUELTA')", name="ck_detalles_resuelto_estado"),
+        CheckConstraint("estado_revision IN ('PENDIENTE','APROBADA')", name="ck_detalles_estado_revision"),
+        Index("ix_detalles_solicitud_revision", "solicitud_id", "estado_revision"),
         {"extend_existing": True},
     )
 
@@ -44,6 +46,13 @@ class TallerSolicitudDetalle(Base):
     estado: Mapped[str] = mapped_column(
         String(30), default=EstadoFalla.PENDIENTE.value, server_default="PENDIENTE", nullable=False, index=True
     )
+    estado_revision: Mapped[str] = mapped_column(
+        String(20), default=EstadoRevisionFalla.PENDIENTE.value, server_default="PENDIENTE", nullable=False
+    )
+    revisado_por_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    fecha_revision: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     motivo_incompleto: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     resuelto: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)

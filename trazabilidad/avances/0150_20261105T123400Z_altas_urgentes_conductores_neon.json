@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 150,
+  "id": "AV-0150",
+  "timestamp": "2026-11-05T12:34:00Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "CON-SYNC-URGENTE", "name": "Altas inmediatas de conductores en Neon", "statusBefore": "pending", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Script creado y ejecutado por solicitud explícita para incorporar inmediatamente 207 conductores nuevos en Neon, conservando 100 cuentas existentes. Verificación posterior sin altas pendientes entre los registros procesables.",
+  "scope": {
+    "planned": ["Crear script de altas urgentes de usuarios nuevos en Neon"],
+    "completed": ["CLI de revisión y aplicación, TLS y validación del destino taller en Neon", "207 cuentas nuevas confirmadas en una sola transacción", "Verificación posterior: 307 existentes y cero nuevas pendientes", "37 pruebas aprobadas", "Informe de registros omitidos"],
+    "pending": ["Corregir en la fuente 9 RUT inválidos y 94 registros de grupos duplicados contradictorios", "Desplegar y activar el servicio mensual por procedimiento independiente"],
+    "outOfScope": ["Modificar usuarios existentes", "Elegir identidades ambiguas", "Cambiar esquema de producción", "Ejecutar scripts legados de mantenimiento"]
+  },
+  "changes": [
+    {"path": "scripts/incorporar_conductores_neon.py", "action": "created", "summary": "Revisión, carga solo de nuevos e informe sin credenciales"},
+    {"path": "app/modules/auth/services/conductor_sync_service.py", "action": "modified", "summary": "Altas inmediatas atómicas sin dependencia de tabla mensual; compatibilidad apellido vacío"},
+    {"path": "app/modules/auth/services/conductor_source.py", "action": "modified", "summary": "Separación de consulta HTTP y validación para carga urgente"},
+    {"path": "app/modules/auth/dtos/conductor_sync_dto.py", "action": "modified", "summary": "Apellido nulo admitido según contrato real"},
+    {"path": "tests/unit/test_incorporar_conductores_neon.py", "action": "created", "summary": "Validación, selección, conexión, preservación e idempotencia"}
+  ],
+  "decisions": [
+    {"id": "DEC-001", "title": "Solo altas nuevas", "rationale": "La solicitud urgente indica enviar los usuarios nuevos a Neon", "consequences": "Conserva contraseñas y campos de las cuentas existentes; no consume ejecución mensual"},
+    {"id": "DEC-002", "title": "No resolver RUT contradictorios automáticamente", "rationale": "El padrón contiene RUT repetidos con nombres o estados distintos", "consequences": "Se omiten grupos completos y se registran IDs de origen para revisión; se cargan todos los registros procesables"},
+    {"id": "DEC-003", "title": "Apellido vacío compatible con Neon", "rationale": "La fuente entrega apellido nulo pero el esquema remoto exige NOT NULL", "consequences": "Conserva nombre completo recibido y guarda apellido vacío; primera tentativa revertida por completo, sin alta parcial"},
+    {"id": "DEC-004", "title": "Conexión legada leída por AST", "rationale": "La configuración local apunta a localhost; existe conexión de mantenimiento autorizada a Neon", "consequences": "Se reutiliza únicamente el literal de conexión sin ejecutar código legado y sin copiar secretos al nuevo script"}
+  ],
+  "verification": [
+    {"command": "python -m pytest tests/unit/test_incorporar_conductores_neon.py tests/unit/test_conductor_sync_service.py tests/integration/test_conductor_sync_api.py tests/migrations/test_conductor_sync_migration.py -q", "result": "passed", "evidence": "37 passed in 8.44s"},
+    {"command": "python -m scripts.incorporar_conductores_neon --conexion-desde scripts/sanear_estadias_duplicadas.py --aplicar --informe .tmp/altas_conductores_neon_aplicadas_20261105.json", "result": "passed", "evidence": "Neon taller: recibidos=307, creados=207, actualizados=0, sin_cambios=100, omitidos_fuente=103"},
+    {"command": "python -m scripts.incorporar_conductores_neon --conexion-desde scripts/sanear_estadias_duplicadas.py --informe .tmp/altas_conductores_neon_verificacion_20261105.json", "result": "passed", "evidence": "Revisión posterior: recibidos=307, creados=0, sin_cambios=307"}
+  ],
+  "blockers": [],
+  "nextStep": "Revisar las identidades omitidas en la fuente y continuar activación del job mensual.",
+  "git": {"repository": "BackendTallerNarbus", "commit": null, "dirty": true},
+  "notes": ["Escritura remota autorizada explícitamente por la solicitud urgente del usuario; realizada mediante código transaccional.", "No se modificó .env ni se ejecutaron migraciones remotas.", "Credenciales nuevas: RUT sin puntos con guion y bcrypt de los primeros cuatro dígitos."]
+}

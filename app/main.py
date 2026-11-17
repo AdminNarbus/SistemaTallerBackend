@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
     Manejo del ciclo de vida de la aplicación.
     La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
     """
+    conductor_sync_task = None
     keepalive_task = None
     keepalive_stop = asyncio.Event()
     if settings.REALTIME_ENABLED:
@@ -120,7 +121,17 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
     
+    if settings.ENVIRONMENT == AppEnvironment.PRODUCTION and settings.CONDUCTORES_SYNC_TIMER_ENABLED:
+        from app.modules.auth.services.conductor_sync_timer import ejecutar_timer_conductores
+        conductor_sync_task = asyncio.create_task(ejecutar_timer_conductores(), name="narbus-conductores-timer")
+
     yield
+    if conductor_sync_task:
+        conductor_sync_task.cancel()
+        try:
+            await conductor_sync_task
+        except asyncio.CancelledError:
+            pass
     if settings.REALTIME_ENABLED:
         await realtime_runtime.stop()
     if keepalive_task:

@@ -56,40 +56,51 @@ def calcular_telemetria_estadias(
     y el conteo total de visitas.
     """
     ref_now = now or datetime.now(timezone.utc)
-    d_ref_now = normalizar_fecha_utc(ref_now)
-
-    total_visitas = len(estadias)
     if not estadias:
-        acumulado = float(horas_taller_acumuladas_db or 0.0)
-        return round(acumulado, 1), 0
-
-    horas_acumuladas = 0.0
+        return round(max(0.0, float(horas_taller_acumuladas_db or 0.0)), 1), 0
+    total = 0.0
     for est in estadias:
-        if isinstance(est, dict):
-            h = est.get("horas_estadia")
-            f_ing = est.get("fecha_ingreso")
-            f_sal = est.get("fecha_salida")
-        else:
-            h = getattr(est, "horas_estadia", None)
-            f_ing = getattr(est, "fecha_ingreso", None)
-            f_sal = getattr(est, "fecha_salida", None)
+        get = est.get if isinstance(est, dict) else lambda key: getattr(est, key, None)
+        horas = get("horas_estadia")
+        ingreso = _fecha_estadia(get("fecha_ingreso"))
+        salida = _fecha_estadia(get("fecha_salida"))
+        if horas is not None:
+            total += max(0.0, float(horas))
+        elif ingreso and (salida or en_taller):
+            fin = normalizar_fecha_utc(salida or ref_now)
+            total += max(0.0, (fin - normalizar_fecha_utc(ingreso)).total_seconds()) / 3600
+    return round(total, 1), len(estadias)
 
-        if h is not None:
-            horas_acumuladas += float(h)
-        elif f_ing is not None and f_sal is None:
-            # Estadía en curso actualmente
-            d_ing = normalizar_fecha_utc(f_ing) if isinstance(f_ing, datetime) else f_ing
-            if isinstance(d_ing, str):
-                try:
-                    d_ing = datetime.fromisoformat(d_ing)
-                    d_ing = normalizar_fecha_utc(d_ing)
-                except Exception:
-                    d_ing = None
-            if d_ing:
-                delta = max(0.0, (d_ref_now - d_ing).total_seconds())
-                horas_acumuladas += delta / 3600.0
 
-    return round(horas_acumuladas, 1), total_visitas
+def _fecha_estadia(valor: Any) -> Optional[datetime]:
+    if isinstance(valor, datetime) or valor is None:
+        return valor
+    return datetime.fromisoformat(valor)
+
+
+def calcular_horas_reales_taller(solicitud: Any, now: Optional[datetime] = None) -> float:
+    """Permanencia física; nunca utiliza la fecha de creación de la solicitud."""
+    get = solicitud.get if isinstance(solicitud, dict) else lambda key: getattr(solicitud, "__dict__", {}).get(key)
+    estadias = get("estadias") or get("estadias_json") or []
+    if isinstance(estadias, str):
+        import json
+        estadias = json.loads(estadias)
+    estado = get("estado")
+    fin = (get("fecha_liberacion") or get("fecha_cierre")) if estado == "LIBERADO" else (get("fecha_cierre") or get("fecha_liberacion"))
+    if estado not in ("LIBERADO", "FINALIZADO"):
+        fin = None
+    activo = estado == "EN_REPARACION"
+    if estadias:
+        return calcular_telemetria_estadias(estadias, en_taller=activo or fin is not None, now=_fecha_estadia(fin) if not activo else now)[0]
+    acumulado = get("horas_en_taller")
+    if acumulado is None:
+        acumulado = get("horas_taller_acumuladas")
+    if acumulado is not None and float(acumulado) > 0:
+        return round(float(acumulado), 1)
+    ingreso = _fecha_estadia(get("fecha_primer_ingreso_taller") or get("fecha_ingreso"))
+    if ingreso and (activo or fin):
+        return calcular_horas_en_taller(ingreso, now if activo else _fecha_estadia(fin)) or 0.0
+    return 0.0
 
 
 def validar_pauta_preventiva_cierre(

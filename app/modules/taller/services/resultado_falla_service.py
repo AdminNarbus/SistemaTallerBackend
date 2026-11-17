@@ -106,6 +106,8 @@ class ResultadoFallaService:
             return self._replay(previa, actor_id, detalle_id, huella)
         if not cabecera.es_ot:
             raise BusinessRuleException("Apruebe la solicitud como OT antes de registrar un resultado")
+        from app.modules.taller.services.revision_falla_service import exigir_falla_aprobada
+        exigir_falla_aprobada(detalle)
         if solicitud_estado == "FINALIZADO":
             raise BusinessRuleException("Reabra la OT antes de registrar un resultado")
         evento_vigente_id = await db.scalar(

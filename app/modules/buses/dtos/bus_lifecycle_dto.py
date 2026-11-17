@@ -41,6 +41,7 @@ class BusResponseDTO(BusBaseDTO):
     """Representación completa de ficha de bus serializada desde modelo ORM."""
 
     id: int
+    horas_taller_totales: Optional[float] = Field(None, description="Horas físicas históricas de todas las OTs; calculadas en consultas de ficha")
 
     model_config = ConfigDict(from_attributes=True)
 

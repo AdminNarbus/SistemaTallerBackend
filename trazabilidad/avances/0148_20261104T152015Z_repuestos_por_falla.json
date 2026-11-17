@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 148,
+  "id": "AV-0148",
+  "timestamp": "2026-11-04T15:20:15Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REP-1",
+    "name": "Repuestos utilizados por falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Catálogo vacío administrable y registro de repuestos por falla con cantidades informativas y bitácora. Sin importación Excel.",
+  "scope": {
+    "planned": [
+      "Catálogo, permisos y trazabilidad por falla",
+      "Pruebas de API y migraciones"
+    ],
+    "completed": [
+      "Modelos y migraciones 037 y 038",
+      "Catálogo y operaciones de uso y anulación",
+      "Protección del borrado de fallas con usos",
+      "Guía API y pruebas en PostgreSQL temporal"
+    ],
+    "pending": [
+      "Aplicar migraciones al entorno de destino mediante procedimiento habitual"
+    ],
+    "outOfScope": [
+      "Importación o carga de Excel",
+      "Stock, bodegas, compras",
+      "Frontend y despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller",
+      "action": "modified",
+      "summary": "Modelos, DTO, repositorio, servicios y rutas de repuestos"
+    },
+    {
+      "path": "alembic/versions",
+      "action": "modified",
+      "summary": "Unión de ramas y esquema de repuestos"
+    },
+    {
+      "path": "tests/integration/test_repuestos_api.py",
+      "action": "created",
+      "summary": "Pruebas de uso y bitácora"
+    },
+    {
+      "path": "tests/migrations/test_repuestos_migration.py",
+      "action": "created",
+      "summary": "Prueba de esquema en PostgreSQL temporal"
+    },
+    {
+      "path": "trazabilidad/GUIA_FRONTEND_REPUESTOS_POR_FALLA.md",
+      "action": "created",
+      "summary": "Contratos y permisos"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Catálogo inicialmente vacío",
+      "rationale": "El usuario excluyó la carga inicial y toda importación Excel.",
+      "consequences": "Los artículos se crean y editan mediante API por supervisión o administración."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Uso por falla con cantidad informativa",
+      "rationale": "El usuario necesita identificar repuestos y cantidad por falla sin inventario.",
+      "consequences": "Una falla admite cero o varios artículos; no hay stock ni descuento."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar trazabilidad",
+      "rationale": "Los códigos pueden cambiar y las fallas con registros no deben eliminarse.",
+      "consequences": "Se conservan datos históricos, anulaciones y restricciones referenciales."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Pruebas locales fuera del sandbox",
+      "rationale": "El bucle asíncrono de Windows se bloqueó al crear su socket interno bajo sandbox.",
+      "consequences": "Se ejecutaron pytest y PostgreSQL temporal local fuera del sandbox."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_repuestos_api.py tests/integration/test_taller_api.py tests/integration/test_supervision_api.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/migrations/test_repuestos_migration.py",
+      "result": "passed",
+      "evidence": "47 pruebas aprobadas; PostgreSQL temporal para el ciclo de la migración 038."
+    },
+    {
+      "command": "pytest tests/integration/test_repuestos_api.py",
+      "result": "passed",
+      "evidence": "3 pruebas aprobadas incluyendo mecánico asignado."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar las migraciones al entorno autorizado y consumir la API desde el frontend.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/repuestos-por-falla",
+    "commit": "5505627",
+    "dirty": true
+  },
+  "notes": [
+    "El código se encuentra en el workspace sin commit; se preservaron cambios locales preexistentes.",
+    "Las pruebas del esquema 038 usan SQL de migración sobre PostgreSQL temporal; no se ejecutó el ciclo completo del historial Alembic en una BD real."
+  ]
+}

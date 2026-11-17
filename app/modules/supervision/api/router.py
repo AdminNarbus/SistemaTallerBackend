@@ -84,7 +84,7 @@ async def listar_usuarios_supervision(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de usuarios a omitir para paginación"),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de usuarios por página (default: 20)"),
-    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR)"),
+    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR, VISUAL)"),
     q: Optional[str] = Query(None, description="Búsqueda por texto en nombre, apellido o username"),
     is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
@@ -133,7 +133,7 @@ async def get_auditoria_buses_taller(
 ):
     """
     Dashboard Auditor para Supervisores/Administradores:
-    En el resumen, tiempo_taller representa las horas desde la creación de la OT hasta ahora.
+    En el resumen, tiempo_taller, horas_en_taller y horas_taller_acumuladas representan permanencia física real.
     Retorna la trazabilidad completa en vivo de todos los buses en taller, incluyendo
     historial inmutable de equipos de mecánicos por turno, checks de fallas con marcas de tiempo
     y la bitácora de comentarios cronológica. Permite filtros por bus, estado, nombre/username del mecánico,
@@ -316,7 +316,12 @@ async def get_solicitud_supervision(
     response_model=SolicitudDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Añadir falla a una OT desde el panel de supervisión",
-    description="Permite a la supervisora agregar una avería a una OT existente, con opción de dejarla pendiente, asignarla de inmediato a un mecánico o registrarla como ya resuelta.",
+    description=(
+        "Permite a la supervisora agregar una avería a una OT existente, con opción de dejarla "
+        "pendiente, asignarla de inmediato a un mecánico o registrarla como ya resuelta. "
+        "Admite fecha_reporte opcional con zona horaria, actual o anterior; "
+        "fecha_creacion conserva el momento de ingreso al sistema."
+    ),
 )
 async def agregar_falla_supervision(
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
@@ -475,3 +480,18 @@ async def eliminar_evidencia_supervision(
 
 
 
+
+
+@router.patch(
+    "/solicitudes/{id}/detalles/{detalle_id}/aprobar",
+    response_model=SolicitudDTO,
+    summary="Dar el visto bueno a una falla pendiente de revisión",
+)
+async def aprobar_falla_supervision(
+    id: int = Path(..., ge=1),
+    detalle_id: int = Path(..., ge=1),
+    current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+) -> SolicitudDTO:
+    from app.modules.taller.services.revision_falla_service import aprobar_falla
+    return await aprobar_falla(db, (id, detalle_id, current_user.id, current_user.nombre_completo))

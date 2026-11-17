@@ -8,6 +8,7 @@ class RolUsuario(str, Enum):
     SUPERVISOR = "SUPERVISOR"
     MECANICO = "MECANICO"
     CONDUCTOR = "CONDUCTOR"
+    VISUAL = "VISUAL"
 
 
 ROLES_PERMITIDOS: Final[frozenset[str]] = frozenset(

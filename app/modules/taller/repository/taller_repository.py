@@ -430,6 +430,9 @@ class TallerRepository:
                                 'descripcion_personalizada', d.descripcion_personalizada,
                                 'estado', d.estado,
                                 'motivo_incompleto', d.motivo_incompleto,
+                                'estado_revision', d.estado_revision,
+                                'revisado_por_id', d.revisado_por_id,
+                                'fecha_revision', d.fecha_revision,
                                 'resuelto', d.resuelto,
                                 'reportado_por_id', d.reportado_por_id,
                                 'reportado_por_nombre', CASE WHEN upr.id IS NOT NULL THEN TRIM(CONCAT(upr.nombre, ' ', COALESCE(upr.apellido, ''))) ELSE NULL END,
@@ -442,6 +445,10 @@ class TallerRepository:
                                             WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
                                             ORDER BY ev2.id DESC LIMIT 1)
                                           AND evx.estado_nuevo = d.estado
+                                          AND EXISTS (
+                                              SELECT 1 FROM taller_falla_evento_mecanicos autores
+                                              WHERE autores.evento_id = evx.id
+                                          )
                                     ) THEN (
                                         SELECT string_agg(em.mecanico_nombre_snapshot, ', ' ORDER BY em.id)
                                         FROM taller_falla_eventos ev
@@ -465,6 +472,10 @@ class TallerRepository:
                                             WHERE ev2.detalle_id = d.id AND ev2.tipo_evento = 'RESUELTA'
                                             ORDER BY ev2.id DESC LIMIT 1)
                                           AND evx.estado_nuevo = d.estado
+                                          AND EXISTS (
+                                              SELECT 1 FROM taller_falla_evento_mecanicos autores
+                                              WHERE autores.evento_id = evx.id
+                                          )
                                     ) THEN COALESCE((
                                         SELECT json_agg(json_build_object(
                                             'id', em.mecanico_id, 'nombre', em.mecanico_nombre_snapshot
@@ -971,6 +982,9 @@ class TallerRepository:
                                 'descripcion_personalizada', d.descripcion_personalizada,
                                 'estado', d.estado,
                                 'motivo_incompleto', d.motivo_incompleto,
+                                'estado_revision', d.estado_revision,
+                                'revisado_por_id', d.revisado_por_id,
+                                'fecha_revision', d.fecha_revision,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
@@ -1232,6 +1246,9 @@ class TallerRepository:
                                 'descripcion_personalizada', d.descripcion_personalizada,
                                 'estado', d.estado,
                                 'motivo_incompleto', d.motivo_incompleto,
+                                'estado_revision', d.estado_revision,
+                                'revisado_por_id', d.revisado_por_id,
+                                'fecha_revision', d.fecha_revision,
                                 'resuelto', d.resuelto,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
@@ -1537,6 +1554,13 @@ class TallerRepository:
         stmt = select(TallerSolicitud.id).where(TallerSolicitud.id == solicitud_id)
         res = await db.execute(stmt)
         return res.scalar_one_or_none() is not None
+
+    async def get_detalles_pendientes_revision(self, db: AsyncSession, solicitud_id: int):
+        resultado = await db.execute(select(TallerSolicitudDetalle).where(
+            TallerSolicitudDetalle.solicitud_id == solicitud_id,
+            TallerSolicitudDetalle.estado_revision == "PENDIENTE",
+        ))
+        return list(resultado.scalars().all())
 
     async def get_asignaciones_activas(
         self,

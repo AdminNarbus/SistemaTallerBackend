@@ -71,6 +71,11 @@ class AgregarFallaDTO(BaseModel):
     mecanico_id: Optional[int] = None
     usuario_id: Optional[int] = None
     resuelto: bool = False
+    fecha_reporte: Optional[AwareDatetime] = Field(
+        None,
+        description="Fecha real del reporte, con zona horaria, solo para SUPERVISOR/ADMIN. "
+        "No admite fechas futuras; omitida o null usa la fecha actual. No cambia fecha_creacion.",
+    )
 
     @property
     def texto_falla(self) -> str:
@@ -222,6 +227,9 @@ class SolicitudDetalleDTO(BaseModel):
     falla: Optional[FallaTallerDTO] = None
     descripcion_personalizada: Optional[str] = None
     estado: str = EstadoFalla.PENDIENTE.value
+    estado_revision: str = "PENDIENTE"
+    revisado_por_id: Optional[int] = None
+    fecha_revision: Optional[datetime] = None
     motivo_incompleto: Optional[str] = None
     resuelto: bool
     reportado_por_id: Optional[int] = None

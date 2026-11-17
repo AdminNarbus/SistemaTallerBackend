@@ -187,7 +187,7 @@ class UserService:
         usuario_in: UsuarioUpdateDTO,
         current_user_id: int,
     ) -> UsuarioResponseDTO:
-        """Actualiza parcialmente nombre, apellido y teléfono de un usuario."""
+        """Actualiza parcialmente los datos personales y credenciales de un usuario."""
         logger.info(
             "[USER-SERVICE] Actualizando datos personales | id=%s | solicitado_por=%s",
             usuario_id,
@@ -198,14 +198,28 @@ class UserService:
             raise NotFoundException("El usuario especificado no fue encontrado.")
 
         payload = usuario_in.model_dump(exclude_unset=True)
-        await user_repository.actualizar_datos_personales(
-            db,
-            user,
-            nombre=payload.get("nombre"),
-            apellido=payload.get("apellido"),
-            telefono=payload.get("telefono"),
-        )
-        await db.commit()
+        username = payload.get("username")
+        if username is not None:
+            existente = await user_repository.get_by_username(db, username=username)
+            if existente and existente.id != usuario_id:
+                raise ConflictException("El nombre de usuario ya está registrado en el sistema.")
+
+        try:
+            if username is not None:
+                user.username = username
+            if payload.get("password") is not None:
+                user.password_hash = get_password_hash(payload["password"])
+            await user_repository.actualizar_datos_personales(
+                db,
+                user,
+                nombre=payload.get("nombre"),
+                apellido=payload.get("apellido"),
+                telefono=payload.get("telefono"),
+            )
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ConflictException("El nombre de usuario ya está registrado en el sistema.") from exc
         clear_user_cache(usuario_id)
         publish_event_soon(RealtimeEvent(
             resource_type="user",

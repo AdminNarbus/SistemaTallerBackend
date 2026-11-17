@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 167,
+  "id": "AV-0167",
+  "timestamp": "2026-11-12T12:43:04Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "FECHA-REPORTE-FALLA",
+    "name": "Fecha de reporte histórica desde supervisión",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "SUPERVISOR y ADMIN pueden indicar fecha_reporte al agregar una falla; fecha_creacion mantiene el momento real de ingreso al sistema.",
+  "scope": {
+    "planned": ["Reporte histórico opcional", "Conservar auditoría", "Contexto para frontend"],
+    "completed": ["DTO con zona horaria", "Permisos y rechazo de fechas futuras", "Evento REPORTADA coherente", "Pruebas unitarias e integración", "Guía frontend"],
+    "pending": [],
+    "outOfScope": ["Cambios en el repositorio frontend", "Despliegue", "Edición de fechas existentes", "Modificaciones de bases externas"]
+  },
+  "changes": [
+    {"path": "app/modules/taller/dtos/averias_dto.py", "action": "modified", "summary": "fecha_reporte opcional de tipo AwareDatetime"},
+    {"path": "app/modules/taller/services/averias_service.py", "action": "modified", "summary": "Validación por rol, normalización UTC y fecha efectiva del evento REPORTADA"},
+    {"path": "app/modules/supervision/api/router.py", "action": "modified", "summary": "Descripción OpenAPI del nuevo campo"},
+    {"path": "tests/unit/test_fecha_reporte_reglas.py", "action": "created", "summary": "Reglas puras, permisos y validación del DTO"},
+    {"path": "tests/integration/test_fecha_reporte_falla.py", "action": "created", "summary": "Persistencia, auditoría, permisos, errores y compatibilidad de creación"},
+    {"path": "docs/FECHA_REPORTE_FALLAS_FRONTEND.md", "action": "created", "summary": "Contrato, payload, zonas horarias, errores e integración frontend"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Estado de la implementación local"}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Reutilizar fecha_reporte y preservar fecha_creacion",
+      "rationale": "El modelo y las respuestas ya separan reporte e ingreso al sistema.",
+      "consequences": "Sin migración ni alteración de registros existentes; campo omitido o null conserva el comportamiento anterior."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Validar fechas históricas en el servicio compartido",
+      "rationale": "La creación se usa desde supervisión y taller; los permisos deben ser iguales en ambas rutas.",
+      "consequences": "Solo SUPERVISOR/ADMIN pueden enviar una fecha explícita; otros roles reciben 403. Fechas sin zona y futuras reciben 422. Se permiten reportes anteriores a la creación de la OT."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Separar fecha del evento y auditoría",
+      "rationale": "El evento REPORTADA debe reflejar el reporte histórico sin atribuirle una fecha de inserción ficticia.",
+      "consequences": "fecha_evento usa fecha_reporte; fecha_registro conserva el default del servidor. Asignaciones, revisión y resolución mantienen su fecha actual."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv/Scripts/python.exe -m pytest tests/unit/test_fecha_reporte_reglas.py tests/integration/test_fecha_reporte_falla.py tests/integration/test_revision_fallas.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/unit/test_supervision_service.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "67 passed, 3 advertencias de deprecación de Starlette, en 21.08s. SQLite en memoria con ENVIRONMENT=dev_local y STORAGE_PROVIDER=local."
+    },
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de espacios."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar el campo en el modal de supervisión del frontend y desplegar el backend cuando corresponda.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/alertas-whatsapp",
+    "commit": "0c00d8c7ca5854438a26c56fee0cd77a55f9884c",
+    "dirty": true
+  },
+  "notes": [
+    "Cambios previos del usuario preservados, incluidos los de WhatsApp.",
+    "La ejecución restringida quedó detenida al iniciar asyncio; se interrumpió y las pruebas se completaron con escalación autorizada.",
+    "No se modificó la base configurada ni se realizó despliegue."
+  ]
+}

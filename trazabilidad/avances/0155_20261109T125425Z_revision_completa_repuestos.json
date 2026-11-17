@@ -1,0 +1,169 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 155,
+  "id": "AV-0155",
+  "timestamp": "2026-11-09T12:54:25.944179+00:00",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "REP-REV",
+    "name": "Revisión completa de repuestos por falla",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Revisión y correcciones de repuestos: 42 pruebas específicas y 120 regresiones pasan; migración y concurrencia comprobadas en PostgreSQL temporal.",
+  "scope": {
+    "planned": [
+      "Auditar catálogo, consumos, permisos, migración y concurrencia"
+    ],
+    "completed": [
+      "Revisión del plan y contratos",
+      "Corrección de edición con ID cero",
+      "Normalización UTC de evidencia",
+      "Validación de rol vigente",
+      "Corrección de aprobación inicial preservando selección",
+      "Pruebas API, unitarias, PostgreSQL y regresión",
+      "Informe y trazabilidad"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Despliegue",
+      "Frontend",
+      "Cambios en bases externas",
+      "Prueba de carga sostenida"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/api/repuestos_router.py",
+      "action": "modified",
+      "summary": "IDs positivos en rutas"
+    },
+    {
+      "path": "app/modules/taller/services/repuesto_service.py",
+      "action": "modified",
+      "summary": "Evitar creación al editar cero y validar rol vigente sin consulta duplicada"
+    },
+    {
+      "path": "app/modules/taller/dtos/repuesto_dto.py",
+      "action": "modified",
+      "summary": "Fechas de evidencia normalizadas a UTC"
+    },
+    {
+      "path": "app/modules/taller/services/aprobacion_ot_service.py",
+      "action": "modified",
+      "summary": "Aprobación inicial con alcance opcional de IDs"
+    },
+    {
+      "path": "app/modules/taller/services/cuadrilla_service.py",
+      "action": "modified",
+      "summary": "Preservar aprobación exclusiva de selección"
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Acotar aprobación a la falla nueva al autoasignar"
+    },
+    {
+      "path": "tests/integration/test_repuestos_api.py",
+      "action": "modified",
+      "summary": "Preparar fallas operativas como aprobadas"
+    },
+    {
+      "path": "tests/integration/test_repuestos_revision.py",
+      "action": "created",
+      "summary": "Pruebas de ciclo completo, errores, permisos y rollback"
+    },
+    {
+      "path": "tests/unit/test_repuesto_service.py",
+      "action": "created",
+      "summary": "Permisos con repositorio simulado"
+    },
+    {
+      "path": "tests/migrations/test_repuestos_migration.py",
+      "action": "modified",
+      "summary": "Ampliar verificaciones CHECK y FK en PostgreSQL"
+    },
+    {
+      "path": "tests/migrations/test_repuestos_postgres_runtime.py",
+      "action": "created",
+      "summary": "Concordancia Alembic/ORM y concurrencia real"
+    },
+    {
+      "path": "tests/integration/test_revision_fallas.py",
+      "action": "modified",
+      "summary": "Alcance de aprobación inicial y reportes posteriores"
+    },
+    {
+      "path": "tests/unit/test_taller_service.py",
+      "action": "modified",
+      "summary": "Preparación explícita de aprobación para pruebas de resultados"
+    },
+    {
+      "path": "docs/REVISION_REPUESTOS_20261109.md",
+      "action": "created",
+      "summary": "Informe de cobertura, hallazgos, evidencia y límites"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Validar PostgreSQL real sin tocar bases externas",
+      "rationale": "SQLite no comprueba los bloqueos ni toda la semántica del motor de despliegue.",
+      "consequences": "Clúster temporal con comparación de metadata, transacciones concurrentes y restricciones reales."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Separar creación y edición por presencia de ID",
+      "rationale": "El ID cero se interpretaba como ausencia y podía insertar desde PATCH.",
+      "consequences": "Rutas positivas y condición is not None en el servicio."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar evidencia UTC y rol vigente",
+      "rationale": "La evidencia de reintentos debe ser consistente y las mutaciones requieren autorización actual.",
+      "consequences": "Fechas normalizadas en DTO y validación de rol activo antes de recibos o escrituras."
+    },
+    {
+      "id": "DEC-004",
+      "title": "Preservar aprobación inicial y selección explícita",
+      "rationale": "La revisión anterior dejaba fallas iniciales pendientes al tomar una solicitud, bloqueando el flujo existente.",
+      "consequences": "Aprobación inicial de fallas; asignación de IDs específicos aprueba solo esos IDs; cabeceras ya aceptadas no aprueban reportes posteriores."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv/Scripts/python.exe -m pytest tests/integration/test_repuestos_api.py tests/integration/test_repuestos_revision.py tests/unit/test_repuesto_service.py tests/migrations/test_repuestos_migration.py tests/migrations/test_repuestos_postgres_runtime.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "42 passed, 11 advertencias de deprecación del alias HTTP 422 de Starlette, en 30.42 s."
+    },
+    {
+      "command": "venv/Scripts/python.exe -m pytest tests/integration/test_taller_api.py tests/integration/test_supervision_api.py tests/integration/test_fase4_checks_pauta_y_liberacion.py tests/integration/test_bitacora_completa_y_avance_pendiente.py tests/integration/test_revision_fallas.py tests/integration/test_aprobacion_solicitudes.py tests/unit/test_taller_service.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/unit/test_realtime.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "120 passed en 62.80 s."
+    },
+    {
+      "command": "venv/Scripts/python.exe -m alembic heads",
+      "result": "passed",
+      "evidence": "041_revision_fallas (head)."
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "evidence": "Sin errores de whitespace."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar las migraciones mediante el proceso habitual de despliegue y verificar integración del frontend en su repositorio.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/repuestos-por-falla",
+    "commit": "55056270fb92eb9e4f6c35e5401d5b51568e5c78",
+    "dirty": true
+  },
+  "notes": [
+    "No se modificaron bases externas.",
+    "Cambios previos preservados.",
+    "La confirmación es funcional local; no equivale a validación del despliegue ni a prueba de carga."
+  ]
+}

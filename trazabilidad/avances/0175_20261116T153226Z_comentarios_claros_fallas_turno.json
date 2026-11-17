@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 175,
+  "id": "AV-0175",
+  "timestamp": "2026-11-16T15:32:26Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "BITACORA-CLARA-1",
+    "name": "Comentarios comprensibles de reporte, asignación y entrega de turno",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Aclara los mensajes automáticos ilustrados por el usuario: reporte de falla, inicio de atención y entrega de turno con resultados reales. Retira la aprobación anticipada de Gestión de Buses que se perdía por populate_existing sin autoflush y dejaba comentarios duplicados o sin aprobación efectiva.",
+  "scope": {
+    "planned": ["Aclarar los textos sin cambiar el paso a paso del trabajo."],
+    "completed": [
+      "Nueva falla indica si el autor la tomó para trabajar, fue asignada a otro mecánico o quedó pendiente de asignación.",
+      "Tomar/asignar una nueva falla utiliza el tipo ASIGNACION en lugar de AVANCE.",
+      "Entrega de turno separa fallas reparadas y pendientes, mantiene el equipo e identifica el texto libre con Nota.",
+      "Una sola aprobación efectiva al comenzar la atención, sin la anotación anticipada desde Gestión de Buses.",
+      "Pruebas de persistencia de aprobaciones, asignación opcional, entrega individual/grupal y resultados mixtos."
+    ],
+    "pending": [],
+    "outOfScope": ["Reescribir comentarios históricos.", "Editar el repositorio frontend o desplegar cambios.", "Corregir pruebas antiguas ajenas a los comentarios."]
+  },
+  "changes": [
+    {"path": "app/modules/taller/services/buses_taller_service.py", "action": "modified", "summary": "Delega la aprobación al flujo de asignación de averías para eliminar registros anticipados redundantes."},
+    {"path": "app/modules/taller/services/averias_service.py", "action": "modified", "summary": "Acciones explícitas, nombres de fallas recibidos por nombre y clasificación ASIGNACION cuando corresponde."},
+    {"path": "app/modules/taller/services/cuadrilla_service.py", "action": "modified", "summary": "Entrega de turno con resultados reales de las fallas involucradas y nota diferenciada."},
+    {"path": "tests/integration/test_buses_mecanicos_api.py", "action": "modified", "summary": "Valida ausencia de aprobaciones duplicadas en base de datos y contenido según asignación opcional."},
+    {"path": "tests/integration/test_bitacora_completa_y_avance_pendiente.py", "action": "modified", "summary": "Valida texto de entrega y agrega dos casos de reparación parcial/completa en respuesta y consulta posterior."},
+    {"path": "tests/unit/test_comentarios_predeterminados.py", "action": "modified", "summary": "Actualiza la expectativa del comentario de entrega."},
+    {"path": "tests/unit/test_duracion_y_autoasignacion_colaborativa.py", "action": "modified", "summary": "Actualiza la expectativa de entrega grupal."},
+    {"path": "trazabilidad/GUIA_COMENTARIOS_BREVES_Y_ASIGNACION_GRUPAL.md", "action": "modified", "summary": "Catálogo vigente y traducciones sugeridas de etiquetas para frontend."},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Registra alcance y validación de AV-0175."}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Describir la acción y el resultado real",
+      "rationale": "Avance seguido del nombre de una falla no permite saber qué ocurrió ni implica una reparación.",
+      "consequences": "La entrega informa pendientes y reparadas según resuelto; las notas se identifican explícitamente."
+    },
+    {
+      "id": "DEC-002",
+      "title": "Aprobar únicamente en el flujo efectivo de atención",
+      "rationale": "Gestión de Buses aprobaba antes de recargar con populate_existing y autoflush=False; la recarga revertía es_ot en memoria pero dejaba el comentario pendiente. El flujo de autoasignación volvía a aprobar.",
+      "consequences": "Se elimina el comentario redundante sin modificar el comportamiento persistido esperado por las pruebas de reportes con y sin autoasignación."
+    },
+    {
+      "id": "DEC-003",
+      "title": "Conservar historial y prefijo de aprobación",
+      "rationale": "El historial es inmutable y el dashboard identifica la fecha de aprobación por el prefijo Solicitud aprobada como OT.",
+      "consequences": "Sin migración ni cambios históricos; ASIGNACION y ENTREGA_TURNO siguen siendo códigos válidos. La traducción de las etiquetas corresponde al frontend."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/integration/test_buses_mecanicos_api.py tests/integration/test_bitacora_completa_y_avance_pendiente.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_duracion_y_autoasignacion_colaborativa.py -q --tb=short --show-capture=no",
+      "result": "failed",
+      "evidence": "44 passed, 1 failed: test_bloqueo_resolver_falla_con_falta_repuesto intenta intervenir una falla sin aprobación. Reproducido con AveriasService original de HEAD cargado en memoria."
+    },
+    {
+      "command": "pytest tests/integration/test_buses_mecanicos_api.py tests/integration/test_bitacora_completa_y_avance_pendiente.py tests/unit/test_comentarios_predeterminados.py tests/unit/test_duracion_y_autoasignacion_colaborativa.py tests/integration/test_aprobacion_solicitudes.py tests/integration/test_supervision_api.py tests/integration/test_taller_api.py tests/unit/test_taller_service.py tests/dashboard/test_solicitud_ot_transition.py -q --tb=short --show-capture=no -k 'not test_bloqueo_resolver_falla_con_falta_repuesto and not test_supervision_fecha_cambio_estado_json_y_multipart'",
+      "result": "failed",
+      "evidence": "120 passed, 6 failed, 7 deselected. Dos casos nuevos enviaban un equipo incompleto; corregidos y aprobados en ejecución posterior. Cuatro casos antiguos de tiempo_taller esperan 72 horas por antigüedad de solicitud; reproducidos sin cambios con los tres servicios originales de HEAD cargados en memoria. Seis casos de fechas previamente documentados se excluyeron y no se ejecutaron en esta tarea."
+    },
+    {
+      "command": "pytest tests/integration/test_bitacora_completa_y_avance_pendiente.py::test_entrega_turno_distingue_reparadas_de_pendientes -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "2 passed in 2.08s tras enviar mecanicos_ids=[2,3], el equipo activo completo exigido por el contrato. Sin cambios posteriores de código productivo. Total de casos distintos aprobados: 122."
+    },
+    {
+      "command": "Contraste en memoria de los servicios de HEAD mediante git show y pytest para los fallos de repuestos y auditoría",
+      "result": "passed",
+      "evidence": "Se reproducen los cinco fallos ajenos con los mismos errores. No se modificaron archivos para ejecutar el contraste."
+    },
+    {"command": "git diff --check", "result": "passed", "evidence": "Sin errores de whitespace."}
+  ],
+  "blockers": [],
+  "nextStep": "Integrar las traducciones de etiquetas en el frontend y publicar los cambios mediante el flujo habitual.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/alertas-whatsapp", "commit": "2dfab219bd6e4a04f01f61fae186d8290802194b", "dirty": true},
+  "notes": [
+    "Pruebas con ENVIRONMENT=dev_local, WhatsApp desactivado y SQLite efímero en memoria; sin acceso a bases reales.",
+    "La primera ejecución dentro del aislamiento Windows quedó sin salida y se interrumpió. Las ejecuciones fuera del aislamiento completaron normalmente.",
+    "Se preservan los cambios locales anteriores de WhatsApp, configuración y otros módulos. Sin commit ni despliegue."
+  ]
+}

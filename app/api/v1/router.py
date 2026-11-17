@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.api.deps import enforce_visual_read_only
+from app.modules.auth.api.conductor_sync_router import router as conductor_sync_router
 
 from app.api.v1.endpoints import health
 from app.api.publica.router import router as publica_router
@@ -11,7 +13,8 @@ from app.modules.dashboard.api.router import router as dashboard_router
 
 from app.modules.control_mantenciones.api.router import router as control_mantenciones_router
 
-api_router = APIRouter()
+api_router = APIRouter(dependencies=[Depends(enforce_visual_read_only)])
+api_router.include_router(conductor_sync_router)
 
 # Autenticación y Usuarios
 api_router.include_router(auth_router, prefix="/auth", tags=["Autenticación"])

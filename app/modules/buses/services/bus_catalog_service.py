@@ -93,7 +93,9 @@ class BusCatalogService:
         if not bus:
             logger.warning("[BUSES-CATALOG] Bus no encontrado por ID | id=%s", bus_id)
             raise NotFoundException(f"Bus con ID {bus_id} no encontrado")
-        return BusResponseDTO.model_validate(bus)
+        dto = BusResponseDTO.model_validate(bus)
+        dto.horas_taller_totales = await self.repo.get_horas_taller_totales(db, bus.id)
+        return dto
 
     async def get_bus_by_n_bus(self, db: AsyncSession, n_bus: str) -> BusResponseDTO:
         """Recupera la ficha de un bus a partir de su número de máquina asignado."""
@@ -101,7 +103,9 @@ class BusCatalogService:
         if not bus:
             logger.warning("[BUSES-CATALOG] Bus no encontrado por n_bus | n_bus='%s'", n_bus)
             raise NotFoundException(f"Bus con número '{n_bus}' no encontrado")
-        return BusResponseDTO.model_validate(bus)
+        dto = BusResponseDTO.model_validate(bus)
+        dto.horas_taller_totales = await self.repo.get_horas_taller_totales(db, bus.id)
+        return dto
 
     async def listar_buses(
         self,

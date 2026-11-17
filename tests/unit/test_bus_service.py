@@ -343,8 +343,13 @@ async def test_dar_de_baja_bus_con_ots_abiertas_requiere_forzar(db_session, seed
         await bus_fleet_service.dar_de_baja_bus(db_session, bus_id=bus.id, dto=dto_baja)
     assert "orden(es) de trabajo abierta(s)" in str(exc_info.value)
 
-    # Con forzar -> éxito
+    # Forzar no puede dejar una orden en reparación con el bus fuera de taller.
     dto_baja_forzada = BusDarDeBajaDTO(motivo="Retiro forzado de flota", forzar=True)
+    with pytest.raises(BusinessRuleException, match="orden en reparación"):
+        await bus_fleet_service.dar_de_baja_bus(db_session, bus_id=bus.id, dto=dto_baja_forzada)
+
+    solicitud.estado = "PENDIENTE"
+    await db_session.flush()
     bus_dado_baja = await bus_fleet_service.dar_de_baja_bus(
         db_session, bus_id=bus.id, dto=dto_baja_forzada, usuario_id=1
     )

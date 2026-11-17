@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BusinessRuleException, NotFoundException
+from app.core.exceptions import BusinessRuleException, NotFoundException, PermissionException
 from app.modules.taller.models.taller_solicitud import TallerSolicitud
 from app.modules.auth.constants import RolUsuario
 from app.modules.taller.constants import EstadoSolicitud, EstadoFalla, TipoEventoFalla
@@ -44,7 +44,25 @@ from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, r
 
 from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_como_ot
 
+from app.modules.taller.services.revision_falla_service import (
+    aprobar_detalle, exigir_falla_aprobada, puede_aprobar_reporte,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def resolver_fecha_reporte(
+    dto: AgregarFallaDTO, rol_reportante: str, ahora: datetime,
+) -> datetime:
+    """Valida el reporte histórico sin modificar las fechas de auditoría."""
+    if dto.fecha_reporte is None:
+        return ahora
+    if rol_reportante not in (RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value):
+        raise PermissionException("Solo supervisores y administradores pueden indicar fecha_reporte")
+    fecha_reporte = dto.fecha_reporte.astimezone(timezone.utc)
+    if fecha_reporte > ahora:
+        raise BusinessRuleException("La fecha de reporte no puede ser futura")
+    return fecha_reporte
 
 
 class AveriasService:
@@ -122,20 +140,32 @@ class AveriasService:
         u = await self.repo.get_usuario_by_id(db, mecanico_id)
         mec_nombre = u.nombre_completo if u else "Mecánico"
 
+        rol_reportante = (getattr(getattr(u, "rol_rel", None), "nombre", None) or "").upper().strip()
+        fecha_reporte = resolver_fecha_reporte(dto, rol_reportante, now)
+        revision_automatica = await puede_aprobar_reporte(
+            db, (self.repo, solicitud.id, mecanico_id, rol_reportante)
+        )
+
+        if rol_reportante == "MECANICO" and dto.autoasignar:
+            revision_automatica = True
+
         # 3. Crear nuevo detalle de falla
         nuevo_detalle = TallerSolicitudDetalle(
             solicitud_id=solicitud.id,
             falla_id=falla_id,
             descripcion_personalizada=texto,
             estado=EstadoFalla.PENDIENTE.value,
+            estado_revision="PENDIENTE",
             motivo_incompleto=None,
             resuelto=False,
             falta_repuesto=False,
             fecha_creacion=now,
-            fecha_reporte=now,
+            fecha_reporte=fecha_reporte,
             reportado_por_id=mecanico_id,
             asignaciones=[],
         )
+        if revision_automatica:
+            aprobar_detalle(nuevo_detalle, AprobacionOT(mecanico_id, mec_nombre, "Revisión automática", now))
         if f_obj:
             nuevo_detalle.falla = f_obj
         self.repo.add_detalle(db, nuevo_detalle)
@@ -149,7 +179,7 @@ class AveriasService:
             actor_nombre=mec_nombre,
             estado_anterior=None,
             estado_nuevo=EstadoFalla.PENDIENTE.value,
-            fecha_evento=now,
+            fecha_evento=fecha_reporte,
             comentario=texto,
         )
 
@@ -202,6 +232,7 @@ class AveriasService:
             )
             nueva_asig.mecanico = u_asig
             nueva_asig.asignado_por = u
+            tipo_bitacora = "ASIGNACION"
             self.repo.add_asignacion_falla(db, nueva_asig)
             nuevo_detalle.asignaciones.append(nueva_asig)
             if (
@@ -226,7 +257,7 @@ class AveriasService:
                 self.repo.add_mecanico(db, nueva_presencia)
                 attach_mecanico_safe(solicitud, nueva_presencia)
 
-            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Asignación de nueva falla por supervisión", fecha_evento=now))
+            await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Supervisión asignó la nueva falla a un mecánico.", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
             if solicitud.estado in [
                 EstadoSolicitud.PENDIENTE.value,
@@ -237,7 +268,7 @@ class AveriasService:
                     self.repo, db, solicitud, now
                 )
         else:
-            debe_autoasignar = dto.autoasignar and not es_supervisor
+            debe_autoasignar = dto.autoasignar and not es_supervisor and revision_automatica
             if debe_autoasignar:
                 nueva_asig = TallerAsignacionFalla(
                     solicitud_id=solicitud.id,
@@ -277,7 +308,8 @@ class AveriasService:
                     self.repo.add_mecanico(db, nueva_presencia)
                     attach_mecanico_safe(solicitud, nueva_presencia)
 
-                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "Autoasignación de nueva falla", fecha_evento=now))
+                tipo_bitacora = "ASIGNACION"
+                await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nombre, "El mecánico tomó la nueva falla para trabajar.", fecha_evento=now, detalles_ids=(nuevo_detalle.id,)))
 
                 if solicitud.estado in [
                     EstadoSolicitud.PENDIENTE.value,
@@ -292,11 +324,7 @@ class AveriasService:
             solicitud.detalles.append(nuevo_detalle)
 
         # 5. Registrar en bitácora inmutable
-        desc_pers = (
-            dto.descripcion_personalizada.strip()
-            if dto.descripcion_personalizada
-            else None
-        )
+        desc_pers = (dto.descripcion_personalizada or texto or "").strip()
         nom_falla_o_cat = None
         if f_obj:
             nom_falla_o_cat = f_obj.nombre
@@ -316,11 +344,12 @@ class AveriasService:
             if u_resolutor:
                 texto_bitacora = formatear_reparacion(falla_txt, [u_resolutor.nombre_completo])
             elif u_asig:
-                texto_bitacora = f"Nueva falla: {falla_txt}. Asignación: {u_asig.nombre_completo}"
+                texto_bitacora = f"Nueva falla: {falla_txt}. Asignada a {u_asig.nombre_completo} para trabajar."
             else:
-                texto_bitacora = f"Nueva falla: {falla_txt}"
+                texto_bitacora = f"Nueva falla: {falla_txt}. Queda pendiente de asignación."
         else:
-            texto_bitacora = f"Nueva falla: {falla_txt}"
+            accion = "Tomó la falla para trabajar." if debe_autoasignar else "Queda pendiente de asignación."
+            texto_bitacora = f"Nueva falla: {falla_txt}. {accion}"
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,
@@ -407,6 +436,7 @@ class AveriasService:
                 raise NotFoundException("Solicitud de taller no encontrada")
             raise NotFoundException("Detalle de falla no encontrado")
 
+        exigir_falla_aprobada(detalle_target)
         now = datetime.now(timezone.utc)
         estado_anterior = detalle_target.estado
         is_resuelta = target_estado == EstadoFalla.RESUELTA
@@ -605,6 +635,7 @@ class AveriasService:
                 f"Detalle con ID {detalle_id} no encontrado en la solicitud"
             )
 
+        exigir_falla_aprobada(detalle)
         if dto.falta_repuesto and getattr(detalle, "resuelto", False):
             raise BusinessRuleException(
                 "No se puede reportar falta de repuesto en una falla que ya fue marcada como resuelta. "
@@ -721,6 +752,7 @@ class AveriasService:
                 "Detalle de falla no encontrado en la orden de taller"
             )
 
+        exigir_falla_aprobada(detalle_target)
         now = datetime.now(timezone.utc)
         fecha_cambio_estado = dto.fecha_cambio_estado or now
         estado_anterior = detalle_target.estado
@@ -948,6 +980,10 @@ class AveriasService:
             raise BusinessRuleException(
                 "No se puede eliminar una falla que ya ha sido marcada como resuelta. Debe reabrirla previamente si desea descartarla."
             )
+
+        from app.modules.taller.repository.repuesto_repository import repuesto_repository
+        if await repuesto_repository.existe_uso(db, detalle_id):
+            raise BusinessRuleException("No se puede eliminar una falla con repuestos registrados")
 
         falla_nom = (
             detalle.descripcion_personalizada

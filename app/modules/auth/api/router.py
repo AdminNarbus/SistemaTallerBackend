@@ -164,7 +164,7 @@ async def listar_usuarios(
     response: Response,
     skip: int = Query(DEFAULT_PAGE_SKIP, ge=0, description="Número de usuarios a omitir para paginación"),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT, description="Número máximo de usuarios por página (default: 20)"),
-    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR)"),
+    rol: Optional[str] = Query(None, description="Filtrar por nombre de rol (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR, VISUAL)"),
     q: Optional[str] = Query(None, description="Búsqueda por texto en nombre, apellido o username"),
     is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
     db: AsyncSession = SessionDep,
@@ -206,7 +206,7 @@ async def crear_usuario_supervisor(
 @router.patch(
     "/usuarios/{usuario_id}",
     response_model=UsuarioResponseDTO,
-    summary="Actualizar datos personales de un usuario (Solo SUPERVISOR o ADMIN)",
+    summary="Actualizar datos personales y credenciales (Solo SUPERVISOR o ADMIN)",
 )
 async def actualizar_usuario_supervisor(
     usuario_id: int,
@@ -214,7 +214,7 @@ async def actualizar_usuario_supervisor(
     db: AsyncSession = SessionDep,
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
 ) -> UsuarioResponseDTO:
-    """Actualiza parcialmente nombre, apellido o teléfono sin cambiar credenciales ni permisos."""
+    """Actualiza parcialmente datos personales, username y password del usuario."""
     return await user_service.actualizar_usuario(
         db,
         usuario_id=usuario_id,

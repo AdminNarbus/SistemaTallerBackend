@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.buses.dtos.bus_lifecycle_dto import BusResponseDTO
 from app.modules.buses.repository.bus_repository import BusRepository, bus_repository
 from app.core.realtime.events import RealtimeEvent, publish_event_soon
@@ -34,6 +34,11 @@ class BusWorkshopService:
         Sincroniza el movimiento físico y la estadía de la OT activa en una transacción.
         """
         solicitud = await self.taller_repo.get_solicitud_activa_por_bus(db, bus_id, None)
+        if not en_taller and solicitud and solicitud.estado == "EN_REPARACION":
+            raise BusinessRuleException(
+                "No se puede retirar el bus del taller mientras su orden está en reparación. "
+                "Libere o finalice la orden primero."
+            )
         ot_aprobada = False
         if solicitud:
             now = datetime.now(timezone.utc)

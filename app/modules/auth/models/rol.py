@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class Rol(Base):
     """
     Modelo de la tabla roles en la base de datos PostgreSQL.
-    Define los roles del sistema (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR).
+    Define los roles del sistema (ADMIN, SUPERVISOR, MECANICO, CONDUCTOR, VISUAL).
     """
 
     __tablename__ = "roles"

@@ -804,6 +804,8 @@ async def test_ciclo_de_vida_tres_estados_falla(db_session, seed_test_data):
         ),
         conductor.id,
     )
+    from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_solicitud
+    await aprobar_solicitud(db_session, sol.id, AprobacionOT(4, "Supervisor", "Preparar OT para resultados"))
     det_id = sol.detalles[0].id
 
     # 1. Estado inicial: debe nacer PENDIENTE
@@ -886,6 +888,8 @@ async def test_metricas_fallas_incompletas_en_solicitud(db_session, seed_test_da
         ),
         conductor.id,
     )
+    from app.modules.taller.services.aprobacion_ot_service import AprobacionOT, aprobar_solicitud
+    await aprobar_solicitud(db_session, sol.id, AprobacionOT(4, "Supervisor", "Preparar OT para resultados"))
     det1_id = sol.detalles[0].id
     det2_id = sol.detalles[1].id
     # detalle 3 queda PENDIENTE

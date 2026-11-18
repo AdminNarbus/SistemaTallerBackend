@@ -7,6 +7,7 @@ from app.modules.dashboard.repository.base import (
     percentage,
     valid_duration,
 )
+from app.modules.dashboard.repository.order_queries import period_conditions
 from app.modules.dashboard.repository.relations import B, D, E, V
 from app.modules.dashboard.repository.sql_expressions import (
     EndOfDay,
@@ -57,10 +58,23 @@ class DashboardRepository(ReadRepository):
             )
         return await self.one(select(*fields).select_from(rows))
 
+    def _latest_month(self, filtered, filters):
+        visits = self.relations.workshop_visits
+        periods = union_all(
+            select(filtered.c.periodo),
+            select(MonthKey(visits.c.fecha_visita).label("periodo"))
+            .select_from(visits.join(filtered, filtered.c.id == visits.c.solicitud_id)),
+        ).subquery()
+        return (
+            select(func.max(periods.c.periodo))
+            .where(*period_conditions(periods.c.periodo, filters))
+            .scalar_subquery()
+        )
+
     async def monthly(self, filters):
-        period = MonthKey(func.now())
         loose = filters.model_copy(update={"meses": [], "anios": []})
         filtered = self.queries.filtered(loose).cte("dash_monthly_filtered")
+        period = self._latest_month(filtered, filters)
         orders = select(filtered).where(filtered.c.periodo == period).cte("dash_monthly_orders")
         ot = (
             select(
@@ -86,7 +100,7 @@ class DashboardRepository(ReadRepository):
         )
         r = self.relations.recurrences
         recurrence = (
-            select(func.count())
+            select(func.count(func.distinct(r.c.bus_id)))
             .select_from(r.join(filtered, filtered.c.id == r.c.solicitud_id))
             .where(r.c.periodo == period)
             .scalar_subquery()
@@ -103,6 +117,21 @@ class DashboardRepository(ReadRepository):
                 recurrence.label("reincidencias"),
             ).select_from(ot.join(faults, literal(True)))
         )
+
+    async def recurrence_summary(self, filters):
+        loose = filters.model_copy(update={"meses": [], "anios": []})
+        filtered = self.queries.filtered(loose).cte("dash_recurrence_summary_orders")
+        period = self._latest_month(filtered, filters)
+        r = self.relations.recurrences.c
+        stmt = (
+            select(r.bus_id, func.max(filtered.c.n_bus).label("n_bus"),
+                   func.max(r.visitas_mes).label("visitas_mes"))
+            .select_from(self.relations.recurrences.join(filtered, filtered.c.id == r.solicitud_id))
+            .where(r.periodo == period)
+            .group_by(r.bus_id)
+            .order_by(func.max(r.visitas_mes).desc(), r.bus_id)
+        )
+        return await self.page(stmt, filters)
 
     async def orders(self, filters):
         rows = self.queries.selected(filters).cte("dash_list_orders")

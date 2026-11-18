@@ -264,3 +264,33 @@ async def test_proyeccion_y_limite_del_grafico(sesiones):
         assert grafico["puntos"][0]["kilometraje"] == 105000
         assert grafico["puntos"][0]["id"] is None
         assert all(p["fecha"] >= inicio for p in grafico["puntos"])
+
+async def test_lectura_pendiente_panel_y_eliminacion_auditada(sesiones):
+    async with sesiones() as db:
+        ops = OperationsService(db, ACTOR)
+        query = QueryService(db)
+        dia_anterior = hoy() - timedelta(days=1)
+        await ops.crear_lectura(
+            LecturaCrear(bus_id=ACTOR, fecha=dia_anterior, kilometraje=100000)
+        )
+        await ImportService(db, ACTOR).confirmar(borrador("150000"))
+        filtros = Filtros(bus_id=ACTOR)
+
+        panel = (await query.panel(filtros))["items"][0]
+        assert panel["tiene_lecturas_pendientes"]
+        assert panel["kilometraje_actual"] is None
+        assert panel["ultimo_confirmado"] == 100000
+        assert panel["fecha_ultimo_confirmado"] == dia_anterior
+
+        historial = (await query.historial(filtros))["items"]
+        lectura = next(fila for fila in historial if fila["estado"] == "pendiente")
+        with pytest.raises(ConflictException):
+            await ops.eliminar_lectura(lectura["id"], lectura["version"] + 1)
+        await ops.eliminar_lectura(lectura["id"], lectura["version"])
+
+        panel = (await query.panel(filtros))["items"][0]
+        assert not panel["tiene_lecturas_pendientes"]
+        assert panel["kilometraje_actual"] == 100000
+        eventos = (await query.eventos(filtros, "kilometraje_eliminado"))["items"]
+        assert eventos[0]["numero_bus"] == "354"
+        assert Decimal(eventos[0]["valores_anteriores"]["kilometraje"]) == 150000

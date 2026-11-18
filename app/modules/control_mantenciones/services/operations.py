@@ -130,6 +130,16 @@ class OperationsService:
         await self.repo.eliminar(self.db, registro)
 
     @atomic
+    async def eliminar_lectura(self, identificador: int, version: int) -> None:
+        registro = await self.requerido(Km, identificador)
+        self.verificar_version(registro, version)
+        await self.evento(
+            "kilometraje_eliminado",
+            {"bus_id": registro.bus_id, "valores_anteriores": snapshot(registro)},
+        )
+        await self.repo.eliminar(self.db, registro)
+
+    @atomic
     async def comentar(self, identificador: int, datos: Comentario) -> dict:
         registro = await self.requerido(Mant, identificador)
         texto = datos.comentario.strip()

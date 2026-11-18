@@ -168,6 +168,14 @@ async def editar_lectura(
     }
 
 
+@router.delete("/kilometrajes/{identificador}", response_model=Operacion)
+async def eliminar_lectura(
+    identificador: int, datos: Version, actor: Actor, db: AsyncSession = SessionDep
+) -> dict:
+    await OperationsService(db, actor.id).eliminar_lectura(identificador, datos.version)
+    return {"mensaje": "Lectura eliminada; su eliminación quedó en el historial de cambios."}
+
+
 @router.post("/kilometrajes/{identificador}/decisiones", response_model=Recurso)
 async def decision(
     identificador: int, datos: Decision, actor: Actor, db: AsyncSession = SessionDep

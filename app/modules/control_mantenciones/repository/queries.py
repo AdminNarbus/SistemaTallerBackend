@@ -134,9 +134,8 @@ def corte_conflicto(tablas: Any) -> Any:
     return func.coalesce(func.least(pendiente, lectura, mantencion), literal(date.max))
 
 
-def ultimo_confirmado(tablas: Any) -> Any:
-    registros = tablas["registros"]
-    diario = (
+def lecturas_confirmadas_por_fecha(registros: Any) -> Any:
+    return (
         select(
             registros.c.bus_id,
             registros.c.fecha,
@@ -146,8 +145,11 @@ def ultimo_confirmado(tablas: Any) -> Any:
         .having(func.count(func.distinct(registros.c.kilometraje)) == 1)
         .cte("diario_confirmado")
     )
+
+
+def ultimo_confirmado(tablas: Any, diario: Any, campo: str) -> Any:
     previo = (
-        select(diario.c.km)
+        select(diario.c[campo])
         .where(diario.c.bus_id == Bus.id, diario.c.fecha < corte_conflicto(tablas))
         .order_by(diario.c.fecha.desc())
         .limit(1)
@@ -187,6 +189,13 @@ def calculos_panel(tablas: Any) -> Any:
 
 def columnas_panel(tablas: Any) -> Any:
     conflicto, km, proxima = calculos_panel(tablas)
+    diario = lecturas_confirmadas_por_fecha(tablas["registros"])
+    tiene_pendientes = (
+        select(Km.id)
+        .where(Km.bus_id == Bus.id, Km.estado == "pendiente")
+        .correlate(Bus)
+        .exists()
+    )
     version = (
         select(func.coalesce(func.max(Evento.id), 0))
         .where(Evento.bus_id == Bus.id, Evento.tipo == "intervalo_cambiado")
@@ -203,8 +212,14 @@ def columnas_panel(tablas: Any) -> Any:
         version.label("version_intervalo"),
         km.label("kilometraje_actual"),
         case(
-            (conflicto, ultimo_confirmado(tablas)), else_=tablas["vigente"].c.km
+            (conflicto, ultimo_confirmado(tablas, diario, "km")),
+            else_=tablas["vigente"].c.km,
         ).label("ultimo_confirmado"),
+        case(
+            (conflicto, ultimo_confirmado(tablas, diario, "fecha")),
+            else_=tablas["ultima"].c.fecha,
+        ).label("fecha_ultimo_confirmado"),
+        tiene_pendientes.label("tiene_lecturas_pendientes"),
         tablas["ultima"].c.fecha.label("ultima_lectura"),
         tablas["mant_fecha"].c.fecha.label("ultima_mantencion"),
         proxima.label("proxima_mantencion"),
@@ -301,6 +316,7 @@ def columnas_lecturas() -> Any:
         Km.version,
         literal(None, Numeric).label("proxima_mantencion"),
         literal(None).label("activa"),
+        Km.observaciones,
     ]
 
 
@@ -320,6 +336,7 @@ def columnas_mantenciones() -> Any:
         Mant.version,
         Mant.kilometraje + intervalo_sql(),
         Mant.activa,
+        cast(literal(None), Km.observaciones.type).label("observaciones"),
     ]
 
 

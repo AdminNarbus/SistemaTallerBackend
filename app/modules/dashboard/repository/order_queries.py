@@ -169,19 +169,15 @@ class OrderQueries:
         return None
 
     def _recurrence_selection(self, filters):
-        posterior = self.filtered(filters.model_copy(update={"meses": [], "anios": []})).cte("dash_recurrence_visible")
         r = self.r.recurrences.c
-        visits = (
-            select(r.solicitud_id, r.bus_id)
-            .join(posterior, posterior.c.id == r.solicitud_id)
-            .where(r.bus_id == filters.seleccion_bus_id if filters.seleccion_bus_id is not None else True,
-                   r.periodo == filters.seleccion_periodo)
-            .distinct()
-            .cte("dash_selected_recurrent_visits")
+        period = filters.seleccion_periodo
+        ids = select(r.solicitud_id).where(r.periodo == period)
+        if filters.seleccion_bus_id is not None:
+            ids = ids.where(r.bus_id == filters.seleccion_bus_id)
+        return and_(
+            self.o.c.periodo == period,
+            self.o.c.id.in_(ids),
         )
-        ids = select(visits.c.solicitud_id)
-        return and_(self.o.c.bus_id == filters.seleccion_bus_id if filters.seleccion_bus_id is not None else True,
-                    self.o.c.id.in_(ids))
 
     def _table_conditions(self, filters):
         c, clauses = self.o.c, []

@@ -296,19 +296,27 @@ async def test_recurrence_summary_matches_indicator(dashboard_client, dashboard_
     assert response.status_code == 200, response.text
     assert response.json()["data"]["items"] == []
 
-async def test_recurrence_total_selects_all_orders_of_recurring_buses(dashboard_client, dashboard_data):
-    now = datetime.now(timezone.utc)
-    await dashboard_data.execute(update(V).where(V.c.id == 3).values(fecha_ingreso=now, fecha_salida=None))
+@pytest.mark.parametrize("kind,bus_filter", [("reincidencias_mes", {}), ("reincidencias_bus", {"seleccion_bus_id": 102})])
+async def test_recurrence_selection_lists_only_requests_from_indicator_month(
+    dashboard_client, dashboard_data, kind, bus_filter
+):
+    november = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
+    october = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+    await dashboard_data.execute(update(S).where(S.c.id == 3).values(fecha_creacion=november))
+    await dashboard_data.execute(update(S).where(S.c.id == 7).values(
+        fecha_creacion=november, fecha_cierre=november + timedelta(hours=1)
+    ))
+    await dashboard_data.execute(update(S).where(S.c.id == 6).values(
+        fecha_creacion=october, fecha_cierre=november + timedelta(hours=1)
+    ))
+    await dashboard_data.execute(update(V).where(V.c.id == 3).values(fecha_ingreso=november, fecha_salida=None))
     await dashboard_data.execute(insert(V), [
-        {"id": 4, "solicitud_id": 6, "numero_visita": 1, "fecha_ingreso": now},
-        {"id": 5, "solicitud_id": 7, "numero_visita": 1, "fecha_ingreso": now},
+        {"id": 4, "solicitud_id": 6, "numero_visita": 1, "fecha_ingreso": november},
+        {"id": 5, "solicitud_id": 7, "numero_visita": 1, "fecha_ingreso": november},
     ])
     await dashboard_data.commit()
-    period = now.strftime("%Y-%m")
-    for extra in ({}, {"seleccion_bus_id": 102}):
-        response = await dashboard_client.get(f"{PREFIX}/solicitudes", params={
-            "seleccion_tipo": "reincidencias_bus" if extra else "reincidencias_mes",
-            "seleccion_periodo": period, "meses": 1, "anios": 2020, **extra,
-        })
-        assert response.status_code == 200, response.text
-        assert {row["id"] for row in response.json()["data"]["items"]} == {3, 6, 7}
+    response = await dashboard_client.get(f"{PREFIX}/solicitudes", params={
+        "seleccion_tipo": kind, "seleccion_periodo": "2026-11", **bus_filter,
+    })
+    assert response.status_code == 200, response.text
+    assert {row["id"] for row in response.json()["data"]["items"]} == {3, 7}

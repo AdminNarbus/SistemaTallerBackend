@@ -1,0 +1,64 @@
+{
+  "phase": "backend_taller",
+  "type": "completed",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "dirty": true,
+    "branch": "feature/dashboard-reincidencias-mes"
+  },
+  "changes": [
+    {
+      "action": "modified",
+      "path": "app/modules/dashboard/repository/order_queries.py",
+      "summary": "Exige que la fecha de la solicitud coincida con el período del indicador."
+    },
+    {
+      "action": "modified",
+      "path": "tests/dashboard/test_dashboard_queries.py",
+      "summary": "Verifica la exclusión de una solicitud de octubre aun cuando la visita ocurrió en noviembre."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "rationale": "Es la fecha que se lee en la tabla de solicitudes.",
+      "title": "Aplicar el mes a la fecha de la solicitud",
+      "consequences": "Solo se muestran solicitudes del mes de la tarjeta."
+    }
+  ],
+  "id": "AV-0177",
+  "summary": "Restringe las solicitudes del detalle de Reincidencias al mes indicado.",
+  "sequence": 177,
+  "timestamp": "2026-11-18T19:25:58Z",
+  "blockers": [],
+  "schemaVersion": "1.0",
+  "verification": [
+    {
+      "result": "passed",
+      "evidence": "107 pruebas aprobadas",
+      "command": "python -m pytest tests/dashboard --tb=short --show-capture=no -q"
+    }
+  ],
+  "notes": [],
+  "nextStep": "Confirmar la revisión activa del backend.",
+  "milestone": {
+    "id": "DASH",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed",
+    "name": "Dashboard de taller"
+  },
+  "scope": {
+    "completed": [
+      "Filtro por mes para un bus y para el total"
+    ],
+    "pending": [
+      "Verificar despliegue en Cloud Run"
+    ],
+    "outOfScope": [
+      "Cambios de datos de producción"
+    ],
+    "planned": [
+      "Alinear el detalle con el mes seleccionado"
+    ]
+  }
+}

@@ -46,7 +46,7 @@ class BusDashboardRepository(ReadRepository):
         r = self.relations.recurrences
         latest = MonthKey(func.now())
         count = (
-            select(func.count())
+            select(func.count(func.distinct(r.c.bus_id)))
             .select_from(r.join(rows, rows.c.id == r.c.solicitud_id))
             .where(r.c.periodo == latest)
             .scalar_subquery()

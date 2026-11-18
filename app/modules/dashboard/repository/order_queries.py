@@ -24,10 +24,15 @@ def conditions(orders, filters):
     )
     if filters.estados:
         result.append(c.estado.in_(filters.estados))
+    return result + period_conditions(c.periodo, filters)
+
+
+def period_conditions(period, filters):
+    result = []
     if filters.meses:
-        result.append(cast(func.substr(c.periodo, 6, 2), Integer).in_(filters.meses))
+        result.append(cast(func.substr(period, 6, 2), Integer).in_(filters.meses))
     if filters.anios:
-        result.append(cast(func.substr(c.periodo, 1, 4), Integer).in_(filters.anios))
+        result.append(cast(func.substr(period, 1, 4), Integer).in_(filters.anios))
     return result
 
 
@@ -105,7 +110,7 @@ class OrderQueries:
             aged = self.open_latest(filters).cte("dash_selected_aging")
             ids = select(aged.c.id).where(self.age_group(aged) == filters.seleccion_grupo)
             return select(self.o).where(self.o.c.id.in_(ids))
-        event_selection = filters.seleccion_tipo in {"taller", "mecanico", "bus_fallas", "bus_visitas", "creadas", "terminadas", "visitas_bus"}
+        event_selection = filters.seleccion_tipo in {"taller", "taller_externo", "mecanico", "bus_fallas", "bus_visitas", "creadas", "terminadas", "visitas_bus", "reincidencias_bus", "reincidencias_mes"}
         stmt = self.filtered(filters.model_copy(update={"meses": [], "anios": []})) if event_selection else self.chart(filters)
         if filters.seleccion_periodos and not event_selection:
             stmt = stmt.where(self.o.c.periodo.in_(filters.seleccion_periodos))
@@ -114,10 +119,12 @@ class OrderQueries:
 
     def _selection_condition(self, filters):
         c, kind = self.o.c, filters.seleccion_tipo
-        if kind == "taller":
+        if kind in {"taller", "taller_externo"}:
             episode = self.r.attentions.c
             return and_(
-                c.grupo_taller == filters.seleccion_grupo,
+                c.grupo_taller == ("EXTERNOS" if kind == "taller_externo" else filters.seleccion_grupo),
+                c.taller_nombre_snapshot == filters.seleccion_taller_nombre if kind == "taller_externo" else True,
+                c.ciudad_nombre_snapshot == filters.seleccion_taller_ciudad if kind == "taller_externo" else True,
                 c.es_ot.is_(True),
                 c.estado.in_(["EN_REPARACION", "LIBERADO", "FINALIZADO"]),
                 exists(select(1).where(
@@ -157,21 +164,24 @@ class OrderQueries:
                     WeekKey(c.fecha_termino) == value,
                 )
             )
-        if kind == "reincidencias_bus":
+        if kind in {"reincidencias_bus", "reincidencias_mes"}:
             return self._recurrence_selection(filters)
         return None
 
     def _recurrence_selection(self, filters):
-        posterior = self.filtered(filters).cte("dash_recurrence_visible")
+        posterior = self.filtered(filters.model_copy(update={"meses": [], "anios": []})).cte("dash_recurrence_visible")
         r = self.r.recurrences.c
-        pairs = (
-            select(self.r.recurrences)
+        visits = (
+            select(r.solicitud_id, r.bus_id)
             .join(posterior, posterior.c.id == r.solicitud_id)
-            .where(r.bus_id == filters.seleccion_bus_id, r.periodo == filters.seleccion_periodo)
-            .cte("dash_selected_pairs")
+            .where(r.bus_id == filters.seleccion_bus_id if filters.seleccion_bus_id is not None else True,
+                   r.periodo == filters.seleccion_periodo)
+            .distinct()
+            .cte("dash_selected_recurrent_visits")
         )
-        ids = union(select(pairs.c.solicitud_id), select(pairs.c.anterior_ot))
-        return and_(self.o.c.bus_id == filters.seleccion_bus_id, self.o.c.id.in_(ids))
+        ids = select(visits.c.solicitud_id)
+        return and_(self.o.c.bus_id == filters.seleccion_bus_id if filters.seleccion_bus_id is not None else True,
+                    self.o.c.id.in_(ids))
 
     def _table_conditions(self, filters):
         c, clauses = self.o.c, []

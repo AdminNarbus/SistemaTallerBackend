@@ -70,6 +70,7 @@ class SolicitudesQueryDTO(SeriesQueryDTO):
     seleccion_tipo: (
         Literal[
             "taller",
+            "taller_externo",
             "antiguedad",
             "mecanico",
             "bus_fallas",
@@ -78,9 +79,12 @@ class SolicitudesQueryDTO(SeriesQueryDTO):
             "terminadas",
             "visitas_bus",
             "reincidencias_bus",
+            "reincidencias_mes",
         ]
         | None
     ) = None
+    seleccion_taller_nombre: str | None = Field(None, max_length=500)
+    seleccion_taller_ciudad: str | None = Field(None, max_length=500)
     seleccion_grupo: str | None = Field(None, max_length=40)
     seleccion_mecanico_id: PositiveId | None = None
     seleccion_bus_id: PositiveId | None = None

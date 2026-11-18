@@ -5,8 +5,7 @@ from sqlalchemy import and_, case, func, literal, select, union, union_all
 from app.modules.auth.models.rol import Rol
 from app.modules.auth.models.usuario import Usuario
 from app.modules.buses.models.bus import Bus
-from app.modules.dashboard.constants import RECURRENCE_HOURS
-from app.modules.dashboard.repository.sql_expressions import BusKey, Hours, MonthKey, Normalized
+from app.modules.dashboard.repository.sql_expressions import BusKey, Hours, MonthKey
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.taller.models.taller_falla_evento import TallerFallaEvento
 from app.modules.taller.models.taller_falla_evento_mecanico import TallerFallaEventoMecanico
@@ -62,6 +61,7 @@ class Relations:
         self.participants = self._participants()
         self.locations = self._locations()
         self.orders = self._orders()
+        self.workshop_visits = self._workshop_visits()
         self.recurrences = self._recurrences()
 
     def _approval(self):
@@ -268,27 +268,61 @@ class Relations:
             .cte("dash_orders")
         )
 
-    def _recurrences(self):
-        date = func.coalesce(D.c.fecha_reporte, D.c.fecha_creacion)
-        key = Normalized(D.c.descripcion_personalizada)
-        window = {"partition_by": (self.orders.c.bus_id, key), "order_by": (date, D.c.id)}
-        reports = (
-            select(
-                D.c.id.label("detalle_id"),
-                D.c.solicitud_id,
-                self.orders.c.bus_id,
-                date.label("fecha_reporte"),
-                MonthKey(date).label("periodo"),
-                func.lag(date).over(**window).label("anterior_fecha"),
-                func.lag(D.c.solicitud_id).over(**window).label("anterior_ot"),
-            )
-            .select_from(D.join(self.orders, self.orders.c.id == D.c.solicitud_id))
-            .where(self.orders.c.bus_id.is_not(None), self.orders.c.es_ot.is_(True), key.is_not(None))
-            .cte("dash_report_history")
+    def _workshop_visits(self):
+        """Cuenta ingresos físicos y recupera entradas históricas cuando falta la tabla de estadías."""
+        orders = self.orders.c
+        physical = select(
+            orders.id.label("solicitud_id"), orders.bus_id, orders.n_bus,
+            V.c.fecha_ingreso.label("fecha_visita"),
+        ).select_from(self.orders.join(V, V.c.solicitud_id == orders.id)).where(
+            orders.bus_id.is_not(None), orders.es_ot.is_(True)
         )
-        difference = Hours(reports.c.anterior_fecha, reports.c.fecha_reporte)
+        # En registros anteriores al historial de estadías, cada transición a
+        # EN_REPARACION es la mejor marca disponible de una nueva entrada.
+        state_entries = select(
+            orders.id.label("solicitud_id"), orders.bus_id, orders.n_bus,
+            SE.c.fecha_evento.label("fecha_visita"),
+        ).select_from(self.orders.join(SE, SE.c.solicitud_id == orders.id)).where(
+            orders.bus_id.is_not(None), orders.es_ot.is_(True),
+            SE.c.estado_nuevo == "EN_REPARACION",
+            ~select(1).where(V.c.solicitud_id == orders.id).exists(),
+        )
+        attention = self.attentions.c
+        first_attention = select(
+            orders.id.label("solicitud_id"), orders.bus_id, orders.n_bus,
+            attention.fecha_atencion.label("fecha_visita"),
+        ).select_from(self.orders.join(self.attentions, attention.solicitud_id == orders.id)).where(
+            orders.bus_id.is_not(None), orders.es_ot.is_(True),
+            ~select(1).where(V.c.solicitud_id == orders.id).exists(),
+            ~select(1).where(
+                SE.c.solicitud_id == orders.id,
+                SE.c.estado_nuevo == "EN_REPARACION",
+            ).exists(),
+        )
+        return union_all(physical, state_entries, first_attention).cte("dash_workshop_visits")
+
+    def _recurrences(self):
+        visits = self.workshop_visits.c
+        recurrent_buses = (
+            select(
+                visits.bus_id, MonthKey(visits.fecha_visita).label("periodo"),
+                func.count().label("visitas_mes"),
+            )
+            .group_by(visits.bus_id, MonthKey(visits.fecha_visita))
+            .having(func.count() > 1)
+            .cte("dash_recurrent_buses")
+        )
         return (
-            select(reports)
-            .where(difference >= 0, difference <= RECURRENCE_HOURS)
+            select(
+                visits.solicitud_id, visits.bus_id, visits.n_bus, visits.fecha_visita,
+                recurrent_buses.c.periodo, recurrent_buses.c.visitas_mes,
+            )
+            .join(
+                recurrent_buses,
+                and_(
+                    recurrent_buses.c.bus_id == visits.bus_id,
+                    recurrent_buses.c.periodo == MonthKey(visits.fecha_visita),
+                ),
+            )
             .cte("dash_recurrences")
         )

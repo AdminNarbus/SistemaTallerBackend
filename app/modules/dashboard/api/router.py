@@ -32,6 +32,7 @@ from app.modules.dashboard.dtos.filtros_dto import (
     FaultQueryDTO,
     FilterQueryDTO,
     GeneralQueryDTO,
+    PageQueryDTO,
     ResourceName,
     SeriesName,
     SeriesQueryDTO,
@@ -40,7 +41,7 @@ from app.modules.dashboard.dtos.filtros_dto import (
     TimelineQueryDTO,
 )
 from app.modules.dashboard.dtos.indicadores_dto import IndicatorsDTO
-from app.modules.dashboard.dtos.series_dto import ExternalWorkshopDTO, SeriesDTO
+from app.modules.dashboard.dtos.series_dto import RecurrenceSummaryDTO, ExternalWorkshopDTO, SeriesDTO
 from app.modules.dashboard.dtos.solicitudes_dto import OrderDTO
 from app.modules.dashboard.services.bus_dashboard_service import BusDashboardService
 from app.modules.dashboard.services.cronologia_service import CronologiaService
@@ -84,6 +85,13 @@ async def external_workshops(
     filters: Annotated[SeriesQueryDTO, Query()], service: DashboardDep, response: Response
 ):
     return paged_response(response, await service.external_workshops(filters))
+
+
+@router.get("/reincidencias", response_model=EnvelopeDTO[PageDTO[RecurrenceSummaryDTO]])
+async def recurrence_summary(
+    filters: Annotated[PageQueryDTO, Query()], service: DashboardDep, response: Response
+):
+    return paged_response(response, await service.recurrence_summary(filters))
 
 
 @router.get("/solicitudes", response_model=EnvelopeDTO[PageDTO[OrderDTO]])

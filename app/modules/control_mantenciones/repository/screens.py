@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import NotFoundException
+from app.modules.buses.models.bus import Bus
 from app.modules.control_mantenciones.dtos.contracts import Filtros
 from app.modules.control_mantenciones.models.entities import ControlEvento as Evento
 from app.modules.control_mantenciones.repository.queries import (
@@ -64,6 +65,8 @@ class ReadRepository:
         items, total = await self.repo.listar(
             self.db, historial_consulta(filtros), filtros
         )
+        if filtros.bus_id is not None:
+            await self.agregar_lecturas_anteriores(items)
         return {
             "items": items,
             "total": total,
@@ -71,10 +74,32 @@ class ReadRepository:
             "limit": filtros.limit,
         }
 
+    async def agregar_lecturas_anteriores(self, filas: list[dict]) -> None:
+        pendientes = [
+            fila for fila in filas
+            if fila["tipo"] == "kilometraje" and fila["estado"] == "pendiente"
+        ]
+        if not pendientes:
+            return
+        contexto = await self.repo.contexto(self.db, pendientes)
+        for indice, fila in enumerate(pendientes):
+            lectura = contexto.get(indice, {})
+            if lectura.get("anterior_fecha") is not None:
+                fila["anterior"] = {
+                    "fecha": lectura["anterior_fecha"],
+                    "kilometraje": lectura["anterior_km"],
+                }
+
     def consulta_eventos(self, filtros: Filtros, tipo: str | None = None) -> Any:
         columnas = [c for c in Evento.__table__.columns if c.name != "metadatos"]
-        consulta = select(
-            *columnas, Evento.metadatos.op("-")("revision").label("metadatos")
+        consulta = (
+            select(
+                *columnas,
+                Evento.metadatos.op("-")("revision").label("metadatos"),
+                Bus.n_bus.label("numero_bus"),
+            )
+            .select_from(Evento)
+            .outerjoin(Bus, Bus.id == Evento.bus_id)
         )
         if tipo:
             consulta = consulta.where(Evento.tipo == tipo)

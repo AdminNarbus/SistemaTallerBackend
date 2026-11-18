@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import event, literal, select, update
+from sqlalchemy import event, insert, literal, select, update
 
-from app.modules.dashboard.repository.relations import D, S
+from app.modules.dashboard.repository.relations import D, S, SE, V
 from app.modules.dashboard.repository.sql_expressions import (
     BusKey,
     EndOfDay,
@@ -154,19 +154,73 @@ async def test_fault_popover_group_and_related_orders(dashboard_client, dashboar
     assert response.json()["data"]["items"] == [{"solicitud_id": 2}]
 
 
-async def test_recurrence_window_includes_exactly_thirty_days(dashboard_client, dashboard_data):
-    boundary = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
-    await dashboard_data.execute(update(D).where(D.c.id == 11).values(fecha_reporte=boundary - timedelta(days=30)))
-    await dashboard_data.execute(update(D).where(D.c.id == 12).values(fecha_reporte=boundary))
+async def test_recurrences_count_buses_with_multiple_workshop_visits(dashboard_client, dashboard_data):
+    now = datetime.now(timezone.utc)
+    await dashboard_data.execute(update(V).where(V.c.id.in_([1, 2])).values(fecha_ingreso=now, fecha_salida=None))
     await dashboard_data.commit()
     response = await dashboard_client.get(f"{PREFIX}/buses/101/resumen")
+    assert response.status_code == 200, response.text
     assert response.json()["data"]["reincidencias"]["cantidad"] == 1
-    await dashboard_data.execute(
-        update(D).where(D.c.id == 12).values(fecha_reporte=boundary + timedelta(seconds=1))
-    )
+
+    # Dos visitas del mismo bus en distintos meses no forman reincidencia mensual.
+    await dashboard_data.execute(update(V).where(V.c.id == 1).values(fecha_ingreso=now - timedelta(days=35), fecha_salida=None))
     await dashboard_data.commit()
     response = await dashboard_client.get(f"{PREFIX}/buses/101/resumen")
     assert response.json()["data"]["reincidencias"]["cantidad"] == 0
+    response = await dashboard_client.get(f"{PREFIX}/indicadores?bus_id=101")
+    assert response.json()["data"]["mensuales"]["reincidencias"] == 0
+    await dashboard_data.execute(update(V).where(V.c.id == 1).values(fecha_ingreso=now, fecha_salida=now + timedelta(hours=1)))
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/buses/101/resumen")
+    assert response.json()["data"]["reincidencias"]["cantidad"] == 1
+
+    # Otra falla reportada no cambia cuántas visitas tuvo el bus.
+    await dashboard_data.execute(update(D).where(D.c.solicitud_id == 2).values(
+        descripcion_personalizada="Falla distinta", fecha_reporte=now - timedelta(days=60)
+    ))
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/buses/101/resumen")
+    assert response.json()["data"]["reincidencias"]["cantidad"] == 1
+
+    # Una visita de una solicitud sin OT deja de contar como visita al taller.
+    await dashboard_data.execute(update(S).where(S.c.id == 2).values(es_ot=False))
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/buses/101/resumen")
+    assert response.json()["data"]["reincidencias"]["cantidad"] == 0
+
+
+async def test_single_workshop_visit_is_not_recurrence(dashboard_client, dashboard_data):
+    await dashboard_data.execute(update(S).where(S.c.id == 5).values(fecha_creacion=datetime.now(timezone.utc), fecha_cierre=datetime.now(timezone.utc) + timedelta(hours=1)))
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/buses/103/resumen")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["reincidencias"]["cantidad"] == 0
+
+
+async def test_second_physical_entry_of_same_ot_counts_as_another_visit(dashboard_client, dashboard_data):
+    now = datetime.now(timezone.utc)
+    await dashboard_data.execute(update(V).where(V.c.id == 1).values(fecha_ingreso=now, fecha_salida=now + timedelta(hours=1)))
+    await dashboard_data.execute(insert(V), {
+        "id": 4, "solicitud_id": 1, "numero_visita": 2, "fecha_ingreso": now + timedelta(hours=2),
+    })
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/reincidencias?bus_id=101")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == [{"bus_id": 101, "n_bus": "001", "visitas_mes": 2}]
+    metrics = await dashboard_client.get(f"{PREFIX}/indicadores?bus_id=101")
+    assert metrics.json()["data"]["mensuales"]["reincidencias"] == 1
+
+
+async def test_legacy_state_history_counts_each_reentry_without_stadias(dashboard_client, dashboard_data):
+    now = datetime.now(timezone.utc)
+    await dashboard_data.execute(insert(SE), [
+        {"id": 104, "solicitud_id": 5, "tipo_evento": "CAMBIO_ESTADO", "estado_anterior": "PENDIENTE", "estado_nuevo": "EN_REPARACION", "fecha_evento": now, "actor_nombre_snapshot": "Supervisor", "origen": "OPERACION"},
+        {"id": 105, "solicitud_id": 5, "tipo_evento": "CAMBIO_ESTADO", "estado_anterior": "LIBERADO", "estado_nuevo": "EN_REPARACION", "fecha_evento": now + timedelta(hours=2), "actor_nombre_snapshot": "Supervisor", "origen": "OPERACION"},
+    ])
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/reincidencias?bus_id=103")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == [{"bus_id": 103, "n_bus": "3", "visitas_mes": 2}]
 
 
 async def test_age_group_boundaries(dashboard_data):
@@ -188,3 +242,73 @@ async def test_age_group_boundaries(dashboard_data):
         (await dashboard_data.execute(select(repository.queries.age_group(rows)))).scalars().all()
     )
     assert groups == ["HASTA_7_DIAS", "MAS_7_HASTA_28_DIAS", "MAS_7_HASTA_28_DIAS", "MAS_28_DIAS"]
+
+@pytest.mark.parametrize("name,city,expected", [
+    ("Externo", "Temuco", {1}),
+    ("Externo", "Santiago", set()),
+    ("Otro", "Temuco", set()),
+])
+async def test_external_workshop_drilldown(dashboard_client, dashboard_data, name, city, expected):
+    response = await dashboard_client.get(f"{PREFIX}/solicitudes", params={
+        "seleccion_tipo": "taller_externo",
+        "seleccion_taller_nombre": name,
+        "seleccion_taller_ciudad": city,
+        "seleccion_periodos": "2026-10",
+    })
+    assert response.status_code == 200, response.text
+    assert {item["id"] for item in response.json()["data"]["items"]} == expected
+
+
+async def test_three_workshop_visits_same_bus_month_count_one_recurrent_bus(dashboard_client, dashboard_data):
+    now = datetime.now(timezone.utc)
+    await dashboard_data.execute(update(V).where(V.c.id == 3).values(fecha_ingreso=now, fecha_salida=None))
+    await dashboard_data.execute(insert(V), [
+        {"id": 4, "solicitud_id": 6, "numero_visita": 1, "fecha_ingreso": now},
+        {"id": 5, "solicitud_id": 7, "numero_visita": 1, "fecha_ingreso": now},
+    ])
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/buses/102/resumen")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["reincidencias"]["cantidad"] == 1
+    response = await dashboard_client.get(f"{PREFIX}/indicadores?bus_id=102")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["mensuales"]["reincidencias"] == 1
+
+async def test_recurrence_summary_matches_indicator(dashboard_client, dashboard_data):
+    now = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
+    await dashboard_data.execute(update(V).where(V.c.id == 3).values(fecha_ingreso=now, fecha_salida=None))
+    await dashboard_data.execute(insert(V), [
+        {"id": 4, "solicitud_id": 6, "numero_visita": 1, "fecha_ingreso": now},
+        {"id": 5, "solicitud_id": 7, "numero_visita": 1, "fecha_ingreso": now},
+    ])
+    await dashboard_data.commit()
+    response = await dashboard_client.get(f"{PREFIX}/reincidencias?bus_id=102&meses=11&anios=2026")
+    assert response.status_code == 200, response.text
+    page = response.json()["data"]
+    assert page["total"] == 1
+    assert page["items"][0]["bus_id"] == 102
+    assert page["items"][0]["visitas_mes"] == 3
+    metrics = await dashboard_client.get(f"{PREFIX}/indicadores?bus_id=102&meses=11&anios=2026")
+    assert page["total"] == metrics.json()["data"]["mensuales"]["reincidencias"]
+    outside = await dashboard_client.get(f"{PREFIX}/reincidencias?bus_id=102&meses=1&anios=2020")
+    assert outside.json()["data"]["items"] == []
+    response = await dashboard_client.get(f"{PREFIX}/reincidencias?bus_id=103")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == []
+
+async def test_recurrence_total_selects_all_orders_of_recurring_buses(dashboard_client, dashboard_data):
+    now = datetime.now(timezone.utc)
+    await dashboard_data.execute(update(V).where(V.c.id == 3).values(fecha_ingreso=now, fecha_salida=None))
+    await dashboard_data.execute(insert(V), [
+        {"id": 4, "solicitud_id": 6, "numero_visita": 1, "fecha_ingreso": now},
+        {"id": 5, "solicitud_id": 7, "numero_visita": 1, "fecha_ingreso": now},
+    ])
+    await dashboard_data.commit()
+    period = now.strftime("%Y-%m")
+    for extra in ({}, {"seleccion_bus_id": 102}):
+        response = await dashboard_client.get(f"{PREFIX}/solicitudes", params={
+            "seleccion_tipo": "reincidencias_bus" if extra else "reincidencias_mes",
+            "seleccion_periodo": period, "meses": 1, "anios": 2020, **extra,
+        })
+        assert response.status_code == 200, response.text
+        assert {row["id"] for row in response.json()["data"]["items"]} == {3, 6, 7}

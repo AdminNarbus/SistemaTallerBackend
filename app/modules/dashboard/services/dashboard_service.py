@@ -12,6 +12,7 @@ from app.modules.dashboard.dtos.indicadores_dto import IndicatorsDTO
 from app.modules.dashboard.dtos.series_dto import (
     AgeSeriesDTO,
     BusSeriesDTO,
+    RecurrenceSummaryDTO,
     ExternalWorkshopDTO,
     MechanicSeriesDTO,
     TrendSeriesDTO,
@@ -75,6 +76,10 @@ class DashboardService(ReadService):
     async def orders(self, filters):
         page = await self.repository.orders(filters)
         return await self.envelope(PageDTO[OrderDTO](**page.as_dict()))
+
+    async def recurrence_summary(self, filters):
+        page = await self.repository.recurrence_summary(filters)
+        return await self.envelope(PageDTO[RecurrenceSummaryDTO](**page.as_dict()))
 
     async def external_workshops(self, filters):
         page = await self.repository.external_workshops(filters)

@@ -46,8 +46,9 @@ async def test_indicators_populations_dates_and_monthly(dashboard_client, dashbo
     }
     assert data["tiempos"]["respuesta"]["validos"] == 0
     assert data["tiempos"]["respuesta"]["promedio_horas"] is None
-    assert data["mensuales"]["ot_atendidas"] == 0
-    assert data["mensuales"]["porcentaje_ot_atendidas"] is None
+    assert data["mensuales"]["periodo"] == "2026-10"
+    assert data["mensuales"]["ot_atendidas"] == 3
+    assert data["mensuales"]["porcentaje_ot_atendidas"] == 50
 
 
 async def test_under_demand_reflects_committed_changes_without_writes(
@@ -144,6 +145,14 @@ async def test_missing_bus_fk_unique_and_ambiguous(dashboard_client, dashboard_d
 
 
 async def test_recurrence_selection_includes_antecedent(dashboard_client, dashboard_data):
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+    from app.modules.dashboard.repository.relations import S
+
+    await dashboard_data.execute(update(S).where(S.c.id == 1).values(
+        fecha_creacion=datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
+    ))
+    await dashboard_data.commit()
     response = await dashboard_client.get(
         f"{PREFIX}/solicitudes?seleccion_tipo=reincidencias_bus&seleccion_bus_id=101&seleccion_periodo=2026-10"
     )

@@ -25,6 +25,12 @@ class BusPointDTO(DTO):
     cantidad: int
 
 
+class RecurrenceSummaryDTO(DTO):
+    bus_id: int
+    n_bus: str
+    visitas_mes: int
+
+
 class WorkshopPointDTO(GroupPointDTO):
     porcentaje: float | None
 

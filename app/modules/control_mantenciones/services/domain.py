@@ -3,6 +3,7 @@
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
+from statistics import median
 from zoneinfo import ZoneInfo
 import re
 
@@ -89,10 +90,61 @@ def motivos_secuencia(
     return motivos
 
 
+MAX_KM_POR_DIA = 2000
+MAX_KM_POR_SEMANA = 10000
+DIAS_POR_SEMANA = 7
+
+
+def motivo_aumento_excesivo(
+    fecha: date | None, kilometraje: Decimal | None, anterior: dict
+) -> str | None:
+    fecha_anterior = anterior.get("anterior_fecha")
+    km_anterior = anterior.get("anterior_km")
+    if (
+        fecha is None or kilometraje is None or fecha_anterior is None or km_anterior is None
+    ):
+        return None
+    dias = (fecha - fecha_anterior).days
+    if dias <= 0:
+        return None
+    semanas, dias_restantes = divmod(dias, DIAS_POR_SEMANA)
+    limite = semanas * MAX_KM_POR_SEMANA + min(
+        dias_restantes * MAX_KM_POR_DIA, MAX_KM_POR_SEMANA
+    )
+    if kilometraje - km_anterior <= limite:
+        return None
+    return "El aumento de kilometraje supera el límite posible para el período entre lecturas."
+
+
 def desplazar_mes(fecha: date, meses: int) -> date:
     indice = fecha.year * 12 + fecha.month - 1 + meses
     anio, mes = divmod(indice, 12)
     return date(anio, mes + 1, min(fecha.day, monthrange(anio, mes + 1)[1]))
+
+
+def ritmo_odometro(lecturas: list[tuple[date, Decimal]], referencia: Decimal) -> Decimal:
+    """Estima el ritmo reciente y cambia de base solo ante un aumento sostenido."""
+    recientes = lecturas[-5:]
+    tramos = [
+        ((actual[0] - anterior[0]).days, actual[1] - anterior[1])
+        for anterior, actual in zip(recientes, recientes[1:])
+    ]
+    if len(tramos) < 2:
+        return referencia
+
+    ritmos = [kilometros / dias for dias, kilometros in tramos]
+    ultimos_tramos = tramos[-2:]
+    dias_recientes = sum(dias for dias, _ in ultimos_tramos)
+    if (
+        dias_recientes >= 7
+        and all(3 <= dias <= 14 for dias, _ in ultimos_tramos)
+        and all(ritmo >= referencia * Decimal("1.25") for ritmo in ritmos[-2:])
+    ):
+        ritmo_reciente = sum(km for _, km in ultimos_tramos) / dias_recientes
+        if ritmo_reciente >= referencia * Decimal("1.50"):
+            return ritmo_reciente
+
+    return median(ritmos) or referencia
 
 
 def proyectar(registros: list[dict], ficha: dict, ventana: int = 90) -> dict:
@@ -106,19 +158,24 @@ def proyectar(registros: list[dict], ficha: dict, ventana: int = 90) -> dict:
     if ficha["restantes"] <= 0 or any(r["estado"] == "pendiente" for r in registros):
         return fallo
     dias = {}
+    odometro = set()
     for registro in registros:
         if registro["estado"] != "aceptado":
             continue
-        dias.setdefault(registro["fecha"], set()).add(registro["kilometraje"])
+        fecha, kilometraje = registro["fecha"], registro["kilometraje"]
+        dias.setdefault(fecha, set()).add(kilometraje)
+        if registro.get("tipo") == "kilometraje" and not registro.get("interpolado"):
+            odometro.add((fecha, kilometraje))
     if len(dias) < 3 or any(len(valores) != 1 for valores in dias.values()):
         return fallo
     ordenados = sorted((dia, next(iter(valores))) for dia, valores in dias.items())
     cobertura = (ordenados[-1][0] - ordenados[0][0]).days
     if cobertura < 7 or any(b[1] < a[1] for a, b in zip(ordenados, ordenados[1:])):
         return fallo
-    tasa = (ordenados[-1][1] - ordenados[0][1]) / cobertura
-    if tasa <= 0 or ficha["ultima_lectura"] > ordenados[-1][0]:
+    referencia = (ordenados[-1][1] - ordenados[0][1]) / cobertura
+    if referencia <= 0 or ficha["ultima_lectura"] > ordenados[-1][0]:
         return fallo
+    tasa = ritmo_odometro(sorted(odometro), referencia)
     dias_faltantes = int(
         (ficha["restantes"] / tasa).to_integral_value(rounding=ROUND_CEILING)
     )

@@ -69,6 +69,8 @@ class OperationsService:
 
     @atomic
     async def crear_mantencion(self, datos: MantencionCrear) -> dict:
+        if datos.kilometraje is not None and datos.fecha is None:
+            raise BusinessRuleException("Indique la fecha de la mantención para registrar su kilometraje.")
         await self.bus(datos.bus_id)
         valores = datos.model_dump()
         valores["estado"] = "incompleta"
@@ -97,6 +99,14 @@ class OperationsService:
         self.verificar_version(registro, datos.version)
         anterior = snapshot(registro)
         cambios = datos.model_dump(exclude_unset=True, exclude={"version"})
+        if (
+            {"fecha", "kilometraje"} & cambios.keys()
+            and cambios.get("kilometraje", registro.kilometraje) is not None
+            and cambios.get("fecha", registro.fecha) is None
+        ):
+            raise BusinessRuleException(
+                "Indique la fecha de la mantención para registrar su kilometraje."
+            )
         if (
             cambios.get("estado", registro.estado) is None
             or cambios.get("activa", registro.activa) is None

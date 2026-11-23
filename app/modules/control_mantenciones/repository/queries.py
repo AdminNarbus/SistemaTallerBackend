@@ -190,6 +190,14 @@ def calculos_panel(tablas: Any) -> Any:
 def columnas_panel(tablas: Any) -> Any:
     conflicto, km, proxima = calculos_panel(tablas)
     diario = lecturas_confirmadas_por_fecha(tablas["registros"])
+    ultimo_estado_lectura = (
+        select(Km.estado)
+        .where(Km.bus_id == Bus.id, Km.estado.in_(("aceptado", "pendiente")))
+        .order_by(Km.fecha.desc().nullslast(), Km.id.desc())
+        .limit(1)
+        .correlate(Bus)
+        .scalar_subquery()
+    )
     tiene_pendientes = (
         select(Km.id)
         .where(Km.bus_id == Bus.id, Km.estado == "pendiente")
@@ -220,6 +228,7 @@ def columnas_panel(tablas: Any) -> Any:
             else_=tablas["ultima"].c.fecha,
         ).label("fecha_ultimo_confirmado"),
         tiene_pendientes.label("tiene_lecturas_pendientes"),
+        func.coalesce(ultimo_estado_lectura == "pendiente", False).label("ultima_lectura_pendiente"),
         tablas["ultima"].c.fecha.label("ultima_lectura"),
         tablas["mant_fecha"].c.fecha.label("ultima_mantencion"),
         proxima.label("proxima_mantencion"),

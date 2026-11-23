@@ -25,6 +25,7 @@ from app.modules.control_mantenciones.models.entities import (
 from app.modules.control_mantenciones.services.domain import (
     fecha_valida,
     hoy,
+    motivo_aumento_excesivo,
     motivos_secuencia,
     numero,
 )
@@ -37,32 +38,6 @@ from app.modules.control_mantenciones.services.transactions import atomic
 MAX_BYTES = 20 * 1024 * 1024
 MAX_EXPANDIDO = 200 * 1024 * 1024
 MAX_FILAS = 100000
-MAX_KM_POR_DIA = 2000
-MAX_KM_POR_SEMANA = 10000
-DIAS_POR_SEMANA = 7
-
-
-def motivo_aumento_excesivo(
-    fecha: date | None, kilometraje: Decimal | None, anterior: dict
-) -> str | None:
-    fecha_anterior = anterior.get("anterior_fecha")
-    km_anterior = anterior.get("anterior_km")
-    if (
-        fecha is None or kilometraje is None or fecha_anterior is None or km_anterior is None
-    ):
-        return None
-    dias = (fecha - fecha_anterior).days
-    if dias <= 0:
-        return None
-    semanas, dias_restantes = divmod(dias, DIAS_POR_SEMANA)
-    limite = semanas * MAX_KM_POR_SEMANA + min(
-        dias_restantes * MAX_KM_POR_DIA, MAX_KM_POR_SEMANA
-    )
-    if kilometraje - km_anterior <= limite:
-        return None
-    return "El aumento de kilometraje supera el límite posible para el período entre lecturas."
-
-
 def leer_excel(nombre: str, contenido: bytes) -> Borrador:
     """Interpreta el documento en un hilo; no escribe archivos ni filas en BD."""
     from openpyxl import load_workbook

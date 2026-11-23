@@ -18,7 +18,7 @@ class TelegramSender(Protocol):
 def construir_mensaje(envio: TelegramNotificacionDTO) -> str:
     if envio.tipo == "SOLICITUD_CHOFER":
         chofer, bus, solicitud, fallas = envio.parametros
-        return f"🚌 Nueva solicitud de chofer\n\n👤 Chofer: {chofer}\n🚌 Bus: {bus}\n📋 Solicitud: {solicitud}\n\n🔧 Fallas informadas: {fallas}\n\nRevisa el detalle en el sistema de taller."
+        return f"🚌 Nueva solicitud de chofer\n\n👤 Chofer: {chofer}\n🚌 Bus: {bus}\n📋 Solicitud: {solicitud}\n\n🔧 Fallas informadas:\n{fallas}\n\nRevisa el detalle en el sistema de taller."
     severidad, tipo, bus, solicitud, detalle = envio.parametros
     return f"🚨 Alerta de taller\n\n⚠️ Severidad: {severidad}\n📌 Tipo: {tipo}\n🚌 Bus: {bus}\n📋 Solicitud: {solicitud}\n\n📝 {detalle}"
 

@@ -20,18 +20,37 @@ from app.modules.supervision.services.telegram_client import TelegramClient
 logger = logging.getLogger(__name__)
 TIPO_REPORTE = "SOLICITUD_CHOFER"
 MAX_TEXTO = 450
+MAX_FALLAS = 3400
 
 
 def _texto(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()[:MAX_TEXTO] or "Sin detalle"
 
 
+def _resumen_fallas(fallas: list[str], descripcion: str | None) -> str:
+    """Incluye las fallas informadas dentro del límite de mensajes de Telegram."""
+    entradas = [re.sub(r"\s+", " ", falla).strip() for falla in fallas if falla and falla.strip()]
+    if not entradas:
+        return _texto(descripcion)
+    lineas = []
+    aviso = "\n… Hay más detalles en el sistema de taller."
+    for entrada in entradas:
+        linea = f"• {entrada}"
+        candidato = "\n".join([*lineas, linea])
+        if len(candidato) > MAX_FALLAS - len(aviso):
+            if not lineas:
+                lineas.append(linea[:MAX_FALLAS - len(aviso)])
+            return "\n".join(lineas) + aviso
+        lineas.append(linea)
+    return "\n".join(lineas)
+
+
 def encolar_reporte(db: AsyncSession, solicitud, datos: tuple) -> None:
     """Agrega las notificaciones a la transacción que guarda el reporte."""
     nombre, dto, detalles = datos
     fallas = [registro[4] for registro in detalles if registro[4]]
-    resumen = "; ".join(fallas[:3]) or dto.descripcion_general or "Sin detalle"
-    parametros = [_texto(nombre)[:100], _texto(solicitud.n_bus), str(solicitud.id), _texto(resumen)]
+    resumen = _resumen_fallas(fallas, dto.descripcion_general)
+    parametros = [_texto(nombre)[:100], _texto(solicitud.n_bus), str(solicitud.id), resumen]
     evento = uuid4().hex
     for numero in settings.TELEGRAM_SOLICITUDES_DESTINATARIOS.split(","):
         clave = hashlib.sha256(f"{TIPO_REPORTE}:{evento}:{numero}".encode()).hexdigest()

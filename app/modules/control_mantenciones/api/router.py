@@ -1,6 +1,8 @@
 """API del módulo preventivo, restringida a Supervisor y Admin."""
 
 import asyncio
+from datetime import date
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
@@ -91,6 +93,20 @@ async def crear_mantencion(
     datos: MantencionCrear, actor: Actor, db: AsyncSession = SessionDep
 ) -> dict:
     return {"datos": await OperationsService(db, actor.id).crear_mantencion(datos)}
+
+
+@router.get("/mantenciones/validacion-kilometraje", response_model=Recurso)
+async def validar_kilometraje_mantencion(
+    bus_id: Annotated[int, Query(gt=0)],
+    fecha: date,
+    kilometraje: Annotated[Decimal, Query(ge=0, max_digits=12, decimal_places=2)],
+    db: AsyncSession = SessionDep,
+) -> dict:
+    return {
+        "datos": await QueryService(db).validar_kilometraje_mantencion(
+            bus_id, fecha, kilometraje
+        )
+    }
 
 
 @router.get("/mantenciones/{identificador}", response_model=Recurso)

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
@@ -13,6 +13,8 @@ from app.modules.control_mantenciones.services.domain import (
     PASO_EJE_Y,
     desplazar_mes,
     hoy,
+    motivo_aumento_excesivo,
+    motivos_secuencia,
     proyectar,
 )
 
@@ -31,6 +33,23 @@ class QueryService:
                 "No se encontró un bus activo con número de máquina."
             )
         return registro
+
+    async def validar_kilometraje_mantencion(
+        self, bus_id: int, fecha: date, kilometraje: Decimal
+    ) -> dict:
+        anterior, posterior = await self.queries.referencias_odometro(bus_id, fecha)
+        motivos = motivos_secuencia(
+            fecha, kilometraje, {"anterior": anterior, "posterior": posterior}
+        )
+        if anterior:
+            motivo = motivo_aumento_excesivo(
+                fecha,
+                kilometraje,
+                {"anterior_fecha": anterior["fecha"], "anterior_km": anterior["kilometraje"]},
+            )
+            if motivo:
+                motivos.append(motivo)
+        return {"motivos": motivos, "anterior": anterior, "posterior": posterior}
 
     async def historial(self, filtros: Filtros) -> dict:
         return await self.queries.historial(filtros)
@@ -62,12 +81,13 @@ class QueryService:
 
     async def proyeccion(self, bus_id: int) -> dict:
         ficha = await self.ficha(bus_id)
+        fecha_corte = hoy()
+        ventana = settings.CONTROL_MANTENCIONES_VENTANA_DIAS
         filtros = Filtros(
-            bus_id=bus_id,
-            desde=hoy() - timedelta(days=settings.CONTROL_MANTENCIONES_VENTANA_DIAS),
+            bus_id=bus_id, desde=fecha_corte - timedelta(days=ventana), hasta=fecha_corte
         )
         registros = await self.serie_periodo(filtros)
-        return proyectar(registros, ficha, settings.CONTROL_MANTENCIONES_VENTANA_DIAS)
+        return proyectar(registros, ficha, ventana)
 
     async def grafico(self, bus_id: int) -> dict:
         ficha = await self.ficha(bus_id)

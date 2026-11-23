@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 from sqlalchemy import JSON, column, func, literal, or_, select
@@ -13,6 +13,7 @@ from app.core.exceptions import NotFoundException
 from app.modules.buses.models.bus import Bus
 from app.modules.control_mantenciones.dtos.contracts import Filtros
 from app.modules.control_mantenciones.models.entities import ControlEvento as Evento
+from app.modules.control_mantenciones.models.entities import ControlKilometraje as Km
 from app.modules.control_mantenciones.repository.queries import (
     historial_consulta,
     panel_consulta,
@@ -60,6 +61,16 @@ class ReadRepository:
         if fila is None:
             return None
         return dict(fila)
+
+    async def referencias_odometro(self, bus_id: int, fecha: date) -> tuple[dict | None, dict | None]:
+        lecturas = select(Km.fecha, Km.kilometraje).where(
+            Km.bus_id == bus_id, Km.estado == "aceptado"
+        )
+        anterior = lecturas.where(Km.fecha < fecha).order_by(Km.fecha.desc(), Km.id.desc())
+        posterior = lecturas.where(Km.fecha > fecha).order_by(Km.fecha, Km.id.desc())
+        previa = (await self.db.execute(anterior.limit(1))).mappings().first()
+        siguiente = (await self.db.execute(posterior.limit(1))).mappings().first()
+        return (dict(previa) if previa else None, dict(siguiente) if siguiente else None)
 
     async def historial(self, filtros: Filtros) -> dict:
         items, total = await self.repo.listar(

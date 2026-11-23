@@ -942,23 +942,22 @@ class CuadrillaService:
                 mecanico_nombre or "Mecánico"
             )
 
-        fallas_involucradas = [
-            describir_detalle_averia(sol_detalles_map[a.detalle_id])
-            for a in asignaciones_activas
-            if a.detalle_id in sol_detalles_map
+        detalles_involucrados = [
+            sol_detalles_map[detalle_id]
+            for detalle_id in dict.fromkeys(a.detalle_id for a in asignaciones_activas)
+            if detalle_id in sol_detalles_map
         ]
-        fallas_unicas = list(dict.fromkeys(fallas_involucradas))
-        fallas_str = ", ".join(fallas_unicas)
-
+        texto_bitacora = "Entrega de turno"
         if len(mecanicos_involucrados_ids) > 1:
-            texto_bitacora = f"Avance: {unir_nombres(mecanicos_nombres)}"
-        else:
-            texto_bitacora = "Avance"
-
-        if fallas_str:
-            texto_bitacora += f": {fallas_str}"
-
-        texto_bitacora = agregar_texto(texto_bitacora, dto.comentario)
+            texto_bitacora = agregar_texto(texto_bitacora, f"Equipo: {unir_nombres(mecanicos_nombres)}")
+        reparadas = [describir_detalle_averia(d) for d in detalles_involucrados if d.resuelto]
+        pendientes = [describir_detalle_averia(d) for d in detalles_involucrados if not d.resuelto]
+        if reparadas:
+            texto_bitacora = agregar_texto(texto_bitacora, f"Fallas reparadas: {', '.join(reparadas)}")
+        if pendientes:
+            texto_bitacora = agregar_texto(texto_bitacora, f"Fallas pendientes: {', '.join(pendientes)}")
+        if dto.comentario and dto.comentario.strip():
+            texto_bitacora = agregar_texto(texto_bitacora, f"Nota: {dto.comentario.strip()}")
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,

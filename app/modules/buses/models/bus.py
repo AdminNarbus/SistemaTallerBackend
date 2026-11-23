@@ -27,6 +27,7 @@ class Bus(Base):
         CheckConstraint("min IS NULL OR min >= 0", name="ck_buses_min"),
         CheckConstraint("max IS NULL OR max >= 0", name="ck_buses_max"),
         CheckConstraint("min IS NULL OR max IS NULL OR min <= max", name="ck_buses_rango"),
+        CheckConstraint("intervalo_mantencion_km IS NULL OR intervalo_mantencion_km > 0", name="ck_buses_intervalo_mantencion"),
         {"extend_existing": True},
     )
 
@@ -55,6 +56,8 @@ class Bus(Base):
     en_taller: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
+
+    intervalo_mantencion_km: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
 
     # Campos de trazabilidad y auditoría temporal
     fecha_creacion: Mapped[datetime] = mapped_column(

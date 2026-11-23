@@ -38,10 +38,11 @@ Los IDs repetidos se deduplican y las asignaciones/presencias ya activas se reut
 | Asignación desde supervisión | `Asignación: Ricardo y Cecil — Sin A/C. Viendo en fosa` |
 | Salir del equipo | `Salida. Texto escrito` |
 | Entregar turno | `Entrega de turno. Texto escrito` |
-| Terminar avance individual | `Avance: Sin A/C. Texto escrito` |
-| Terminar avance grupal | `Avance: Ricardo y Cecil: Sin A/C. Texto escrito` |
-| Agregar avería | `Nueva falla: Sin A/C` |
-| Agregar avería asignada | `Nueva falla: Sin A/C. Asignación: Ricardo` |
+| Terminar avance individual | `Entrega de turno. Fallas pendientes: Sin A/C. Nota: Texto escrito` |
+| Terminar avance grupal | `Entrega de turno. Equipo: Ricardo y Cecil. Fallas reparadas: Freno largo. Fallas pendientes: Sin A/C. Nota: Texto escrito` |
+| Agregar avería sin asignar | `Nueva falla: Sin A/C. Queda pendiente de asignación.` |
+| Agregar avería y tomarla | `Nueva falla: Sin A/C. Tomó la falla para trabajar.` (tipo `ASIGNACION`) |
+| Agregar avería asignada por supervisión | `Nueva falla: Sin A/C. Asignada a Ricardo para trabajar.` (tipo `ASIGNACION`) |
 | Reparación propia | `Reparó: Sin A/C. Texto escrito` |
 | Reparación de otro mecánico o registrada por supervisión | `Ricardo reparó: Sin A/C. Texto escrito` |
 | Reparación grupal | `Ricardo y Cecil repararon: Sin A/C. Texto escrito` |
@@ -57,6 +58,10 @@ Los IDs repetidos se deduplican y las asignaciones/presencias ya activas se reut
 Las partes opcionales se omiten cuando están vacías. En una falla incompleta no se repite el comentario si es igual al motivo. Se conservan íntegros los nombres almacenados de mecánicos y fallas; no se acortan apellidos ni se cambia el texto libre del usuario, salvo quitar espacios en sus extremos.
 
 Los comentarios históricos ya almacenados conservan su texto. No se cambian los estados, fechas de eventos ni reglas de reparación/cierre por este ajuste. Los comentarios manuales mantienen el contenido recibido.
+
+Actualización AV-0175: la entrega de turno informa solo las fallas de las asignaciones cerradas y separa reparadas de pendientes según su resultado real. La nota libre se identifica con `Nota:`. Registrar una falla desde Gestión de Buses ya no añade una aprobación anticipada redundante: la aprobación se registra al asignar la atención. Se conserva el prefijo `Solicitud aprobada como OT.` que utiliza el dashboard para ubicar la fecha de aprobación.
+
+Las etiquetas visibles de la interfaz se traducen en el frontend: `ASIGNACION` → `Asignación`, `AVANCE` → `Avance`, `ENTREGA_TURNO` → `Entrega de turno`. Los códigos del contrato se conservan.
 
 ## Código
 

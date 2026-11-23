@@ -13,6 +13,8 @@ from app.modules.supervision.api.whatsapp_router import router as whatsapp_route
 from app.modules.supervision.api.telegram_router import router as telegram_router
 from app.modules.dashboard.api.router import router as dashboard_router
 
+from app.modules.control_mantenciones.api.router import router as control_mantenciones_router
+
 api_router = APIRouter(dependencies=[Depends(enforce_visual_read_only)])
 api_router.include_router(conductor_sync_router)
 
@@ -33,3 +35,5 @@ api_router.include_router(publica_router)
 api_router.include_router(dashboard_router)
 
 
+
+api_router.include_router(control_mantenciones_router, prefix="/control-mantenciones", tags=["Control de mantenciones"])

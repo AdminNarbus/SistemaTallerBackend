@@ -1,0 +1,64 @@
+{
+  "scope": {
+    "completed": [
+      "Conteo mensual de visitas y ruta GET de detalle"
+    ],
+    "outOfScope": [
+      "Modificar datos de producción"
+    ],
+    "pending": [
+      "Verificar la revisión desplegada"
+    ],
+    "planned": [
+      "Corregir el indicador y su detalle"
+    ]
+  },
+  "timestamp": "2026-11-18T19:04:13Z",
+  "schemaVersion": "1.0",
+  "milestone": {
+    "id": "DASH",
+    "statusAfter": "completed",
+    "statusBefore": "in_progress",
+    "name": "Dashboard de taller"
+  },
+  "nextStep": "Verificar el despliegue y la respuesta autenticada de producción.",
+  "summary": "Agrega el detalle de reincidencias y alinea el indicador con el conteo de visitas por bus y mes.",
+  "id": "AV-0176",
+  "blockers": [],
+  "changes": [
+    {
+      "action": "modified",
+      "summary": "Cálculo por visitas, consulta de detalle y filtros de selección.",
+      "path": "app/modules/dashboard"
+    },
+    {
+      "action": "modified",
+      "summary": "Cobertura de visitas, reingresos y concordancia entre tarjeta y detalle.",
+      "path": "tests/dashboard"
+    }
+  ],
+  "phase": "backend_taller",
+  "sequence": 176,
+  "type": "completed",
+  "git": {
+    "branch": "feature/dashboard-reincidencias-backend",
+    "dirty": true,
+    "repository": "SistemaTallerBackend"
+  },
+  "decisions": [
+    {
+      "consequences": "La tarjeta y el detalle aplican la misma selección mensual.",
+      "title": "Contar visitas por su fecha de ingreso",
+      "id": "DEC-001",
+      "rationale": "Una visita puede ocurrir en un mes posterior a la creación de la OT."
+    }
+  ],
+  "verification": [
+    {
+      "result": "passed",
+      "evidence": "106 pruebas aprobadas",
+      "command": "python -m pytest tests/dashboard --tb=short --show-capture=no -q"
+    }
+  ],
+  "notes": []
+}

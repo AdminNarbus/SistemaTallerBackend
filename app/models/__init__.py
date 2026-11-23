@@ -26,8 +26,14 @@ from app.modules.formularios.models.reporte_neumatico import ReporteNeumatico
 from app.modules.formularios.models.comentario_neumatico import ComentarioNeumatico
 from app.modules.taller.models import historical_snapshots  # register insert hooks
 
+from app.modules.control_mantenciones.models.entities import ControlMantencion, ControlKilometraje, ControlEvento
+
 __all__ = [
     "WhatsappEnvio",
+    "TelegramEnvio",
+    "ControlMantencion",
+    "ControlKilometraje",
+    "ControlEvento",
     "TallerCorreccionVisita",
     "TallerSolicitudEstadoEvento",
     "Base",

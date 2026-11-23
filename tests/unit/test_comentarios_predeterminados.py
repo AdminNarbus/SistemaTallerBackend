@@ -130,7 +130,8 @@ async def test_flujo_comentarios_predeterminados_sin_ids(db_session, seed_test_d
     sol_avance = await taller_service.terminar_avance(db_session, solicitud.id, dto_avance, mecanico1_id)
     com_avance = sol_avance.comentarios[-1]
     assert com_avance.tipo == "ENTREGA_TURNO"
-    assert com_avance.comentario.startswith("Avance:")
+    assert com_avance.comentario.startswith("Entrega de turno.")
+    assert "Fallas pendientes:" in com_avance.comentario
     assert "Corte de turno mediodía" in com_avance.comentario
 
     # 9. Resolver falla 2 y completar pauta preventiva

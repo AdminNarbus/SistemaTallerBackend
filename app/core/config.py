@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     HOST: Optional[str] = None
     PORT: int = 8000
 
+    CONTROL_MANTENCIONES_DIAS_RECIENTES: int = 14
+    CONTROL_MANTENCIONES_VENTANA_DIAS: int = 90
+
     # JWT Security Settings
     SECRET_KEY: str = "narbus_secret_key_taller_2026_super_secure_jwt_token_change_in_prod"
     ALGORITHM: str = "HS256"

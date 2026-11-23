@@ -5,6 +5,7 @@ from typing import Any, List, Optional, Tuple
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.core.storage.storage_service import storage_service, StorageService
 from app.modules.taller.constants import (
@@ -560,11 +561,21 @@ class SolicitudService:
                         actor_nombre=creador_nombre, fecha_evento=now, tipo_evento="CREACION",
                     ),
                 )
+            if settings.WHATSAPP_SOLICITUDES_ENABLED and (creador_rol or "").upper() == "CONDUCTOR":
+                from app.modules.taller.services.whatsapp_solicitud_service import encolar_reporte
+                encolar_reporte(db, solicitud, (creador_nombre, dto, detalles_a_procesar))
+            if settings.TELEGRAM_SOLICITUDES_ENABLED and (creador_rol or "").upper() == "CONDUCTOR":
+                from app.modules.taller.services.telegram_solicitud_service import encolar_reporte as encolar_reporte_telegram
+                encolar_reporte_telegram(db, solicitud, (creador_nombre, dto, detalles_a_procesar))
             await db.commit()
         except Exception as exc:
             await db.rollback()
             logger.error("[MANTENCION] Error al persistir solicitud: %s", exc)
             raise
+
+        if settings.TELEGRAM_SOLICITUDES_ENABLED and (creador_rol or "").upper() == "CONDUCTOR":
+            from app.modules.taller.services.telegram_solicitud_service import despachar_solicitudes
+            asyncio.create_task(despachar_solicitudes(), name="narbus-telegram-solicitud")
 
         result = await self.get_solicitud(db, solicitud.id)
         publish_event_soon(RealtimeEvent(

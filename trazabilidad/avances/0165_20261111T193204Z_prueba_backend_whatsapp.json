@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 165,
+  "id": "AV-0165",
+  "timestamp": "2026-11-11T19:32:04Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "WHATSAPP-LOCAL", "name": "Prueba local del backend", "statusBefore": "in_progress", "statusAfter": "in_progress"},
+  "type": "in_progress",
+  "summary": "Adaptación temporal a plantilla aprobada y prueba real de una alerta local desde el endpoint ASGI del backend.",
+  "scope": {"planned": ["Adaptar plantilla aprobada", "Probar servicio del backend"], "completed": ["Mapeo de cuatro variables para narbus_alertas", "Pruebas unitarias e integración", "Una alerta local enviada mediante endpoint y aceptada por Meta"], "pending": ["Confirmación de entrega al teléfono", "Verificación de autenticación real en esta prueba"], "outOfScope": ["Envío automático", "Despliegue"]},
+  "changes": [
+    {"path": "app/modules/supervision/services/whatsapp_service.py", "action": "modified", "summary": "Selecciona cuatro parámetros para la plantilla aprobada y conserva los cinco parámetros de la plantilla original."},
+    {"path": "tests/unit/test_whatsapp_alertas_service.py", "action": "modified", "summary": "Comprueba el orden de parámetros de la plantilla aprobada."},
+    {"path": "docs/ALERTAS_WHATSAPP.md", "action": "modified", "summary": "Documenta la plantilla de prueba."},
+    {"path": ".env", "action": "modified", "summary": "Habilita envío manual local con la plantilla aprobada; timer desactivado."}
+  ],
+  "decisions": [{"id": "DEC-165-1", "title": "Acotar prueba a una alerta", "rationale": "Existían siete alertas activas y el usuario solicitó una prueba inmediata.", "consequences": "Se limitó la consulta a una alerta durante la prueba en proceso; el comportamiento normal sigue considerando todas las alertas."}],
+  "verification": [
+    {"command": "pytest tests/unit/test_whatsapp_alertas_service.py tests/integration/test_whatsapp_alertas.py -q", "result": "passed", "evidence": "33 pruebas aprobadas; una advertencia Starlette existente."},
+    {"command": "POST /api/v1/supervision/alertas/whatsapp/envios mediante ASGITransport", "result": "passed", "evidence": "HTTP 200; una alerta real leída de PostgreSQL local, un registro aceptado por Meta. Autorización sustituida para la prueba; no confirma entrega al dispositivo."}
+  ],
+  "blockers": [],
+  "nextStep": "Confirmar recepción; probar credenciales reales y reactivar el timer cuando corresponda.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/alertas-whatsapp", "commit": "0c00d8c", "dirty": true},
+  "notes": ["La cuenta de Meta está en desarrollo y el token es temporal."]
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 172,
+  "id": "AV-0172",
+  "timestamp": "2026-11-13T18:31:58Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "WHATSAPP-SOLICITUDES",
+    "name": "Avisos de reportes de conductor",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Cola y despacho de avisos WhatsApp por cada nuevo reporte de conductor, con múltiples destinatarios.",
+  "scope": {
+    "completed": [
+      "Inserción transaccional por destinatario y por reporte, incluso anexos",
+      "Despacho independiente con reserva y estados persistentes",
+      "Configuración local del destinatario solicitado",
+      "Migración 043 y documentación"
+    ],
+    "pending": [
+      "Aplicar migración en entorno destino",
+      "Verificar credenciales y plantilla Meta y activar servicio"
+    ],
+    "outOfScope": [
+      "Despliegue",
+      "Envío real durante estas pruebas",
+      "Webhooks de entrega"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "DEC-WS-001",
+      "title": "Cola transaccional por reporte y destinatario",
+      "rationale": "No perder el aviso tras confirmar la solicitud y admitir múltiples celulares.",
+      "consequences": "La lista queda congelada al crear el reporte; requiere trabajador activo."
+    },
+    {
+      "id": "DEC-WS-002",
+      "title": "Reutilizar cliente y tabla WhatsApp",
+      "rationale": "Compartir el adaptador Meta y persistir resultados con las protecciones existentes.",
+      "consequences": "Se añade estado PENDIENTE y plantilla de tres variables; los resultados inciertos no se reenvían automáticamente."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest pruebas WhatsApp unitarias, integración y migraciones",
+      "result": "passed",
+      "evidence": "43 passed; PostgreSQL temporal y Meta simulado. Una advertencia de deprecación preexistente."
+    },
+    {
+      "command": "alembic heads; git diff --check",
+      "result": "passed",
+      "evidence": "Revisión final 043; sin errores de espacios."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Aplicar migración 043, verificar credenciales y plantilla, activar el servicio y probar con reporte real.",
+  "notes": [
+    "No se aplicó la migración a la base operacional ni se enviaron mensajes reales.",
+    "Se mantienen los cambios previos del árbol de trabajo."
+  ]
+}

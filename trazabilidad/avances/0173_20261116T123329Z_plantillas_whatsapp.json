@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 173,
+  "id": "AV-0173",
+  "timestamp": "2026-11-16T12:33:29Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "WHATSAPP-PLANTILLAS",
+    "name": "Actualización de mensajes WhatsApp",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Usar alerta_taller_visual y aclarar el resumen de fallas informado por el conductor.",
+  "scope": {
+    "planned": [
+      "Cambiar plantilla de alerta y aclarar texto de reporte"
+    ],
+    "completed": [
+      "Plantilla visual aprobada configurada en código y entorno local",
+      "Resumen de fallas identifica al informante sin etiquetas confusas",
+      "Dos mensajes de prueba aceptados por Meta"
+    ],
+    "pending": [
+      "Confirmación de recepción en el celular",
+      "Configurar la plantilla visual en producción"
+    ],
+    "outOfScope": [
+      "Activar envíos automáticos o desplegar"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Plantilla visual por defecto"
+    },
+    {
+      "path": "app/modules/taller/services/whatsapp_solicitud_service.py",
+      "action": "modified",
+      "summary": "Fallas seguidas del nombre del informante"
+    },
+    {
+      "path": ".env.example",
+      "action": "modified",
+      "summary": "Ejemplo de configuración actualizado"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-173-1",
+      "title": "Reutilizar la plantilla de fallas aprobada",
+      "rationale": "Tiene tres variables y el conductor debe figurar junto al resumen de fallas.",
+      "consequences": "El nombre aparece entre paréntesis al final del resumen; no requiere una nueva aprobación."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest tests/unit/test_whatsapp_alertas_service.py tests/integration/test_whatsapp_solicitudes.py",
+      "result": "passed",
+      "evidence": "25 pruebas aprobadas."
+    },
+    {
+      "command": "Envío manual mediante cliente Meta",
+      "result": "passed",
+      "evidence": "Meta aceptó ambas pruebas; no confirma entrega."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Confirmar recepción y configurar las variables en el entorno de destino.",
+  "notes": [
+    "Los envíos automáticos permanecen desactivados."
+  ]
+}

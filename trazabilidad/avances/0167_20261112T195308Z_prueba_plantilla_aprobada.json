@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 167,
+  "id": "AV-0167",
+  "timestamp": "2026-11-12T19:53:08Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "WHATSAPP-LOCAL", "name": "Prueba con plantilla original aprobada", "statusBefore": "in_progress", "statusAfter": "in_progress"},
+  "type": "in_progress",
+  "summary": "Token temporal renovado y prueba de una alerta local mediante el endpoint con la plantilla original aprobada por Meta.",
+  "scope": {"planned": ["Renovar token", "Probar plantilla aprobada"], "completed": ["Token temporal guardado", "Plantilla aprobada verificada en Meta", "Una alerta local procesada y aceptada por Meta"], "pending": ["Confirmar recepción en WhatsApp", "Comprobar autenticación real"], "outOfScope": ["Activación automática", "Despliegue"]},
+  "changes": [
+    {"path": ".env", "action": "modified", "summary": "Token temporal renovado; no se registran credenciales aquí."},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Resultado y límites de la prueba."}
+  ],
+  "decisions": [{"id": "DEC-167-1", "title": "Limitar la prueba a una alerta", "rationale": "El usuario solicitó una prueba inmediata sin activar envíos masivos.", "consequences": "Se seleccionó una alerta no enviada durante la ejecución aislada; la configuración persistente continúa desactivada."}],
+  "verification": [
+    {"command": "Consulta de plantilla en Meta", "result": "passed", "evidence": "alerta_taller, idioma es, estado APPROVED."},
+    {"command": "POST /api/v1/supervision/alertas/whatsapp/envios mediante ASGITransport", "result": "passed", "evidence": "HTTP 200; una alerta local aceptada por Meta. Autenticación sustituida durante la prueba; entrega pendiente de confirmación."}
+  ],
+  "blockers": [],
+  "nextStep": "Confirmar recepción y validar autenticación real antes de activar el envío.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/alertas-whatsapp", "commit": "0c00d8c", "dirty": true},
+  "notes": ["No se incluyen credenciales ni teléfonos en este registro.", "El token es temporal."]
+}

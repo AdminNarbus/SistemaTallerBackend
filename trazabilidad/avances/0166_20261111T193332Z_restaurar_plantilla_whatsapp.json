@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 166,
+  "id": "AV-0166",
+  "timestamp": "2026-11-11T19:33:32Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "WHATSAPP-LOCAL", "name": "Restaurar servicio después de prueba", "statusBefore": "in_progress", "statusAfter": "completed"},
+  "type": "completed",
+  "summary": "Retirada de la adaptación temporal y restauración del contrato original de la plantilla de alertas, según solicitud del usuario.",
+  "scope": {"planned": ["Restaurar servicio y configuración anteriores a la prueba"], "completed": ["Restaurado contrato de cinco parámetros", "Configuración local vuelve a alerta_taller y español", "Envío y timer desactivados", "Pruebas del servicio aprobadas"], "pending": [], "outOfScope": ["Eliminar registros o revertir migración local"]},
+  "changes": [
+    {"path": "app/modules/supervision/services/whatsapp_service.py", "action": "modified", "summary": "Se retiró la rama temporal para la plantilla de cuatro parámetros."},
+    {"path": "tests/unit/test_whatsapp_alertas_service.py", "action": "modified", "summary": "Se retiró la prueba exclusiva de la adaptación temporal."},
+    {"path": "docs/ALERTAS_WHATSAPP.md", "action": "modified", "summary": "Se retiró la documentación de la adaptación temporal."},
+    {"path": ".env", "action": "modified", "summary": "Se restauró la configuración local previa a la prueba."},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Se registró la restauración."}
+  ],
+  "decisions": [{"id": "DEC-166-1", "title": "Mantener la funcionalidad original", "rationale": "El usuario pidió volver el servicio a como era después de la prueba temporal.", "consequences": "Se conserva el desarrollo original con plantilla alerta_taller; su uso requiere aprobación en Meta."}],
+  "verification": [{"command": "pytest tests/unit/test_whatsapp_alertas_service.py tests/integration/test_whatsapp_alertas.py -q", "result": "passed", "evidence": "32 pruebas aprobadas; una advertencia existente de Starlette."}],
+  "blockers": [],
+  "nextStep": "Esperar aprobación de la plantilla original antes de activar el envío.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/alertas-whatsapp", "commit": "0c00d8c", "dirty": true},
+  "notes": ["La migración y el registro del envío de prueba se conservan."]
+}

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 174,
+  "id": "AV-0174",
+  "timestamp": "2026-11-16T12:37:21Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "WHATSAPP-REPORTES",
+    "name": "Plantilla visual de reporte",
+    "statusBefore": "in_progress",
+    "statusAfter": "in_progress"
+  },
+  "type": "progress",
+  "summary": "Plantilla visual de reporte de chofer enviada a Meta y backend adaptado a cuatro campos.",
+  "scope": {
+    "planned": [
+      "Registrar plantilla visual y adaptar backend"
+    ],
+    "completed": [
+      "Plantilla narbus_reporte_fallas_visual registrada en Meta",
+      "Backend usa chofer, bus, solicitud y fallas separados",
+      "Compatibilidad para avisos anteriores",
+      "42 pruebas aprobadas"
+    ],
+    "pending": [
+      "Aprobación por Meta",
+      "Prueba real de la plantilla aprobada"
+    ],
+    "outOfScope": [
+      "Activación automática o despliegue"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/services/whatsapp_solicitud_service.py",
+      "action": "modified",
+      "summary": "Cuatro parámetros separados"
+    },
+    {
+      "path": "app/modules/supervision/services/whatsapp_client.py",
+      "action": "modified",
+      "summary": "Compatibilidad de formato anterior y nuevo"
+    },
+    {
+      "path": "app/core/config.py",
+      "action": "modified",
+      "summary": "Nueva plantilla predeterminada"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-174-1",
+      "title": "Mantener el despacho de mensajes encolados anteriormente",
+      "rationale": "Los avisos ya guardados usan tres variables y la plantilla aprobada anterior.",
+      "consequences": "Se conserva narbus_fallas para mensajes de tres variables y configuraciones explícitas anteriores."
+    }
+  ],
+  "verification": [
+    {
+      "command": "pytest pruebas WhatsApp de integración, unitarias y migración de solicitudes",
+      "result": "passed",
+      "evidence": "42 pruebas aprobadas; una advertencia de deprecación existente."
+    },
+    {
+      "command": "Consulta de plantilla en Meta",
+      "result": "passed",
+      "evidence": "narbus_reporte_fallas_visual, es_CL, estado PENDING."
+    }
+  ],
+  "blockers": [
+    "Meta aún revisa la plantilla."
+  ],
+  "nextStep": "Comprobar aprobación de Meta y probar envío real.",
+  "notes": [
+    "La funcionalidad local permanece desactivada."
+  ]
+}

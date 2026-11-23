@@ -4,6 +4,8 @@ Proyecto backend para la gestión de taller desarrollado con **FastAPI**, **Pyth
 
 Sincronización mensual de conductores: [configuración y activación con Cloud Scheduler](docs/SINCRONIZACION_CONDUCTORES.md).
 
+Alertas por WhatsApp: [configuración de Meta, plantilla y operación](docs/ALERTAS_WHATSAPP.md).
+
 ## Dashboard de taller
 
 API de lectura bajo demanda en `/api/v1/dashboard`, protegida para Supervisor y Admin.

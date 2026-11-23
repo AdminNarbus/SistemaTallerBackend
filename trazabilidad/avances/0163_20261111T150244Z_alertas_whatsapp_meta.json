@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 163,
+  "id": "AV-0163",
+  "timestamp": "2026-11-11T15:02:44Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "WHATSAPP-1",
+    "name": "Notificaciones de alertas operacionales mediante Meta Cloud API",
+    "statusBefore": "pending",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Implementación local de alertas por WhatsApp en una rama nueva, con proveedor Meta elegido por el usuario, ejecución periódica, API manual protegida, registro de intentos y protección persistente contra duplicados.",
+  "scope": {
+    "planned": [
+      "Crear una rama de funcionalidad para las alertas por WhatsApp",
+      "Integrar las alertas existentes con la API oficial de Meta",
+      "Verificar permisos, persistencia, concurrencia y migración local"
+    ],
+    "completed": [
+      "Rama feature/alertas-whatsapp creada desde el checkout existente",
+      "Envío de plantillas de cinco variables a destinatarios configurados por entorno",
+      "Timer vinculado al lifespan y POST manual para SUPERVISOR/ADMIN",
+      "GET paginado de historial con permisos de supervisión existentes",
+      "Reserva durable y clave única por tipo, OT, detalle, severidad y destinatario",
+      "Reintentos de HTTP 429 con espera y máximo de tres intentos",
+      "Tratamiento conservador de timeouts, 5xx, respuestas inválidas y reservas abandonadas",
+      "Migración 042 autogenerada, revisada y probada en bases desechables locales",
+      "Documentación de configuración, plantilla, operación y límites de entrega"
+    ],
+    "pending": [
+      "Aplicar la migración 042 en el entorno de destino mediante el proceso de despliegue",
+      "Configurar token, ID emisor, versión habilitada de Meta y destinatarios autorizados",
+      "Obtener la plantilla aprobada en Meta y activar WHATSAPP_ENABLED"
+    ],
+    "outOfScope": [
+      "Frontend",
+      "Despliegue o modificaciones en bases externas",
+      "Envíos reales durante las pruebas",
+      "Webhooks de confirmación de entrega o lectura",
+      "Reparación de la prueba antigua de integración de fase 5"
+    ]
+  },
+  "changes": [
+    {"path": "app/core/config.py", "action": "modified", "summary": "Configuración y validación de Meta, teléfonos internacionales y límites de ejecución"},
+    {"path": "app/main.py", "action": "modified", "summary": "Inicio y cancelación del timer según activación explícita"},
+    {"path": "app/api/v1/router.py", "action": "modified", "summary": "Registro de rutas protegidas de WhatsApp"},
+    {"path": "app/models/__init__.py", "action": "modified", "summary": "Registro centralizado del modelo WhatsappEnvio"},
+    {"path": "app/modules/supervision/models/whatsapp_envio.py", "action": "created", "summary": "Modelo SQLAlchemy 2.0 con auditoría temporal, unicidad, restricciones e índice de reintentos"},
+    {"path": "app/modules/supervision/models/__init__.py", "action": "created", "summary": "Exportación del modelo operacional"},
+    {"path": "app/modules/supervision/dtos/whatsapp_dto.py", "action": "created", "summary": "Contratos de notificación, resultado, resumen e historial"},
+    {"path": "app/modules/supervision/repository/whatsapp_repository.py", "action": "created", "summary": "Reservas atómicas, registro de resultados e historial sin commits en el repositorio"},
+    {"path": "app/modules/supervision/services/whatsapp_client.py", "action": "created", "summary": "Adaptador HTTP asíncrono de Meta con plantillas y clasificación de resultados"},
+    {"path": "app/modules/supervision/services/whatsapp_service.py", "action": "created", "summary": "Orquestación de alertas, severidad, destinatarios y transacciones"},
+    {"path": "app/modules/supervision/services/whatsapp_timer.py", "action": "created", "summary": "Sondeo periódico y cierre de sesiones incluso tras fallos"},
+    {"path": "app/modules/supervision/api/whatsapp_router.py", "action": "created", "summary": "POST de envío y GET paginado con DTOs y autenticación"},
+    {"path": "alembic/versions/042_whatsapp_envios.py", "action": "created", "summary": "Nueva tabla de auditoría y downgrade reversible"},
+    {"path": "tests/unit/test_whatsapp_alertas_service.py", "action": "created", "summary": "Validación, payload Meta, estados, fallos de red y orquestación aislada"},
+    {"path": "tests/unit/test_whatsapp_timer.py", "action": "created", "summary": "Continuidad del timer y arranque/cancelación en lifespan"},
+    {"path": "tests/integration/test_whatsapp_alertas.py", "action": "created", "summary": "Deduplicación, escalamiento, concurrencia, reintentos, caídas e interfaces protegidas"},
+    {"path": "tests/migrations/test_whatsapp_envios_migration.py", "action": "created", "summary": "Ciclo de migración y concordancia de esquema en SQLite/PostgreSQL; concurrencia de reservas y reintentos en PostgreSQL"},
+    {"path": ".env.example", "action": "modified", "summary": "Variables de ejemplo sin credenciales reales y envío desactivado"},
+    {"path": "docs/ALERTAS_WHATSAPP.md", "action": "created", "summary": "Guía de activación, plantilla y límites operativos"},
+    {"path": "README.md", "action": "modified", "summary": "Enlace a la guía de alertas por WhatsApp"},
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Estado del módulo y activación pendiente"}
+  ],
+  "decisions": [
+    {
+      "id": "DEC-WA-001",
+      "title": "Meta Cloud API mediante HTTP y plantillas",
+      "rationale": "El usuario eligió la API oficial de Meta. Se reutiliza httpx ya instalado y las alertas canónicas existentes; la versión de Graph API se exige por configuración.",
+      "consequences": "No se agrega SDK ni dependencia; se requiere una plantilla aprobada con cinco variables y credenciales del entorno."
+    },
+    {
+      "id": "DEC-WA-002",
+      "title": "Reservar y confirmar antes del envío externo",
+      "rationale": "Una restricción única e INSERT ON CONFLICT arbitran entre procesos e instancias. El commit previo evita que otro worker emita la misma notificación.",
+      "consequences": "Las caídas posteriores a reservar quedan inciertas y no se reenvían. Una severidad nueva genera otra clave; no se garantiza entrega exactamente una vez."
+    },
+    {
+      "id": "DEC-WA-003",
+      "title": "Reintentar únicamente rechazos HTTP 429",
+      "rationale": "Un timeout, 5xx o respuesta inválida puede suceder después de que Meta acepte un mensaje. Reenviar automáticamente esos casos podría duplicarlo.",
+      "consequences": "Los 429 tienen plazo persistente y máximo de tres intentos; otros rechazos o incertidumbres requieren revisión operativa. ACEPTADO no significa entregado."
+    },
+    {
+      "id": "DEC-WA-004",
+      "title": "Destinatarios administrados por configuración e historial independiente",
+      "rationale": "El alcance pide notificar alertas sin definir gestión de contactos. Se usan números autorizados por entorno y se guarda la solicitud como referencia histórica sin FK.",
+      "consequences": "El cliente no puede elegir teléfonos arbitrarios. El historial persiste independientemente de eliminaciones operativas; los cambios de destinatarios requieren reinicio."
+    },
+    {
+      "id": "DEC-WA-005",
+      "title": "Timer interno con activación explícita",
+      "rationale": "Las alertas dependen del tiempo y deben detectarse sin consultas al dashboard. El proyecto ya usa tareas ligadas al lifespan.",
+      "consequences": "La instancia necesita CPU fuera de peticiones. Se documenta desactivar el timer y usar el POST autenticado desde un planificador cuando la infraestructura lo requiera."
+    }
+  ],
+  "verification": [
+    {
+      "command": "venv/Scripts/python.exe -m pytest tests/unit/test_whatsapp_alertas_service.py tests/unit/test_whatsapp_timer.py tests/integration/test_whatsapp_alertas.py tests/migrations/test_whatsapp_envios_migration.py tests/unit/test_core_module.py tests/unit/test_conductor_sync_timer.py tests/unit/test_supervision_service.py tests/unit/test_supervision_depuracion_fallas_y_fotos.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "76 passed, 1 warning in 14.86s. Advertencia de deprecación existente de Starlette para HTTP 422. PostgreSQL temporal local incluido, sin skips; Meta simulado."
+    },
+    {
+      "command": "alembic upgrade head; alembic downgrade -1; alembic upgrade head; alembic check (DATABASE_URL fijada a .tmp/whatsapp_autogenerate.sqlite)",
+      "result": "passed",
+      "evidence": "Ciclo completo local exitoso; No new upgrade operations detected. SQLite advierte que no refleja índices de expresiones existentes; la tabla nueva también se comparó con su modelo en PostgreSQL temporal."
+    },
+    {
+      "command": "venv/Scripts/python.exe -m alembic heads; git diff --check",
+      "result": "passed",
+      "evidence": "Una única revisión final: 042_whatsapp_envios. Sin errores de whitespace."
+    },
+    {
+      "command": "pytest tests/integration/test_fase5_supervision_y_alertas.py -q --tb=short --show-capture=no (checkout y copia temporal de git archive HEAD)",
+      "result": "failed",
+      "evidence": "Fallo preexistente confirmado en ambos: línea 54 espera 200 del PATCH de repuesto, pero recibe 422. La copia de HEAD excluye todos los cambios de WhatsApp."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Configurar Meta y aplicar la migración en destino antes de activar WhatsApp; revisar separadamente la prueba antigua de fase 5.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/alertas-whatsapp",
+    "commit": "0c00d8c",
+    "dirty": true
+  },
+  "notes": [
+    "Cambios disponibles en el directorio de trabajo, sin commit ni merge.",
+    "Se conservó sin modificar el avance 0162 no versionado que ya existía al iniciar.",
+    "No se leyeron ni modificaron credenciales reales para activar el envío.",
+    "No se aplicaron migraciones a la base operacional ni se enviaron mensajes reales.",
+    "La implementación conserva la arquitectura router/service/repository/DTO."
+  ]
+}

@@ -1,9 +1,10 @@
 import json
 import os
+import re
 from enum import Enum
-from typing import Final, List, Optional, Union
+from typing import Final, List, Literal, Optional, Union
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 30
@@ -35,6 +36,79 @@ class Settings(BaseSettings):
     CONDUCTORES_SYNC_URL: str = "https://backendnarbus-100590754321.us-east4.run.app/api/v1/publico/conductores"
     CONDUCTORES_SYNC_SECRET: Optional[SecretStr] = None
     CONDUCTORES_SYNC_TIMER_ENABLED: bool = True
+
+    # Alertas por Meta WhatsApp Cloud API; activación explícita por entorno.
+    WHATSAPP_ENABLED: bool = False
+    WHATSAPP_TIMER_ENABLED: bool = True
+    WHATSAPP_ACCESS_TOKEN: Optional[SecretStr] = None
+    WHATSAPP_PHONE_NUMBER_ID: str = Field(default="", pattern=r"^[0-9]*$")
+    WHATSAPP_API_VERSION: str = Field(default="", pattern=r"^(v[0-9]+\.[0-9]+)?$")
+    WHATSAPP_TEMPLATE_NAME: str = Field(default="alerta_taller_visual", pattern=r"^[a-z0-9_]+$")
+    WHATSAPP_TEMPLATE_LANGUAGE: str = Field(default="es", pattern=r"^[a-z]{2,3}(_[A-Z]{2})?$")
+    WHATSAPP_DESTINATARIOS: str = ""
+    WHATSAPP_SEVERIDAD_MINIMA: Literal["BAJA", "MEDIA", "ALTA", "CRITICA"] = "BAJA"
+    WHATSAPP_INTERVAL_SECONDS: int = Field(default=300, ge=60, le=86400)
+    WHATSAPP_TIMEOUT_SECONDS: int = Field(default=20, ge=1, le=60)
+    WHATSAPP_SOLICITUDES_ENABLED: bool = False
+    WHATSAPP_SOLICITUDES_DESTINATARIOS: str = ""
+    WHATSAPP_SOLICITUDES_TEMPLATE_NAME: str = Field(default="narbus_reporte_fallas_visual", pattern=r"^[a-z0-9_]+$")
+    WHATSAPP_SOLICITUDES_TEMPLATE_LANGUAGE: str = Field(default="es_CL", pattern=r"^[a-z]{2,3}(_[A-Z]{2})?$")
+    WHATSAPP_SOLICITUDES_INTERVAL_SECONDS: int = Field(default=15, ge=5, le=3600)
+
+    TELEGRAM_ENABLED: bool = False
+    TELEGRAM_TIMER_ENABLED: bool = True
+    TELEGRAM_SOLICITUDES_ENABLED: bool = False
+    TELEGRAM_BOT_TOKEN: Optional[SecretStr] = None
+    TELEGRAM_DESTINATARIOS: str = ""
+    TELEGRAM_SOLICITUDES_DESTINATARIOS: str = ""
+    TELEGRAM_SEVERIDAD_MINIMA: Literal["BAJA", "MEDIA", "ALTA", "CRITICA"] = "BAJA"
+    TELEGRAM_INTERVAL_SECONDS: int = Field(default=300, ge=60, le=86400)
+    TELEGRAM_SOLICITUDES_INTERVAL_SECONDS: int = Field(default=15, ge=5, le=3600)
+    TELEGRAM_TIMEOUT_SECONDS: int = Field(default=20, ge=1, le=60)
+
+    @field_validator("TELEGRAM_DESTINATARIOS", "TELEGRAM_SOLICITUDES_DESTINATARIOS")
+    @classmethod
+    def validar_chats_telegram(cls, value: str) -> str:
+        chats = list(dict.fromkeys(x.strip() for x in value.split(",") if x.strip()))
+        if len(chats) > 20 or any(not re.fullmatch(r"-?[1-9][0-9]{0,19}", x) for x in chats):
+            raise ValueError("Configure hasta 20 identificadores numéricos de chat de Telegram")
+        return ",".join(chats)
+
+    @model_validator(mode="after")
+    def validar_telegram(self) -> "Settings":
+        token = self.TELEGRAM_BOT_TOKEN and self.TELEGRAM_BOT_TOKEN.get_secret_value().strip()
+        if self.TELEGRAM_ENABLED and not (token and self.TELEGRAM_DESTINATARIOS):
+            raise ValueError("Telegram requiere token y chats de alertas")
+        if self.TELEGRAM_SOLICITUDES_ENABLED and not (token and self.TELEGRAM_SOLICITUDES_DESTINATARIOS):
+            raise ValueError("Telegram requiere token y chats de solicitudes")
+        return self
+
+    @field_validator("WHATSAPP_DESTINATARIOS", "WHATSAPP_SOLICITUDES_DESTINATARIOS")
+    @classmethod
+    def validar_destinatarios_whatsapp(cls, value: str) -> str:
+        numeros = list(dict.fromkeys(
+            numero.strip().removeprefix("+") for numero in value.split(",") if numero.strip()
+        ))
+        if len(numeros) > 20 or any(not re.fullmatch(r"[1-9][0-9]{7,14}", numero) for numero in numeros):
+            raise ValueError("Configure hasta 20 números internacionales separados por comas")
+        return ",".join(numeros)
+
+    @model_validator(mode="after")
+    def validar_configuracion_whatsapp(self) -> "Settings":
+        configuracion_completa = all((
+            self.WHATSAPP_ACCESS_TOKEN and self.WHATSAPP_ACCESS_TOKEN.get_secret_value().strip(),
+            self.WHATSAPP_PHONE_NUMBER_ID,
+            self.WHATSAPP_API_VERSION,
+            self.WHATSAPP_DESTINATARIOS,
+        ))
+        if self.WHATSAPP_ENABLED and not configuracion_completa:
+            raise ValueError("WhatsApp requiere token, phone number ID, versión de API y destinatarios")
+        if self.WHATSAPP_SOLICITUDES_ENABLED and not all((
+            self.WHATSAPP_ACCESS_TOKEN and self.WHATSAPP_ACCESS_TOKEN.get_secret_value().strip(),
+            self.WHATSAPP_PHONE_NUMBER_ID, self.WHATSAPP_API_VERSION, self.WHATSAPP_SOLICITUDES_DESTINATARIOS,
+        )):
+            raise ValueError("Avisos de solicitudes requieren token, emisor, versión y destinatarios")
+        return self
 
     # Host y Puerto
     HOST: Optional[str] = None

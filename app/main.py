@@ -84,6 +84,10 @@ async def lifespan(app: FastAPI):
     La siembra de datos de prueba (seeding) SOLO ocurre en entorno local/desarrollo.
     """
     conductor_sync_task = None
+    telegram_task = None
+    telegram_solicitudes_task = None
+    whatsapp_task = None
+    whatsapp_solicitudes_task = None
     keepalive_task = None
     keepalive_stop = asyncio.Event()
     if settings.REALTIME_ENABLED:
@@ -125,7 +129,42 @@ async def lifespan(app: FastAPI):
         from app.modules.auth.services.conductor_sync_timer import ejecutar_timer_conductores
         conductor_sync_task = asyncio.create_task(ejecutar_timer_conductores(), name="narbus-conductores-timer")
 
+    if settings.WHATSAPP_ENABLED and settings.WHATSAPP_TIMER_ENABLED:
+        from app.modules.supervision.services.whatsapp_timer import ejecutar_timer_whatsapp
+        whatsapp_task = asyncio.create_task(ejecutar_timer_whatsapp(), name="narbus-whatsapp-timer")
+
+    if settings.WHATSAPP_SOLICITUDES_ENABLED:
+        from app.modules.taller.services.whatsapp_solicitud_service import ejecutar_timer_solicitudes
+        whatsapp_solicitudes_task = asyncio.create_task(ejecutar_timer_solicitudes(), name="narbus-whatsapp-solicitudes")
+
+    telegram_subscription = None
+    if settings.TELEGRAM_ENABLED or settings.TELEGRAM_SOLICITUDES_ENABLED:
+        from app.modules.supervision.services.telegram_scheduler import telegram_scheduler
+        telegram_subscription = realtime_runtime.bus.subscribe(telegram_scheduler.changed)
+        telegram_task = asyncio.create_task(telegram_scheduler.run(), name="narbus-telegram-vencimientos")
+
     yield
+    if telegram_subscription:
+        realtime_runtime.bus.unsubscribe(telegram_subscription)
+    for task in (telegram_task, telegram_solicitudes_task):
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    if whatsapp_solicitudes_task:
+        whatsapp_solicitudes_task.cancel()
+        try:
+            await whatsapp_solicitudes_task
+        except asyncio.CancelledError:
+            pass
+    if whatsapp_task:
+        whatsapp_task.cancel()
+        try:
+            await whatsapp_task
+        except asyncio.CancelledError:
+            pass
     if conductor_sync_task:
         conductor_sync_task.cancel()
         try:

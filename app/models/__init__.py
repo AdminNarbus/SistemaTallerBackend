@@ -1,4 +1,5 @@
 from app.core.base import Base, TimestampMixin
+from app.modules.supervision.models import WhatsappEnvio, TelegramEnvio
 from app.modules.taller.models.repuesto import Repuesto
 from app.modules.taller.models.taller_repuesto_utilizado import TallerRepuestoUtilizado
 from app.modules.taller.models.taller_consolidacion_archivo import TallerConsolidacionArchivo
@@ -26,6 +27,7 @@ from app.modules.formularios.models.comentario_neumatico import ComentarioNeumat
 from app.modules.taller.models import historical_snapshots  # register insert hooks
 
 __all__ = [
+    "WhatsappEnvio",
     "TallerCorreccionVisita",
     "TallerSolicitudEstadoEvento",
     "Base",

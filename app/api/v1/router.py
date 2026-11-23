@@ -9,6 +9,8 @@ from app.modules.buses.api.router import router as buses_router
 from app.modules.formularios.api import formularios_router
 from app.modules.taller.api import router as taller_router
 from app.modules.supervision.api.router import router as supervision_router
+from app.modules.supervision.api.whatsapp_router import router as whatsapp_router
+from app.modules.supervision.api.telegram_router import router as telegram_router
 from app.modules.dashboard.api.router import router as dashboard_router
 
 api_router = APIRouter(dependencies=[Depends(enforce_visual_read_only)])
@@ -25,6 +27,8 @@ api_router.include_router(buses_router, prefix="/buses", tags=["Buses"])
 api_router.include_router(formularios_router, prefix="/formularios", tags=["Formularios Unificados"])
 api_router.include_router(taller_router, tags=["Operativa de Taller"])
 api_router.include_router(supervision_router, tags=["Supervisión y Auditoría"])
+api_router.include_router(whatsapp_router)
+api_router.include_router(telegram_router)
 api_router.include_router(publica_router)
 api_router.include_router(dashboard_router)
 

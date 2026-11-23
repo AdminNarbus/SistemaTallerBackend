@@ -1,11 +1,45 @@
 # Estado Actual del Proyecto: Backend Taller Narbus
 
+AV-0175: comentarios nuevos de fallas y entrega de turno explican la acción, separan fallas reparadas/pendientes y distinguen la nota del mecánico. Eliminada la aprobación anticipada redundante de Gestión de Buses; tomar o asignar una nueva falla genera tipo ASIGNACION. 122 casos aprobados entre regresión y verificación final de los dos casos nuevos; cinco fallos ajenos reproducidos con servicios de HEAD (repuestos y tiempos de taller). Historial almacenado conservado; etiquetas visibles pendientes de traducción en frontend. Ver [guía de comentarios](GUIA_COMENTARIOS_BREVES_Y_ASIGNACION_GRUPAL.md).
+
+AV-0174: plantilla visual de reportes registrada en Meta y backend adaptado a cuatro campos. La plantilla está pendiente de aprobación; 42 pruebas aprobadas.
+
+AV-0173: plantilla visual de alertas configurada y texto de reportes de conductor aclarado. Meta aceptó dos mensajes de prueba; entrega pendiente de confirmación. 25 pruebas aprobadas.
+
+AV-0172: avisos de WhatsApp por cada reporte de conductor, con cola transaccional, múltiples destinatarios y migración 043. Implementado y probado con Meta simulado; falta aplicar migración y activar configuración en el entorno. Ver [guía](../docs/WHATSAPP_SOLICITUDES.md).
+
+AV-0167: Meta confirmó `alerta_taller` aprobada; token temporal renovado y
+prueba local de una alerta mediante el endpoint aceptada por Meta. La prueba
+usó ASGI en proceso y sustituyó la autenticación; falta confirmar recepción.
+El envío automático sigue desactivado.
+
 AV-0167: creación de fallas desde supervisión admite `fecha_reporte` opcional
 con zona horaria, solo para SUPERVISOR/ADMIN y sin fechas futuras. Se conserva
 `fecha_creacion` automática; el evento REPORTADA usa la fecha reportada y su
 registro conserva la fecha de auditoría. Sin migración ni despliegue.
 67 pruebas aprobadas. Contrato y ejemplos para frontend en
 [fecha de reporte](../docs/FECHA_REPORTE_FALLAS_FRONTEND.md).
+
+AV-0166: a petición del usuario se retiró la adaptación temporal a
+`narbus_alertas` y se restauró el contrato original de cinco variables de
+`alerta_taller`. El envío local quedó desactivado. 32 pruebas aprobadas.
+
+AV-0165: prueba local del endpoint de alertas por WhatsApp con la plantilla
+aprobada `narbus_alertas`: una alerta real procesada y aceptada por Meta.
+El endpoint se ejecutó en proceso ASGI con la autorización sustituida para la
+prueba y limitado a una alerta; la entrega al teléfono no está confirmada.
+
+AV-0164: migración 042 aplicada y verificada en PostgreSQL local; destinatario de
+prueba confirmado en Meta y plantilla `alerta_taller` registrada para revisión.
+Meta la reporta PENDING; el envío permanece desactivado hasta su aprobación.
+
+AV-0163: alertas por WhatsApp con Meta Cloud API implementadas en `feature/alertas-whatsapp`.
+Timer configurable, envío manual protegido, historial paginado y deduplicación persistente
+por alerta/severidad/destinatario. Reintentos 429 limitados; resultados inciertos no se
+reenvían. Migración 042 autogenerada y verificada en SQLite y PostgreSQL desechables;
+76 pruebas aprobadas. Configuración y plantilla en [guía operativa](../docs/ALERTAS_WHATSAPP.md).
+Pendientes migración en destino, credenciales, plantilla aprobada y activación explícita.
+La prueba antigua de integración de fase 5 falla también en HEAD sin estos cambios.
 
 AV-0153: búsqueda por prefijo en tabla_ot y tabla_n_bus de GET /dashboard/solicitudes y en q (número/patente) de GET /taller/buses. El autocompletado del dashboard ya usaba prefijo. Filtros globales exactos conservados. Bandejas pendientes/mis-trabajos sin búsqueda textual; no se agregan parámetros nuevos. Verificación: 82 pruebas de regresión y buses aprobadas, más 8 casos nuevos del dashboard aprobados tras corregir un dato de prueba incompatible con una única OT activa por bus.
 

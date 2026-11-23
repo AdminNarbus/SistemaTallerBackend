@@ -51,7 +51,7 @@ def _work_order_event(path: str, method: str) -> Optional[Tuple[int, str, Option
 
 
 def emit_http_mutation_event(request: Request, status_code: int) -> None:
-    if not settings.REALTIME_ENABLED or status_code >= 300:
+    if not (settings.REALTIME_ENABLED or settings.TELEGRAM_ENABLED) or status_code >= 300:
         return
     event_data = _work_order_event(request.url.path, request.method)
     if not event_data:

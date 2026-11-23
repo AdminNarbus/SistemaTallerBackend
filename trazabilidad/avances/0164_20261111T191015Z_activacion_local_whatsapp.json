@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 164,
+  "id": "AV-0164",
+  "timestamp": "2026-11-11T19:10:15Z",
+  "phase": "backend_taller",
+  "milestone": {"id": "WHATSAPP-LOCAL", "name": "Preparación de pruebas locales de WhatsApp", "statusBefore": "pending", "statusAfter": "in_progress"},
+  "type": "in_progress",
+  "summary": "Migración local aplicada y plantilla de alertas registrada para revisión en Meta a petición del usuario.",
+  "scope": {
+    "planned": ["Preparar prueba local con destinatario autorizado", "Registrar plantilla de alertas"],
+    "completed": ["Conexión PostgreSQL local confirmada por dirección loopback", "Migración 042 aplicada", "Destinatario de prueba confirmado en Meta", "Plantilla alerta_taller en español registrada con cinco parámetros"],
+    "pending": ["Aprobación de plantilla por Meta", "Activar envío y verificar una alerta real al destinatario"],
+    "outOfScope": ["Cambios en base remota", "Activación de producción"]
+  },
+  "changes": [
+    {"path": "trazabilidad/01_ESTADO_ACTUAL_PROYECTO.md", "action": "modified", "summary": "Estado de la preparación local y revisión pendiente en Meta"},
+    {"path": ".env", "action": "modified", "summary": "Configuración local privada del destinatario y credencial temporal, sin publicar valores"}
+  ],
+  "decisions": [
+    {"id": "DEC-164-1", "title": "Esperar aprobación antes de enviar", "rationale": "Meta reporta la plantilla como PENDING; un rechazo quedaría registrado y no se reintentaría automáticamente.", "consequences": "El envío permanece desactivado hasta obtener aprobación."},
+    {"id": "DEC-164-2", "title": "Uso exclusivo de base local", "rationale": "La solicitud fue una prueba local y el repositorio restringe las pruebas a dev_local.", "consequences": "Solo se ejecutó Alembic en la base local tras confirmar IP loopback."}
+  ],
+  "verification": [
+    {"command": "Alembic upgrade head en PostgreSQL local", "result": "passed", "evidence": "Revisión 042_whatsapp_envios y tabla whatsapp_envios verificadas."},
+    {"command": "Consulta GET de plantilla en Meta", "result": "passed", "evidence": "HTTP 200; plantilla alerta_taller idioma es, estado PENDING."},
+    {"command": "Consulta de configuración local", "result": "passed", "evidence": "Envío desactivado mientras se espera aprobación."}
+  ],
+  "blockers": ["Aprobación de la plantilla por Meta"],
+  "nextStep": "Consultar aprobación y ejecutar prueba controlada al destinatario una vez aprobada.",
+  "git": {"repository": "BackendTallerNarbus", "branch": "feature/alertas-whatsapp", "commit": "0c00d8c", "dirty": true},
+  "notes": ["No se enviaron mensajes reales.", "No se incluyen teléfonos ni credenciales en este registro."]
+}

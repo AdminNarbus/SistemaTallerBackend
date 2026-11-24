@@ -490,7 +490,7 @@ class SupervisionService:
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        """Permite a la supervisora corregir la descripción de una avería con justificación obligatoria."""
+        """Permite a la supervisora corregir la descripción de una avería con justificación opcional."""
         logger.info(
             "[SUPERVISION_SERVICE] Supervisora %s modificando texto de falla detalle_id=%s en solicitud_id=%s",
             supervisor_id,

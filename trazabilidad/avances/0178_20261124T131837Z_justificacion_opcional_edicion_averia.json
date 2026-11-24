@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 178,
+  "id": "AV-0178",
+  "timestamp": "2026-11-24T13:18:37Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUPERVISION",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed",
+    "name": "Edición de averías con justificación opcional"
+  },
+  "type": "completed",
+  "summary": "El PATCH de edición de averías acepta una justificación opcional y registra cada cambio en la bitácora.",
+  "scope": {
+    "planned": ["Aceptar ediciones de averías sin justificación"],
+    "completed": ["Validación del payload, registro en bitácora y cobertura del endpoint"],
+    "pending": [],
+    "outOfScope": ["Despliegue en producción"]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Acepta la omisión, null y texto vacío en justificacion. El texto presente se recorta y valida."
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Incluye el motivo en el comentario cuando se proporciona."
+    },
+    {
+      "path": "app/modules/supervision/api/router.py",
+      "action": "modified",
+      "summary": "Documenta el campo opcional en OpenAPI."
+    },
+    {
+      "path": "tests/unit/test_supervision_depuracion_fallas_y_fotos.py",
+      "action": "modified",
+      "summary": "Verifica cinco variantes del campo mediante el PATCH y su resultado en bitácora."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "Aceptar la edición sin motivo",
+      "rationale": "El formulario ya permite omitir la justificación.",
+      "consequences": "La bitácora conserva el texto anterior y el nuevo en todas las ediciones. Si se envía un motivo, se registra con su texto validado."
+    }
+  ],
+  "verification": [
+    {
+      "command": "python -m pytest tests/unit/test_supervision_depuracion_fallas_y_fotos.py -q --tb=short --show-capture=no",
+      "result": "passed",
+      "evidence": "10 pruebas aprobadas en la rama de publicación, incluidos los cinco casos del PATCH."
+    },
+    {
+      "command": "python -m pytest tests/unit/test_supervision_depuracion_fallas_y_fotos.py tests/integration/test_supervision_api.py -q --tb=short",
+      "result": "failed",
+      "evidence": "30 casos aprobados, incluidos los cinco del PATCH. Los cuatro casos fallidos de auditoría se reprodujeron en ec137be."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Desplegar el cambio cuando corresponda.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feature/justificacion-opcional-averias",
+    "commit": "8615452",
+    "dirty": true
+  },
+  "notes": ["git fetch origin y git pull --ff-only origin main confirmaron que el checkout estaba actualizado."]
+}

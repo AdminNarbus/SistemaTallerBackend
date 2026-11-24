@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.taller.constants import EstadoFalla
 from app.modules.taller.dtos.catalogo_dto import FallaTallerDTO
@@ -92,18 +92,18 @@ class AgregarFallaDTO(BaseModel):
 
 
 class EditarFallaDTO(BaseModel):
-    """Payload para que un supervisor o administrador modifique la descripción de una avería con justificación obligatoria."""
+    """Edición de la descripción de una avería con justificación opcional."""
     descripcion_personalizada: str = Field(
         ...,
         min_length=2,
         max_length=1000,
         description="Nuevo texto o descripción corregida de la avería",
     )
-    justificacion: str = Field(
-        ...,
+    justificacion: Optional[str] = Field(
+        None,
         min_length=3,
         max_length=1000,
-        description="Justificación obligatoria del motivo del cambio",
+        description="Motivo opcional del cambio. Un valor vacío equivale a omitirlo.",
     )
     falla_id: Optional[int] = Field(
         None,
@@ -113,6 +113,13 @@ class EditarFallaDTO(BaseModel):
         None,
         description="ID de categoría opcional si además se reclasifica",
     )
+
+    @field_validator("justificacion", mode="before")
+    @classmethod
+    def normalizar_justificacion(cls, valor: Any) -> Any:
+        if isinstance(valor, str):
+            return valor.strip() or None
+        return valor
 
 
 class CheckFallaDTO(BaseModel):

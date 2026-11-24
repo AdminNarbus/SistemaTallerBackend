@@ -1048,10 +1048,7 @@ class AveriasService:
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        """
-        Modifica el texto o descripción de una avería requiriendo justificación obligatoria.
-        Registra la justificación en la bitácora inmutable.
-        """
+        """Modifica la descripción de una avería y registra el cambio en la bitácora."""
         logger.info(
             "[SUPERVISION] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | supervisor_id=%s",
             solicitud_id,
@@ -1078,7 +1075,6 @@ class AveriasService:
             or f"Avería #{detalle.id}"
         )
         texto_nuevo = dto.descripcion_personalizada.strip()
-        justificacion = dto.justificacion.strip()
 
         now = datetime.now(timezone.utc)
 
@@ -1097,8 +1093,10 @@ class AveriasService:
         # Registrar en la bitácora inmutable
         sup_nom = supervisor_nombre or "Supervisor"
         comentario_texto = (
-            f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'. Justificación: {justificacion}"
+            f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'."
         )
+        if dto.justificacion:
+            comentario_texto += f" Justificación: {dto.justificacion}"
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
             usuario_id=supervisor_id,

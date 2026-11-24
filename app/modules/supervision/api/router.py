@@ -423,8 +423,8 @@ async def eliminar_falla_supervision(
 @router.patch(
     "/solicitudes/{id}/detalles/{detalle_id}",
     response_model=SolicitudDTO,
-    summary="Modificar texto de una falla con justificación obligatoria",
-    description="Permite a la supervisora corregir el texto o descripción de una avería justificando obligatoriamente el motivo del cambio en la bitácora inmutable.",
+    summary="Modificar texto de una falla con justificación opcional",
+    description="Registra la corrección en la bitácora inmutable e incluye el motivo cuando se proporciona.",
 )
 async def editar_falla_supervision(
     id: int = Path(..., description="ID numérico de la solicitud/OT", ge=1),
@@ -433,7 +433,7 @@ async def editar_falla_supervision(
     current_user: UsuarioResponseDTO = Depends(require_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ) -> SolicitudDTO:
-    """Modifica la descripción de una avería requiriendo justificación obligatoria."""
+    """Modifica la descripción de una avería desde Supervisión."""
     logger.info(
         "[SUPERVISION] Supervisora %s modificando texto de falla detalle_id=%s en solicitud_id=%s | justificacion='%s'",
         current_user.id,

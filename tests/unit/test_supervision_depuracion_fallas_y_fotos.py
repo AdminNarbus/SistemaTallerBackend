@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 from app.core.exceptions import BusinessRuleException, NotFoundException
 from app.modules.buses.models.bus import Bus
 from app.modules.taller.constants import EstadoFalla, EstadoSolicitud
-from app.modules.taller.dtos import EditarFallaDTO
 from app.modules.taller.models.falla_taller import FallaTaller
 from app.modules.taller.models.categoria_falla import CategoriaFalla
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
@@ -163,10 +162,25 @@ async def test_eliminar_falla_bloqueada_en_ot_finalizada(db_session, seed_test_d
 
 
 @pytest.mark.asyncio
-async def test_editar_falla_con_justificacion_exitoso(db_session, seed_test_data):
-    """Verifica que el supervisor pueda corregir el texto de una avería dejando justificación en bitácora."""
+@pytest.mark.parametrize(
+    ("campos_opcionales", "sufijo_bitacora"),
+    [
+        pytest.param({}, "", id="omitida"),
+        pytest.param({"justificacion": None}, "", id="nula"),
+        pytest.param({"justificacion": ""}, "", id="vacia"),
+        pytest.param({"justificacion": " \t "}, "", id="espacios"),
+        pytest.param(
+            {"justificacion": "  Corrección de redacción del chofer  "},
+            " Justificación: Corrección de redacción del chofer",
+            id="con-motivo",
+        ),
+    ],
+)
+async def test_editar_falla_con_justificacion_opcional(
+    client, db_session, seed_test_data, auth_headers_supervisor, campos_opcionales, sufijo_bitacora,
+):
+    """Verifica que el PATCH registre la edición con o sin motivo."""
     conductor = seed_test_data["conductor"]
-    supervisor = seed_test_data["supervisor"]
     now = datetime.now(timezone.utc)
 
     sol = TallerSolicitud(
@@ -190,30 +204,21 @@ async def test_editar_falla_con_justificacion_exitoso(db_session, seed_test_data
     db_session.add(det)
     await db_session.commit()
 
-    dto = EditarFallaDTO(
-        descripcion_personalizada="Luces delanteras principales no encienden",
-        justificacion="Corrección de redacción del chofer para claridad técnica",
+    nueva_descripcion = "Luces delanteras principales no encienden"
+    response = await client.patch(
+        "/api/v1/supervision/solicitudes/8804/detalles/9905",
+        headers=auth_headers_supervisor,
+        json={"descripcion_personalizada": nueva_descripcion, **campos_opcionales},
     )
 
-    result = await supervision_service.editar_falla(
-        db_session,
-        solicitud_id=8804,
-        detalle_id=9905,
-        dto=dto,
-        supervisor_id=supervisor.id,
-        supervisor_nombre="Supervisora Laura",
+    assert response.status_code == 200, response.text
+    solicitud = response.json()
+    detalle = next(d for d in solicitud["detalles"] if d["id"] == 9905)
+    assert detalle["descripcion_personalizada"] == nueva_descripcion
+    comentario = next(c for c in solicitud["comentarios"] if c["tipo"] == "SUPERVISION")
+    assert comentario["comentario"] == (
+        f"Avería #9905 modificada: de 'lucs no predn' a '{nueva_descripcion}'.{sufijo_bitacora}"
     )
-
-    # Verificar descripción actualizada en DTO
-    det_editado = next((d for d in result.detalles if d.id == 9905), None)
-    assert det_editado is not None
-    assert det_editado.descripcion_personalizada == "Luces delanteras principales no encienden"
-
-    # Verificar bitácora inmutable
-    comentario = next((c for c in result.comentarios if "modificada:" in c.comentario), None)
-    assert comentario is not None
-    assert "de 'lucs no predn' a 'Luces delanteras principales no encienden'" in comentario.comentario
-    assert "Justificación: Corrección de redacción del chofer para claridad técnica" in comentario.comentario
 
 
 @pytest.mark.asyncio

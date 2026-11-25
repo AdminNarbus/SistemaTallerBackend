@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 179,
+  "id": "AV-0179",
+  "timestamp": "2026-11-25T14:47:22Z",
+  "phase": "control_mantenciones_backend",
+  "milestone": {
+    "id": "MANT",
+    "name": "Control de Mantenciones",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed"
+  },
+  "type": "completed",
+  "summary": "Completa el tipo de registro en el listado de mantenciones.",
+  "scope": {
+    "planned": [
+      "Incluye el campo tipo en el listado exclusivo de mantenciones."
+    ],
+    "completed": [
+      "Incluye el campo tipo en el listado exclusivo de mantenciones."
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Datos y configuración de producción."
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/control_mantenciones/repository/queries.py",
+      "action": "modified",
+      "summary": "Incluye el campo tipo en el listado exclusivo de mantenciones."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-MANT-001",
+      "title": "Identificar el tipo del registro",
+      "rationale": "Una mantención y una lectura pueden compartir identificador.",
+      "consequences": "El borrado usa el recurso correspondiente y conserva su control de versión."
+    }
+  ],
+  "verification": [
+    {
+      "command": "Prueba de API con PostgreSQL local y reversión de la transacción",
+      "result": "passed",
+      "evidence": "Borrado, conflicto de versión, preservación de la lectura con el mismo identificador, recálculo y auditoría comprobados."
+    },
+    {
+      "command": "pytest del módulo",
+      "result": "failed",
+      "evidence": "37 pruebas pasaron. Tres expectativas de umbrales antiguos fallaron y la prueba de esquema no encontró el ejecutable virtual en el checkout de publicación."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Publicar por develop y main.",
+  "git": {
+    "repository": "SistemaTallerBackend",
+    "branch": "feature/mantenciones-cambios-y-eliminacion",
+    "commit": null,
+    "dirty": true
+  },
+  "notes": []
+}

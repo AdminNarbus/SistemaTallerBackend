@@ -333,7 +333,7 @@ def columnas_mantenciones() -> Any:
     return [
         Mant.id,
         Mant.bus_id,
-        literal("mantencion"),
+        literal("mantencion").label("tipo"),
         Mant.fecha,
         Mant.kilometraje,
         Mant.estado,

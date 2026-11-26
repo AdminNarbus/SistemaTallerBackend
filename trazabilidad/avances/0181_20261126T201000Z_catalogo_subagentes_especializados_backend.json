@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 181,
+  "id": "AV-0181",
+  "timestamp": "2026-11-26T20:10:00Z",
+  "phase": "arquitectura_agentes",
+  "milestone": {
+    "id": "AGENTS_BACKEND",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed",
+    "name": "Catálogo y matriz de enrutamiento de 5 subagentes especializados de Backend"
+  },
+  "type": "completed",
+  "summary": "Se incorporó AGENTS.md raíz y las 5 definiciones de subagentes especializados en .agents/agents/ junto con referencias cruzadas en las guías de buenas prácticas.",
+  "scope": {
+    "planned": [
+      "Definir los 5 subagentes de Backend y su protocolo de delegación en AGENTS.md y .agents/"
+    ],
+    "completed": [
+      "AGENTS.md raíz, .agents/agents/* y actualización de guías en .agents/"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Cambios en endpoints o lógica de dominio"
+    ]
+  },
+  "changes": [
+    {
+      "path": "AGENTS.md",
+      "action": "created",
+      "summary": "Orquestador raíz y tabla de delegación de subagentes de BackendTallerNarbus."
+    },
+    {
+      "path": ".agents/AGENTS.md",
+      "action": "modified",
+      "summary": "Documenta mapa de .agents/ y matriz de los 5 especialistas."
+    },
+    {
+      "path": ".agents/agents",
+      "action": "created",
+      "summary": "Definiciones de arquitecto-dominio-seguridad, especialista-datos-rendimiento, implementador-api-fastapi, ingeniero-qa-migraciones y documentador-trazabilidad-contratos."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0181-01",
+      "title": "Separar subagentes por perfil cognitivo (pro vs flash)",
+      "rationale": "Optimiza latencia y precisión reservando modelos pro para diseño/seguridad/SQL complejo y flash para implementación CRUD, QA y trazabilidad.",
+      "consequences": "Enrutamiento determinista desde AGENTS.md."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m compileall app tests -q",
+      "result": "passed",
+      "evidence": "Árbol Python intacto y definiciones Markdown verificadas."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Continuar flujo habitual sobre develop.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feat/subagentes-especializados",
+    "commit": "7d3ecac",
+    "dirty": false
+  },
+  "notes": []
+}

@@ -2,6 +2,11 @@
 
 Este documento establece las directrices de ingeniería de software, código limpio (*Clean Code*), principios SOLID, diseño de funciones, nomenclatura y estándares de calidad para el repositorio **`BackendTallerNarbus`**. Complementa las guías específicas de base de datos ([.agents/BUENAS_PRACTICAS_BD.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_BD.md)) y arquitectura backend ([.agents/BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/BUENAS_PRACTICAS_Y_ESTANDARES_BACKEND.md)).
 
+> **Subagentes Especializados Asociados (`.agents/agents/`):**
+> - **`implementador-api-fastapi`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/implementador-api-fastapi/agent.md), `model: flash`) y **`arquitecto-dominio-seguridad`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/arquitecto-dominio-seguridad/agent.md), `model: pro`): Aplican SRP (funciones de 5-20 líneas), SLAP, CQS, guard clauses Fail-Fast, constantes `Final` y tipado estricto.
+> - **`ingeniero-qa-migraciones`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/ingeniero-qa-migraciones/agent.md), `model: flash`): Ejecuta la Sección 9 (Testing unitario e integral bajo patrón AAA con `AsyncMock` y cobertura de casos borde).
+> - **`documentador-trazabilidad-contratos`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/documentador-trazabilidad-contratos/agent.md), `model: flash`): Mantiene la coherencia documental de contratos y avances técnicos.
+
 ---
 
 ## 1. Principio de Responsabilidad Única (SRP)

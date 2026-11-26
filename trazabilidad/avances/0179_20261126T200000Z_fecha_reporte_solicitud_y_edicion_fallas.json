@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 179,
+  "id": "AV-0179",
+  "timestamp": "2026-11-26T20:00:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "SUPERVISION_TALLER",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed",
+    "name": "Fecha histórica de notificación en creación de solicitud y edición de fallas abiertas"
+  },
+  "type": "completed",
+  "summary": "Se habilitó fecha_reporte histórica por ítem al crear solicitudes (solo SUPERVISOR/ADMIN, sin fechas futuras) y la edición de fecha_reporte en averías abiertas desde Supervisión sin alterar fecha_creacion.",
+  "scope": {
+    "planned": [
+      "Aceptar fecha_reporte opcional por falla en SolicitudDetalleCreateDTO para SUPERVISOR/ADMIN",
+      "Aceptar fecha_reporte opcional en EditarFallaDTO bloqueando fallas resueltas y fechas futuras",
+      "Sincronizar el evento REPORTADA y registrar cambio en bitácora inmutable"
+    ],
+    "completed": [
+      "Validación RBAC y temporal en averias_service y solicitud_service",
+      "Actualización de fecha_evento en evento REPORTADA y trazabilidad en bitácora",
+      "Pruebas de integración en test_fecha_reporte_falla.py"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Alterar fecha_creacion de auditoría o editar averías resueltas"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/modules/taller/dtos/averias_dto.py",
+      "action": "modified",
+      "summary": "Agrega fecha_reporte opcional (AwareDatetime) en SolicitudDetalleCreateDTO y EditarFallaDTO."
+    },
+    {
+      "path": "app/modules/taller/services/averias_service.py",
+      "action": "modified",
+      "summary": "Extrae resolver_fecha_reporte_valor, bloquea edición de averías resueltas y actualiza fecha_reporte y evento REPORTADA."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Aplica resolver_fecha_reporte_valor por detalle al crear solicitudes y en registrar_evento_falla."
+    },
+    {
+      "path": "tests/integration/test_fecha_reporte_falla.py",
+      "action": "modified",
+      "summary": "Cobertura de creación multi-falla con fechas distintas, rechazo 403 a CONDUCTOR y edición bloqueada en RESUELTA."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0179-01",
+      "title": "Separar fecha_reporte histórica de fecha_creacion inmutable",
+      "rationale": "Los supervisores registran fallas reportadas verbalmente o por radio con anterioridad, pero la auditoría del sistema requiere preservar el instante real de inserción.",
+      "consequences": "fecha_creacion permanece intacta y solo fecha_reporte más el evento inicial REPORTADA reflejan la hora real informada."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/integration/test_fecha_reporte_falla.py -q --tb=short",
+      "result": "passed",
+      "evidence": "Suite completa de fecha_reporte aprobada en verde."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Integrar soporte multimedia de evidencias en rama independiente.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feat/fecha-reporte-fallas",
+    "commit": "2aecf56",
+    "dirty": false
+  },
+  "notes": []
+}

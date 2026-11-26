@@ -44,6 +44,7 @@ from app.modules.taller.services.mappers import (
 )
 from app.core.realtime.events import RealtimeEvent, publish_event_soon
 from app.modules.taller.services.estadias_helper import attach_comentario_safe
+from app.modules.taller.services.averias_service import resolver_fecha_reporte_valor
 from app.modules.taller.services.trazabilidad_fallas import registrar_evento_falla
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
@@ -500,6 +501,11 @@ class SolicitudService:
                     continue
 
                 falla_nombre = falla_nombre or texto
+                fecha_reporte_item = resolver_fecha_reporte_valor(
+                    getattr(det_dto, "fecha_reporte", None),
+                    creador_rol or "",
+                    now,
+                )
 
                 detalle = TallerSolicitudDetalle(
                     solicitud_id=solicitud.id if not es_nueva_ot else None,
@@ -507,7 +513,7 @@ class SolicitudService:
                     descripcion_personalizada=texto,
                     resuelto=False,
                     fecha_creacion=now,
-                    fecha_reporte=now,
+                    fecha_reporte=fecha_reporte_item,
                     reportado_por_id=creador_id,
                     estado_revision="APROBADA" if revision_automatica else "PENDIENTE",
                     revisado_por_id=creador_id if revision_automatica else None,
@@ -535,7 +541,7 @@ class SolicitudService:
                     actor_nombre=creador_nombre,
                     estado_anterior=None,
                     estado_nuevo=EstadoFalla.PENDIENTE.value,
-                    fecha_evento=now,
+                    fecha_evento=detalle.fecha_reporte or now,
                     comentario=detalle.descripcion_personalizada,
                 )
             if not es_nueva_ot:

@@ -70,6 +70,9 @@ class EstadoItemPauta(str, Enum):
 # Cantidad canónica de ítems en el catálogo maestro de pauta preventiva de taller
 TOTAL_ITEMS_PAUTA_PREVENTIVA: Final[int] = 10
 
+# Cantidad máxima de archivos multimedia (fotos o videos) por acción
+MAX_ADJUNTOS_EVIDENCIA: Final[int] = 5
+
 # Parámetros estándar de paginación para consultas de listados de solicitudes
 DEFAULT_PAGE_SKIP: Final[int] = 0
 DEFAULT_PAGE_LIMIT: Final[int] = 20

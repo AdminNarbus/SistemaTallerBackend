@@ -40,6 +40,7 @@ UPLOAD_DIR = settings.upload_absolute_path
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "solicitudes"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "evidencias"), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "bitacora"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "neumaticos"), exist_ok=True)
 logger.info("[STARTUP] Directorio de almacenamiento de imágenes listo: '%s'", UPLOAD_DIR)
 

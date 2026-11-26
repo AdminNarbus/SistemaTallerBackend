@@ -622,4 +622,130 @@ async def test_numero_fallas_en_pendientes_y_mis_trabajos(
     assert item_sin_asignaciones["fallas_asignadas_al_mecanico"] == 0
 
 
+@pytest.mark.asyncio
+async def test_solicitud_conductor_con_videos_y_limite_cinco(
+    client, auth_headers_conductor, seed_test_data
+):
+    """Permite subir mezcla de fotos y videos (hasta 5) al crear solicitud y rechaza 6."""
+    import json
+
+    fake_jpg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"evidencia"
+    fake_mp4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"video_bytes"
+
+    res_ok = await client.post(
+        "/api/v1/formularios/mantencion/solicitudes",
+        data={
+            "n_bus": "VID-001",
+            "descripcion_general": "Ruido en suspensión trasera",
+            "detalles": json.dumps([{"falla_id": seed_test_data["falla1"].id}]),
+        },
+        files=[
+            ("fotos", ("foto_1.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("foto_2.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("foto_3.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("clip_1.mp4", io.BytesIO(fake_mp4), "video/mp4")),
+            ("fotos", ("clip_2.mp4", io.BytesIO(fake_mp4), "video/mp4")),
+        ],
+        headers=auth_headers_conductor,
+    )
+    assert res_ok.status_code == 201, res_ok.text
+    body = res_ok.json()
+    assert len(body["evidencias"]) == 5
+    video_evs = [ev for ev in body["evidencias"] if ev.get("content_type") == "video/mp4"]
+    assert len(video_evs) == 2
+    assert body["foto_url"] is not None
+
+    res_over = await client.post(
+        "/api/v1/formularios/mantencion/solicitudes",
+        data={
+            "n_bus": "VID-002",
+            "detalles": json.dumps([{"falla_id": seed_test_data["falla1"].id}]),
+        },
+        files=[
+            ("fotos", (f"foto_{i}.jpg", io.BytesIO(fake_jpg), "image/jpeg"))
+            for i in range(6)
+        ],
+        headers=auth_headers_conductor,
+    )
+    assert res_over.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_bitacora_y_check_falla_con_videos_y_limite_cinco(
+    client, auth_headers_conductor, auth_headers_mecanico1, seed_test_data, taller_resultado
+):
+    """Permite adjuntar hasta 5 fotos/videos en chat bitácora y videos al cambiar estado de falla."""
+    create_res = await client.post(
+        "/api/v1/taller/solicitudes",
+        json={
+            "n_bus": "VID-BIT-001",
+            "detalles": [{"falla_id": seed_test_data["falla1"].id}],
+        },
+        headers=auth_headers_conductor,
+    )
+    assert create_res.status_code == 201
+    solicitud_id = create_res.json()["id"]
+    detalle_id = create_res.json()["detalles"][0]["id"]
+
+    fake_jpg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"foto"
+    fake_mp4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"video"
+
+    comentario_5 = await client.post(
+        f"/api/v1/taller/{solicitud_id}/comentarios",
+        data={"tipo": "GENERAL", "comentario": "Evidencia mixta 5 archivos"},
+        files=[
+            ("fotos", ("f1.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("f2.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("f3.jpg", io.BytesIO(fake_jpg), "image/jpeg")),
+            ("fotos", ("v1.mp4", io.BytesIO(fake_mp4), "video/mp4")),
+            ("fotos", ("v2.mp4", io.BytesIO(fake_mp4), "video/mp4")),
+        ],
+        headers=auth_headers_mecanico1,
+    )
+    assert comentario_5.status_code == 200, comentario_5.text
+    adjuntos = comentario_5.json()["adjuntos"]
+    assert len(adjuntos) == 5
+    assert sum(1 for a in adjuntos if a.get("content_type") == "video/mp4") == 2
+
+    comentario_6 = await client.post(
+        f"/api/v1/taller/{solicitud_id}/comentarios",
+        data={"tipo": "GENERAL", "comentario": "Excede límite"},
+        files=[
+            ("fotos", (f"f{i}.jpg", io.BytesIO(fake_jpg), "image/jpeg"))
+            for i in range(6)
+        ],
+        headers=auth_headers_mecanico1,
+    )
+    assert comentario_6.status_code == 422
+
+    await client.post(f"/api/v1/taller/{solicitud_id}/tomar", json={}, headers=auth_headers_mecanico1)
+    await client.post(
+        f"/api/v1/taller/{solicitud_id}/autoasignar",
+        headers=auth_headers_mecanico1,
+        json={"detalles_ids": [detalle_id]},
+    )
+    resultado = await taller_resultado["payload"](
+        solicitud_id,
+        detalle_id,
+        "RESUELTA",
+        [seed_test_data["mecanico1"].id],
+        comentario="Reparación verificada en video",
+    )
+    cambio = await client.patch(
+        f"/api/v1/taller/{solicitud_id}/detalles/{detalle_id}/check",
+        data=resultado,
+        files={"fotos": ("prueba_final.mp4", io.BytesIO(fake_mp4), "video/mp4")},
+        headers=auth_headers_mecanico1,
+    )
+    assert cambio.status_code == 200, cambio.text
+
+    detalle_res = await client.get(f"/api/v1/taller/{solicitud_id}", headers=auth_headers_mecanico1)
+    assert detalle_res.status_code == 200
+    resolucion = next(item for item in detalle_res.json()["comentarios"] if item["tipo"] == "RESOLUCION")
+    assert len(resolucion["adjuntos"]) == 1
+    assert resolucion["adjuntos"][0]["content_type"] == "video/mp4"
+    assert resolucion["adjuntos"][0]["detalle_id"] == detalle_id
+
+
+
 

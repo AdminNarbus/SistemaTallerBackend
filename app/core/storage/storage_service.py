@@ -1,7 +1,7 @@
 import logging
 import os
 import uuid
-from typing import Final, Optional, Set
+from typing import Dict, Final, Optional, Set
 from fastapi import UploadFile
 
 from app.core.config import settings
@@ -10,6 +10,7 @@ from app.core.storage.base import BaseStorageProvider
 from app.core.storage.dtos import StorageUploadResultDTO
 from app.core.storage.gcs_provider import GCSStorageProvider
 from app.core.storage.local_provider import LocalStorageProvider
+from app.core.storage.video_processor import normalize_video_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,27 @@ ALLOWED_IMAGE_MIME_TYPES: Final[Set[str]] = {
     "image/png",
     "image/webp",
     "application/octet-stream",  # Algunos clientes envían octet-stream para fotos móviles
+}
+ALLOWED_VIDEO_EXTENSIONS: Final[Set[str]] = {".mp4", ".webm", ".mov", ".m4v", ".3gp"}
+ALLOWED_VIDEO_MIME_TYPES: Final[Set[str]] = {
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-m4v",
+    "video/3gpp",
+    "application/octet-stream",
+}
+ALLOWED_MEDIA_EXTENSIONS: Final[Set[str]] = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+EXTENSION_TO_MIME: Final[Dict[str, str]] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+    ".3gp": "video/3gpp",
 }
 
 
@@ -53,6 +75,37 @@ def _validate_image_file(file: Optional[UploadFile], content: bytes) -> str:
         )
 
     return extension
+
+
+def _resolve_media_mime(raw_content_type: Optional[str], extension: str) -> str:
+    """Normaliza MIME faltante o genérico según la extensión del archivo."""
+    cleaned = (raw_content_type or "").split(";", 1)[0].strip().lower()
+    if not cleaned or cleaned == "application/octet-stream":
+        return EXTENSION_TO_MIME.get(extension, "application/octet-stream")
+    return cleaned
+
+
+def _validate_video_size(file: UploadFile, content: bytes, extension: str) -> str:
+    """Valida extensión, Content-Type de respaldo y tamaño opcional de video."""
+    tamano_bytes = len(content)
+    if tamano_bytes == 0:
+        raise BusinessRuleException("El archivo subido está vacío (0 bytes).")
+
+    resolved_mime = _resolve_media_mime(file.content_type, extension)
+    if resolved_mime not in ALLOWED_VIDEO_MIME_TYPES:
+        logger.warning(
+            "[STORAGE_SERVICE] Advertencia: Content-Type no estándar '%s' para video '%s'",
+            resolved_mime,
+            file.filename,
+        )
+
+    max_bytes = settings.MAX_VIDEO_UPLOAD_SIZE_BYTES
+    if max_bytes is not None and max_bytes > 0 and tamano_bytes > max_bytes:
+        max_mb = max_bytes // (1024 * 1024)
+        raise BusinessRuleException(
+            f"El video supera el tamaño máximo permitido de {max_mb} MB (tamaño recibido: {tamano_bytes / (1024*1024):.2f} MB)."
+        )
+    return resolved_mime
 
 
 class StorageService:
@@ -135,6 +188,58 @@ class StorageService:
             content_type=content_type,
         )
 
+    async def upload_media(
+        self,
+        file: UploadFile,
+        folder: str = "evidencias",
+        allow_video: bool = True,
+    ) -> StorageUploadResultDTO:
+        """
+        Valida y sube una imagen o video (si allow_video=True) al almacenamiento configurado.
+        """
+        if not file or not file.filename:
+            raise BusinessRuleException("No se proporcionó ningún archivo para subir.")
+
+        content = await file.read()
+        extension = (os.path.splitext(file.filename)[1] or ".jpg").lower()
+
+        if extension in ALLOWED_IMAGE_EXTENSIONS:
+            validated_ext = _validate_image_file(file, content)
+            content_type = _resolve_media_mime(file.content_type, validated_ext)
+            final_ext = validated_ext
+        elif extension in ALLOWED_VIDEO_EXTENSIONS:
+            if not allow_video:
+                raise BusinessRuleException(
+                    f"Tipo de archivo no permitido: '{extension}'. Formatos válidos: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}"
+                )
+            resolved_mime = _validate_video_size(file, content, extension)
+            content, final_ext, content_type = await normalize_video_if_needed(
+                content, extension, resolved_mime
+            )
+        else:
+            allowed = ALLOWED_MEDIA_EXTENSIONS if allow_video else ALLOWED_IMAGE_EXTENSIONS
+            raise BusinessRuleException(
+                f"Tipo de archivo no permitido: '{extension}'. Formatos válidos: {', '.join(sorted(allowed))}"
+            )
+
+        unique_filename = f"{uuid.uuid4()}{final_ext}"
+        stored_path = await self.provider.upload_file(
+            file_content=content,
+            filename=unique_filename,
+            content_type=content_type,
+            folder=folder,
+        )
+        accessible_url = self.provider.get_url(stored_path)
+
+        return StorageUploadResultDTO(
+            url=accessible_url,
+            path=stored_path,
+            filename=unique_filename,
+            original_filename=file.filename or unique_filename,
+            size_bytes=len(content),
+            content_type=content_type,
+        )
+
     def get_url(
         self,
         file_path_or_url: Optional[str],
@@ -164,4 +269,8 @@ __all__ = [
     "storage_service",
     "ALLOWED_IMAGE_EXTENSIONS",
     "ALLOWED_IMAGE_MIME_TYPES",
+    "ALLOWED_VIDEO_EXTENSIONS",
+    "ALLOWED_VIDEO_MIME_TYPES",
+    "ALLOWED_MEDIA_EXTENSIONS",
+    "EXTENSION_TO_MIME",
 ]

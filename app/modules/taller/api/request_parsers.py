@@ -32,7 +32,22 @@ async def parse_json_or_multipart(request: Request, model: Type[T]) -> Tuple[T, 
                     values = form.getlist(field)
                     if values:
                         payload[field] = values
-            fotos = [foto for foto in form.getlist("fotos") if getattr(foto, "filename", None)]
+            fotos = []
+            for key in (
+                "fotos",
+                "fotos[]",
+                "videos",
+                "videos[]",
+                "evidencias",
+                "evidencias[]",
+                "adjuntos",
+                "adjuntos[]",
+                "archivos",
+                "archivos[]",
+            ):
+                for item in form.getlist(key):
+                    if getattr(item, "filename", None) and item not in fotos:
+                        fotos.append(item)
         elif "application/json" in content_type:
             payload = await request.json()
         else:

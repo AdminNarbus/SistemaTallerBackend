@@ -1,4 +1,4 @@
-"""Utilidades compartidas para adjuntar imágenes a eventos inmutables de bitácora."""
+"""Utilidades compartidas para adjuntar imágenes y videos a eventos inmutables de bitácora."""
 from typing import List, Optional
 
 from fastapi import UploadFile
@@ -6,19 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException
 from app.core.storage.storage_service import StorageService, storage_service
+from app.modules.taller.constants import MAX_ADJUNTOS_EVIDENCIA
 from app.modules.taller.dtos.bitacora_dto import ComentarioAdjuntoDTO
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_evidencia import TallerSolicitudEvidencia
 
 
-MAX_ADJUNTOS_BITACORA = 3
+MAX_ADJUNTOS_BITACORA = MAX_ADJUNTOS_EVIDENCIA
 
 
 def normalizar_fotos(fotos: Optional[List[UploadFile]]) -> List[UploadFile]:
     archivos = [foto for foto in (fotos or []) if foto and foto.filename]
     if len(archivos) > MAX_ADJUNTOS_BITACORA:
         raise BusinessRuleException(
-            f"Se permite adjuntar un máximo de {MAX_ADJUNTOS_BITACORA} imágenes por evento de bitácora."
+            f"Se permite adjuntar un máximo de {MAX_ADJUNTOS_BITACORA} archivos (fotos o videos) por evento de bitácora."
         )
     return archivos
 
@@ -33,7 +34,7 @@ async def guardar_adjuntos_bitacora(
     detalle_id: Optional[int] = None,
     storage: StorageService = storage_service,
 ) -> List[ComentarioAdjuntoDTO]:
-    """Sube y vincula imágenes al comentario antes del commit de su evento."""
+    """Sube y vincula imágenes o videos al comentario antes del commit de su evento."""
     archivos = normalizar_fotos(fotos)
     if not archivos:
         return []
@@ -42,7 +43,10 @@ async def guardar_adjuntos_bitacora(
     adjuntos: List[ComentarioAdjuntoDTO] = []
     evidencias: List[TallerSolicitudEvidencia] = []
     for archivo in archivos:
-        resultado = await storage.upload_image(file=archivo, folder="bitacora")
+        if hasattr(storage, "upload_media"):
+            resultado = await storage.upload_media(file=archivo, folder="bitacora", allow_video=True)
+        else:
+            resultado = await storage.upload_image(file=archivo, folder="bitacora")
         evidencia = TallerSolicitudEvidencia(
             solicitud_id=solicitud_id,
             detalle_id=detalle_id,

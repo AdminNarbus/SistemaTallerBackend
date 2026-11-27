@@ -1,8 +1,8 @@
-# Guía frontend: fotos en bitácora de OT
+# Guía frontend: fotos y videos en bitácora y evidencias de OT
 
 ## Objetivo
 
-La bitácora de cada OT permite que mecánicos, supervisores y administradores publiquen comentarios con hasta **3 imágenes**. Las fotos quedan asociadas al evento exacto que las produjo: un mensaje manual o un cambio de estado de una falla.
+La bitácora, las notificaciones iniciales de choferes y los cambios de estado de fallas permiten adjuntar hasta **5 archivos (fotos o videos en cualquier combinación)**. Los adjuntos quedan asociados al evento exacto que los produjo: la creación inicial de la OT, un mensaje manual o un cambio de estado de una falla.
 
 Los conductores pueden visualizar el historial si ya tienen acceso a la OT, pero no pueden publicar en esta bitácora técnica.
 
@@ -139,8 +139,9 @@ Las evidencias siguen apareciendo además en `solicitud.evidencias` por compatib
 
 ## Validaciones y manejo de errores
 
-- Máximo: 3 imágenes por acción.
-- Formatos: JPG, JPEG, PNG y WebP.
+- Máximo: **5 archivos** (fotos o videos en cualquier combinación) por acción.
+- Formatos de imagen: JPG, JPEG, PNG y WebP (máx. 10 MB por imagen).
+- Formatos de video: MP4, WebM, MOV, M4V y 3GP (resolución máxima 720p `1280x720` o `720x1280` en vertical; sin límite de duración, FPS ni peso).
 - El tamaño máximo por archivo depende de la configuración del backend; mostrar el mensaje devuelto por la API si se rechaza un archivo.
 - Si la API devuelve `403`, ocultar o deshabilitar el compositor para usuarios sin rol `MECANICO`, `SUPERVISOR` o `ADMIN`.
 - Si falla el envío, conservar texto y miniaturas para permitir reintentar.

@@ -73,7 +73,7 @@ async def agregar_comentario(
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Agrega un comentario JSON o multipart con hasta tres imágenes a la bitácora."""
+    """Agrega un comentario JSON o multipart con hasta cinco archivos (fotos o videos) a la bitácora."""
     dto, fotos = await parse_json_or_multipart(request, ComentarioCreateDTO)
     logger.info(
         "[MANTENCION] Agregando comentario en solicitud_id=%s | usuario_id=%s",

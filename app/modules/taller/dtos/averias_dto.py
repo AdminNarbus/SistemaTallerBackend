@@ -50,6 +50,11 @@ class SolicitudDetalleCreateDTO(BaseModel):
     falla_id: Optional[int] = None
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
+    fecha_reporte: Optional[AwareDatetime] = Field(
+        None,
+        description="Fecha real de notificación, con zona horaria, solo para SUPERVISOR/ADMIN. "
+        "No admite fechas futuras; omitida o null usa la fecha actual. No cambia fecha_creacion.",
+    )
 
     @property
     def texto_falla(self) -> str:
@@ -112,6 +117,11 @@ class EditarFallaDTO(BaseModel):
     categoria_id: Optional[int] = Field(
         None,
         description="ID de categoría opcional si además se reclasifica",
+    )
+    fecha_reporte: Optional[AwareDatetime] = Field(
+        None,
+        description="Fecha real de notificación corregida, con zona horaria, solo para fallas abiertas. "
+        "No admite fechas futuras; omitida o null conserva la actual. No cambia fecha_creacion.",
     )
 
     @field_validator("justificacion", mode="before")

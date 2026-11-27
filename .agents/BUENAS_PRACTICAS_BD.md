@@ -2,6 +2,10 @@
 
 Este documento establece los estándares de ingeniería de software, diseño relacional, modelado con SQLAlchemy 2.0 y gestión del ciclo de vida de migraciones con Alembic para el repositorio **`BackendTallerNarbus`**.
 
+> **Subagentes Especializados Asociados (`.agents/agents/`):**
+> - **`especialista-datos-rendimiento`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/especialista-datos-rendimiento/agent.md), `model: pro`): Responsable principal del diseño 3NF en SQLAlchemy 2.0, registro en `app/models/__init__.py`, migraciones de riesgo medio/alto (columnas `NOT NULL` en 3 fases, renombrados, backfills, merge de heads) y optimización SQL bajo el presupuesto `X-DB-Round-Trips`.
+> - **`ingeniero-qa-migraciones`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/ingeniero-qa-migraciones/agent.md), `model: flash`): Responsable de ejecutar y certificar el ciclo local completo de Alembic (`upgrade head` -> `downgrade -1` -> `upgrade head` -> `check`) y la suite `tests/migrations/`.
+
 ---
 
 ## 1. Principios Fundamentales del Diseño de Modelos

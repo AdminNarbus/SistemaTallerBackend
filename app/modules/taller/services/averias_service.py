@@ -51,18 +51,25 @@ from app.modules.taller.services.revision_falla_service import (
 logger = logging.getLogger(__name__)
 
 
-def resolver_fecha_reporte(
-    dto: AgregarFallaDTO, rol_reportante: str, ahora: datetime,
+def resolver_fecha_reporte_valor(
+    fecha_reporte_raw: Optional[datetime], rol_reportante: str, ahora: datetime,
 ) -> datetime:
     """Valida el reporte histórico sin modificar las fechas de auditoría."""
-    if dto.fecha_reporte is None:
+    if fecha_reporte_raw is None:
         return ahora
-    if rol_reportante not in (RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value):
+    if (rol_reportante or "").upper().strip() not in (RolUsuario.SUPERVISOR.value, RolUsuario.ADMIN.value):
         raise PermissionException("Solo supervisores y administradores pueden indicar fecha_reporte")
-    fecha_reporte = dto.fecha_reporte.astimezone(timezone.utc)
+    fecha_reporte = fecha_reporte_raw.astimezone(timezone.utc)
     if fecha_reporte > ahora:
         raise BusinessRuleException("La fecha de reporte no puede ser futura")
     return fecha_reporte
+
+
+def resolver_fecha_reporte(
+    dto: AgregarFallaDTO, rol_reportante: str, ahora: datetime,
+) -> datetime:
+    """Valida el reporte histórico desde AgregarFallaDTO sin modificar las fechas de auditoría."""
+    return resolver_fecha_reporte_valor(dto.fecha_reporte, rol_reportante, ahora)
 
 
 class AveriasService:
@@ -1047,10 +1054,13 @@ class AveriasService:
         dto: EditarFallaDTO,
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
+        actor_rol: Optional[str] = None,
     ) -> SolicitudDTO:
         """Modifica la descripción de una avería y registra el cambio en la bitácora."""
+        es_mecanico = (actor_rol or "").upper().strip() == RolUsuario.MECANICO.value
         logger.info(
-            "[SUPERVISION] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | supervisor_id=%s",
+            "[%s] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | actor_id=%s",
+            "MECANICO" if es_mecanico else "SUPERVISION",
             solicitud_id,
             detalle_id,
             supervisor_id,
@@ -1069,14 +1079,49 @@ class AveriasService:
         if not detalle:
             raise NotFoundException("Avería no encontrada en esta solicitud de taller")
 
+        if detalle.resuelto or detalle.estado == EstadoFalla.RESUELTA.value:
+            raise BusinessRuleException(
+                "No se puede modificar una avería que ya ha sido resuelta"
+            )
+
+        if es_mecanico:
+            if dto.fecha_reporte is not None:
+                raise PermissionException(
+                    "Solo supervisores y administradores pueden modificar fecha_reporte"
+                )
+
         texto_anterior = (
             detalle.descripcion_personalizada
             or (detalle.falla.nombre if getattr(detalle, "falla", None) else None)
             or f"Avería #{detalle.id}"
         )
         texto_nuevo = dto.descripcion_personalizada.strip()
+        if len(texto_nuevo) < 2:
+            raise BusinessRuleException(
+                "La descripción de la avería debe tener al menos 2 caracteres"
+            )
 
         now = datetime.now(timezone.utc)
+
+        # Actualizar fecha de notificación (solo en fallas abiertas; no altera fecha_creacion)
+        fecha_notificacion_cambio = False
+        fecha_utc: Optional[datetime] = None
+        if dto.fecha_reporte is not None:
+            fecha_utc = dto.fecha_reporte.astimezone(timezone.utc)
+            if fecha_utc > now:
+                raise BusinessRuleException("La fecha de reporte no puede ser futura")
+            fecha_previa = detalle.fecha_reporte
+            if fecha_previa is not None and fecha_previa.tzinfo is None:
+                fecha_previa = fecha_previa.replace(tzinfo=timezone.utc)
+            elif fecha_previa is not None:
+                fecha_previa = fecha_previa.astimezone(timezone.utc)
+            if fecha_previa != fecha_utc:
+                fecha_notificacion_cambio = True
+            detalle.fecha_reporte = fecha_utc
+            for ev in getattr(detalle, "eventos", None) or []:
+                if getattr(ev, "tipo_evento", None) == TipoEventoFalla.REPORTADA.value:
+                    ev.fecha_evento = fecha_utc
+                    db.add(ev)
 
         # Actualizar datos de la avería
         detalle.descripcion_personalizada = texto_nuevo
@@ -1091,23 +1136,36 @@ class AveriasService:
         db.add(detalle)
 
         # Registrar en la bitácora inmutable
-        sup_nom = supervisor_nombre or "Supervisor"
-        comentario_texto = (
-            f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'."
-        )
+        actor_nom = supervisor_nombre or ("Mecánico" if es_mecanico else "Supervisor")
+        tipo_comentario = "AVANCE" if es_mecanico else "SUPERVISION"
+        if fecha_notificacion_cambio and fecha_utc is not None:
+            fecha_fmt = fecha_utc.strftime("%d-%m-%Y %H:%M UTC")
+            if texto_anterior.strip() == texto_nuevo:
+                comentario_texto = (
+                    f"Fecha de notificación de avería #{detalle.id} actualizada a {fecha_fmt}."
+                )
+            else:
+                comentario_texto = (
+                    f"Cambio de avería '{texto_anterior}' a '{texto_nuevo}'. "
+                    f"Fecha de notificación: {fecha_fmt}."
+                )
+        else:
+            comentario_texto = (
+                f"Cambio de avería '{texto_anterior}' a '{texto_nuevo}'."
+            )
         if dto.justificacion:
             comentario_texto += f" Justificación: {dto.justificacion}"
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
             usuario_id=supervisor_id,
-            tipo="SUPERVISION",
+            tipo=tipo_comentario,
             comentario=comentario_texto,
             fecha_registro=now,
             fecha_evento=now,
         )
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.flush(db)
-        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=sup_nom)
+        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=actor_nom)
 
         solicitud.fecha_actualizacion = now
         dto_resultado = orm_to_solicitud_dto(solicitud)

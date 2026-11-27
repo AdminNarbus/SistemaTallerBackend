@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "sequence": 180,
+  "id": "AV-0180",
+  "timestamp": "2026-11-26T20:05:00Z",
+  "phase": "backend_taller",
+  "milestone": {
+    "id": "MULTIMEDIA_OT",
+    "statusBefore": "in_progress",
+    "statusAfter": "completed",
+    "name": "Soporte de videos de evidencia 720p y ampliación a 5 adjuntos por acción"
+  },
+  "type": "completed",
+  "summary": "Se incorporó validación, normalización/transcodificación a 720p con ffmpeg y almacenamiento de videos junto con ampliación del límite a 5 archivos (fotos o videos) en solicitudes, bitácora y cambios de estado de fallas.",
+  "scope": {
+    "planned": [
+      "Soportar carga de videos (MP4, WebM, MOV, M4V, 3GP) con normalización hasta 720p",
+      "Ampliar el máximo de adjuntos de 3 imágenes a 5 archivos multimedia por acción",
+      "Documentar contrato actualizado para Frontend y agregar cobertura unitaria e integración"
+    ],
+    "completed": [
+      "Procesador de video asíncrono (video_processor.py) e integración en StorageService.upload_media",
+      "Parsers multipart y servicios de solicitud/bitácora actualizados a MAX_ADJUNTOS_EVIDENCIA = 5",
+      "Dockerfile con ffmpeg y pruebas unitarias/integración aprobadas"
+    ],
+    "pending": [],
+    "outOfScope": [
+      "Streaming HLS adaptativo"
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/core/storage/video_processor.py",
+      "action": "created",
+      "summary": "Inspección ffprobe y transcodificación/escalado máximo 720p con ffmpeg."
+    },
+    {
+      "path": "app/core/storage/storage_service.py",
+      "action": "modified",
+      "summary": "Nuevo método upload_media con validación MIME/magic bytes para imágenes y videos."
+    },
+    {
+      "path": "app/modules/taller/constants.py",
+      "action": "modified",
+      "summary": "Define MAX_ADJUNTOS_EVIDENCIA = 5."
+    },
+    {
+      "path": "app/modules/taller/services/bitacora_adjuntos.py",
+      "action": "modified",
+      "summary": "Usa MAX_ADJUNTOS_EVIDENCIA y upload_media(allow_video=True)."
+    },
+    {
+      "path": "app/modules/taller/services/solicitud_service.py",
+      "action": "modified",
+      "summary": "Valida máximo 5 evidencias, sube videos/imágenes y prioriza imagen en foto_url principal."
+    },
+    {
+      "path": "Dockerfile",
+      "action": "modified",
+      "summary": "Instala ffmpeg y asegura directorios de uploads."
+    },
+    {
+      "path": "GUIA_FRONTEND_ADJUNTOS_BITACORA.md",
+      "action": "modified",
+      "summary": "Actualiza contrato a 5 archivos multimedia (fotos y videos 720p)."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-0180-01",
+      "title": "Normalización server-side a 720p con fallback tolerante cuando ffmpeg no está instalado localmente",
+      "rationale": "Garantiza compatibilidad multi-plataforma (iOS/Android/Web) en producción Docker con ffmpeg sin bloquear entornos locales de desarrollo sin binario.",
+      "consequences": "Los contenedores productivos normalizan a MP4 H.264/AAC <= 720p y los tests/entornos locales conservan operación segura."
+    }
+  ],
+  "verification": [
+    {
+      "command": ".\\venv\\Scripts\\python.exe -m pytest tests/unit/test_video_processor.py tests/unit/test_storage_service.py tests/integration/test_taller_api.py -k \"video or cinco or upload_media\" -q --tb=short",
+      "result": "passed",
+      "evidence": "Pruebas unitarias de video/storage e integración de solicitudes y bitácora con 5 archivos en verde."
+    }
+  ],
+  "blockers": [],
+  "nextStep": "Sincronizar con las ramas feat/ equivalentes en ProtoNeumaticos.",
+  "git": {
+    "repository": "BackendTallerNarbus",
+    "branch": "feat/evidencias-video-ot",
+    "commit": "badeb05",
+    "dirty": false
+  },
+  "notes": []
+}

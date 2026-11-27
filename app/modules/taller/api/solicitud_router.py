@@ -45,7 +45,20 @@ def _extraer_datos_multipart_solicitud(
     foto_url = form.get("foto_url")
 
     fotos_files: List[Any] = []
-    for key in ["fotos", "fotos[]", "evidencias", "evidencias[]", "foto", "evidencia"]:
+    for key in [
+        "fotos",
+        "fotos[]",
+        "videos",
+        "videos[]",
+        "evidencias",
+        "evidencias[]",
+        "adjuntos",
+        "adjuntos[]",
+        "archivos",
+        "archivos[]",
+        "foto",
+        "evidencia",
+    ]:
         items = form.getlist(key)
         for item in items:
             if hasattr(item, "filename") and item.filename and item not in fotos_files:

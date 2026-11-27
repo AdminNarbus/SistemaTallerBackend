@@ -199,6 +199,70 @@ def test_get_url_gcs_provider_and_cache():
         assert mock_blob.generate_signed_url.call_count == 1
 
 
+@pytest.fixture
+def dummy_video_file():
+    """Genera un archivo UploadFile MP4 válido para pruebas de subida multimedia."""
+    content = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"V" * 1024
+    file_obj = io.BytesIO(content)
+    return UploadFile(
+        file=file_obj,
+        filename="evidencia_taller.mp4",
+        headers={"content-type": "application/octet-stream"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_media_video_local_provider(tmp_path, dummy_video_file):
+    """Verifica subida de video MP4 y normalización de MIME application/octet-stream -> video/mp4."""
+    local_provider = LocalStorageProvider(base_directory=str(tmp_path))
+    service = StorageService(provider=local_provider)
+
+    with patch("app.core.storage.video_processor.shutil.which", return_value=None):
+        result = await service.upload_media(file=dummy_video_file, folder="bitacora", allow_video=True)
+
+    assert result["url"].startswith("/uploads/bitacora/")
+    assert result["url"].endswith(".mp4")
+    assert result["content_type"] == "video/mp4"
+    assert result["original_filename"] == "evidencia_taller.mp4"
+    assert (tmp_path / "bitacora" / result["filename"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_upload_media_accepts_large_video_without_size_limit(tmp_path):
+    local_provider = LocalStorageProvider(base_directory=str(tmp_path))
+    service = StorageService(provider=local_provider)
+    large_mp4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"X" * (21 * 1024 * 1024)
+    large_file = UploadFile(
+        file=io.BytesIO(large_mp4),
+        filename="largo.mp4",
+        headers={"content-type": "video/mp4"},
+    )
+    with patch("app.core.storage.video_processor.shutil.which", return_value=None):
+        result = await service.upload_media(file=large_file, folder="bitacora", allow_video=True)
+
+    assert result["url"].startswith("/uploads/bitacora/")
+    assert result["size_bytes"] == len(large_mp4)
+
+
+@pytest.mark.asyncio
+async def test_upload_media_rejects_empty_video():
+    service = StorageService(provider=MagicMock(spec=BaseStorageProvider))
+    empty_file = UploadFile(
+        file=io.BytesIO(b""),
+        filename="vacio.mp4",
+        headers={"content-type": "video/mp4"},
+    )
+    with pytest.raises(BusinessRuleException, match="vacío"):
+        await service.upload_media(file=empty_file, allow_video=True)
+
+
+@pytest.mark.asyncio
+async def test_upload_media_rejects_video_when_disallowed(dummy_video_file):
+    service = StorageService(provider=MagicMock(spec=BaseStorageProvider))
+    with pytest.raises(BusinessRuleException, match="Tipo de archivo no permitido"):
+        await service.upload_media(file=dummy_video_file, allow_video=False)
+
+
 def test_resolve_service_account_email():
     """Verifica la resolución del email de Service Account para firma de URLs en Cloud Run."""
     from app.core.storage.gcs_provider import _resolve_service_account_email

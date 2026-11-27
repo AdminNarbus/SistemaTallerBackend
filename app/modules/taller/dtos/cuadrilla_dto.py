@@ -32,6 +32,10 @@ class AutoasignarFallasDTO(BaseModel):
     detalles_ids: List[int]
     comentario: Optional[str] = None
     colaboradores_ids: Optional[List[int]] = None
+    unirse_a_activas: bool = Field(
+        False,
+        description="Si es True, permite sumarse a fallas que ya tienen otros mecánicos activos (co-responsabilidad en caliente).",
+    )
 
 
 class AsignarFallasSupervisoraDTO(BaseModel):
@@ -65,6 +69,16 @@ class LiberarTurnoDTO(BaseModel):
 
 
 class AgregarColaboradorDTO(BaseModel):
-    """Payload para invitar un colega mecánico al equipo de trabajo de la OT."""
+    """Payload para invitar uno o más colegas mecánicos al equipo de trabajo de la OT."""
     colaborador_id: Optional[int] = None
     colaborador_nombre: Optional[str] = None
+    colaboradores_ids: Optional[List[int]] = None
+    detalles_ids: Optional[List[int]] = None
+    comentario: Optional[str] = None
+
+    @property
+    def effective_colaboradores_ids(self) -> List[int]:
+        ids = list(self.colaboradores_ids or [])
+        if self.colaborador_id is not None:
+            ids.append(self.colaborador_id)
+        return list(dict.fromkeys(ids))

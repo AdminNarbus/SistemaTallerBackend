@@ -78,7 +78,7 @@ class CierreService:
         comentario_limpio = (dto.comentario or "").strip()
         archivos = normalizar_fotos(fotos)
         if not comentario_limpio and not archivos:
-            raise BusinessRuleException("Debe enviar un comentario o al menos una imagen adjunta.")
+            raise BusinessRuleException("Debe enviar un comentario o al menos un archivo adjunto (foto o video).")
 
         if not usuario_nombre:
             u_usr = await self.repo.get_usuario_by_id(db, usuario_id)

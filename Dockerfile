@@ -13,6 +13,7 @@ WORKDIR /app
 # Instalar dependencias del sistema mínimas requeridas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ffmpeg \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -26,7 +27,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Asegurar la existencia de directorios y permisos de ejecución del entrypoint
-RUN mkdir -p uploads/solicitudes uploads/evidencias && \
+RUN mkdir -p uploads/solicitudes uploads/evidencias uploads/bitacora uploads/neumaticos && \
     sed -i 's/\r$//' /app/docker-entrypoint.sh && \
     chmod +x /app/docker-entrypoint.sh
 

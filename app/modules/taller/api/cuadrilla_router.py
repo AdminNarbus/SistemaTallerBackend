@@ -171,11 +171,17 @@ async def agregar_colaborador(
     current_user: UsuarioResponseDTO = Depends(require_mecanico_or_admin),
     db: AsyncSession = SessionDep,
 ):
-    """Agrega un colaborador al equipo mientras la solicitud está EN_REPARACION."""
+    """Agrega uno o más colaboradores al equipo mientras la solicitud está EN_REPARACION."""
     logger.info(
-        "[MANTENCION] Agregando colaborador_id=%s a solicitud_id=%s por mecanico_id=%s",
-        dto.colaborador_id,
+        "[MANTENCION] Agregando colaborador(es)=%s a solicitud_id=%s por mecanico_id=%s",
+        dto.effective_colaboradores_ids or dto.colaborador_nombre,
         id,
         current_user.id,
     )
-    return await cuadrilla_service.agregar_colaborador(db, solicitud_id=id, mecanico_id=current_user.id, dto=dto)
+    return await cuadrilla_service.agregar_colaborador(
+        db,
+        solicitud_id=id,
+        mecanico_id=current_user.id,
+        dto=dto,
+        mecanico_nombre=current_user.nombre_completo,
+    )

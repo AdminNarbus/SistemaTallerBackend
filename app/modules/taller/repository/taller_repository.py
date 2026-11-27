@@ -986,6 +986,7 @@ class TallerRepository:
                                 'revisado_por_id', d.revisado_por_id,
                                 'fecha_revision', d.fecha_revision,
                                 'resuelto', d.resuelto,
+                                'reportado_por_id', d.reportado_por_id,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
                                     WHEN d.resuelto = true THEN COALESCE((
@@ -1250,6 +1251,7 @@ class TallerRepository:
                                 'revisado_por_id', d.revisado_por_id,
                                 'fecha_revision', d.fecha_revision,
                                 'resuelto', d.resuelto,
+                                'reportado_por_id', d.reportado_por_id,
                                 'mecanico_resolvio_id', d.mecanico_resolvio_id,
                                 'mecanico_resolvio_nombre', CASE
                                     WHEN d.resuelto = true THEN COALESCE((

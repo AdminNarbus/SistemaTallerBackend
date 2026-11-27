@@ -13,6 +13,7 @@ from app.modules.taller.dtos import (
     AgregarFallaDTO,
     CheckFallaDTO,
     DetalleUpdateDTO,
+    EditarFallaDTO,
     ReportarRepuestoDTO,
     SolicitudDTO,
 )
@@ -129,4 +130,31 @@ async def reportar_repuesto(
         dto=dto,
         mecanico_id=current_user.id,
         mecanico_nombre=current_user.nombre_completo,
+    )
+
+
+@router.patch("/{id}/detalles/{detalle_id}", response_model=SolicitudDTO)
+async def editar_falla(
+    id: int,
+    detalle_id: int,
+    dto: EditarFallaDTO,
+    current_user: UsuarioResponseDTO = Depends(require_mecanico_or_supervisor_or_admin),
+    db: AsyncSession = SessionDep,
+):
+    """Permite a un mecánico, supervisor o admin editar cualquier falla abierta de una OT no finalizada."""
+    logger.info(
+        "[MANTENCION] Editando texto de falla en solicitud_id=%s | detalle_id=%s | actor_id=%s | rol=%s",
+        id,
+        detalle_id,
+        current_user.id,
+        current_user.rol,
+    )
+    return await averias_service.editar_falla(
+        db,
+        solicitud_id=id,
+        detalle_id=detalle_id,
+        dto=dto,
+        supervisor_id=current_user.id,
+        supervisor_nombre=current_user.nombre_completo,
+        actor_rol=current_user.rol,
     )

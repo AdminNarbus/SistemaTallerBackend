@@ -11,6 +11,7 @@ from app.core.storage.storage_service import storage_service, StorageService
 from app.modules.taller.constants import (
     DEFAULT_PAGE_LIMIT,
     DEFAULT_PAGE_SKIP,
+    MAX_ADJUNTOS_EVIDENCIA,
     EstadoSolicitud,
     TipoComentarioBitacora,
     EstadoFalla,
@@ -44,6 +45,7 @@ from app.modules.taller.services.mappers import (
 )
 from app.core.realtime.events import RealtimeEvent, publish_event_soon
 from app.modules.taller.services.estadias_helper import attach_comentario_safe
+from app.modules.taller.services.averias_service import resolver_fecha_reporte_valor
 from app.modules.taller.services.trazabilidad_fallas import registrar_evento_falla
 
 from app.modules.taller.services.trazabilidad_estados import RegistroEstadoOT, registrar_evento_estado
@@ -289,6 +291,13 @@ class SolicitudService:
         )
 
         archivos_fotos = recopilar_archivos_fotos(foto=foto, fotos=fotos)
+        urls_unicas = list(dict.fromkeys(u for u in (dto.fotos_urls or []) if u))
+        if dto.foto_url and dto.foto_url not in urls_unicas:
+            urls_unicas.insert(0, dto.foto_url)
+        if len(archivos_fotos) + len(urls_unicas) > MAX_ADJUNTOS_EVIDENCIA:
+            raise BusinessRuleException(
+                f"Se permite adjuntar un máximo de {MAX_ADJUNTOS_EVIDENCIA} archivos (fotos o videos) por solicitud."
+            )
 
         uploaded_evidencias: List[dict] = []
         if archivos_fotos:
@@ -298,6 +307,10 @@ class SolicitudService:
 
             async def _subir_evidencia(archivo: UploadFile) -> dict:
                 async with upload_semaphore:
+                    if hasattr(self.storage, "upload_media"):
+                        return await self.storage.upload_media(
+                            file=archivo, folder="solicitudes", allow_video=True
+                        )
                     return await self.storage.upload_image(
                         file=archivo, folder="solicitudes"
                     )
@@ -327,7 +340,12 @@ class SolicitudService:
                     })
 
         if uploaded_evidencias and not dto.foto_url:
-            dto.foto_url = uploaded_evidencias[0].get("path") or uploaded_evidencias[0]["url"]
+            primera_imagen = next(
+                (e for e in uploaded_evidencias if str(e.get("content_type") or "").startswith("image/")),
+                None,
+            )
+            elegida = primera_imagen or uploaded_evidencias[0]
+            dto.foto_url = elegida.get("path") or elegida["url"]
         elif dto.foto_url and not any(
             e.get("path") == dto.foto_url or e.get("url") == dto.foto_url
             for e in uploaded_evidencias
@@ -500,6 +518,11 @@ class SolicitudService:
                     continue
 
                 falla_nombre = falla_nombre or texto
+                fecha_reporte_item = resolver_fecha_reporte_valor(
+                    getattr(det_dto, "fecha_reporte", None),
+                    creador_rol or "",
+                    now,
+                )
 
                 detalle = TallerSolicitudDetalle(
                     solicitud_id=solicitud.id if not es_nueva_ot else None,
@@ -507,7 +530,7 @@ class SolicitudService:
                     descripcion_personalizada=texto,
                     resuelto=False,
                     fecha_creacion=now,
-                    fecha_reporte=now,
+                    fecha_reporte=fecha_reporte_item,
                     reportado_por_id=creador_id,
                     estado_revision="APROBADA" if revision_automatica else "PENDIENTE",
                     revisado_por_id=creador_id if revision_automatica else None,
@@ -535,7 +558,7 @@ class SolicitudService:
                     actor_nombre=creador_nombre,
                     estado_anterior=None,
                     estado_nuevo=EstadoFalla.PENDIENTE.value,
-                    fecha_evento=now,
+                    fecha_evento=detalle.fecha_reporte or now,
                     comentario=detalle.descripcion_personalizada,
                 )
             if not es_nueva_ot:

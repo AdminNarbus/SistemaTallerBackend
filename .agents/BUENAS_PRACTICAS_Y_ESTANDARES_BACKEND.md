@@ -2,6 +2,11 @@
 
 Este documento establece las directrices de ingeniería de software, arquitectura limpia, seguridad, rendimiento y buenas prácticas para el desarrollo y mantenimiento del repositorio **`BackendTallerNarbus`**.
 
+> **Subagentes Especializados Asociados (`.agents/agents/`):**
+> - **`arquitecto-dominio-seguridad`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/arquitecto-dominio-seguridad/agent.md), `model: pro`): Vela por el aislamiento de las 4 capas, invariantes de negocio de OT/cuadrilla/bitácora, RBAC (`enforce_visual_read_only`), I/O asíncrono seguro (`app/core/storage/`), WebSockets (`app/core/realtime/`) y timers en segundo plano.
+> - **`implementador-api-fastapi`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/implementador-api-fastapi/agent.md), `model: flash`): Construye y refactoriza Routers, Services, Repositories y DTOs Pydantic v2 aplicando paginación, `response_model` y excepciones de `app/core/exceptions.py`.
+> - **`especialista-datos-rendimiento`** ([agent.md](file:///c:/Users/Fabian/Desktop/Narbus/BackendTallerNarbus/.agents/agents/especialista-datos-rendimiento/agent.md), `model: pro`): Audita y optimiza agregaciones SQL nativas, eliminación de N+1 y cumplimiento del presupuesto `X-DB-Round-Trips`.
+
 ---
 
 ## 1. Arquitectura Limpia y Separación de Responsabilidades

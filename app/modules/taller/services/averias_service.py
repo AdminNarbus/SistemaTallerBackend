@@ -1054,10 +1054,13 @@ class AveriasService:
         dto: EditarFallaDTO,
         supervisor_id: int,
         supervisor_nombre: Optional[str] = None,
+        actor_rol: Optional[str] = None,
     ) -> SolicitudDTO:
         """Modifica la descripción de una avería y registra el cambio en la bitácora."""
+        es_mecanico = (actor_rol or "").upper().strip() == RolUsuario.MECANICO.value
         logger.info(
-            "[SUPERVISION] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | supervisor_id=%s",
+            "[%s] Modificando texto de falla | solicitud_id=%s | detalle_id=%s | actor_id=%s",
+            "MECANICO" if es_mecanico else "SUPERVISION",
             solicitud_id,
             detalle_id,
             supervisor_id,
@@ -1081,12 +1084,22 @@ class AveriasService:
                 "No se puede modificar una avería que ya ha sido resuelta"
             )
 
+        if es_mecanico:
+            if dto.fecha_reporte is not None:
+                raise PermissionException(
+                    "Solo supervisores y administradores pueden modificar fecha_reporte"
+                )
+
         texto_anterior = (
             detalle.descripcion_personalizada
             or (detalle.falla.nombre if getattr(detalle, "falla", None) else None)
             or f"Avería #{detalle.id}"
         )
         texto_nuevo = dto.descripcion_personalizada.strip()
+        if len(texto_nuevo) < 2:
+            raise BusinessRuleException(
+                "La descripción de la avería debe tener al menos 2 caracteres"
+            )
 
         now = datetime.now(timezone.utc)
 
@@ -1123,7 +1136,8 @@ class AveriasService:
         db.add(detalle)
 
         # Registrar en la bitácora inmutable
-        sup_nom = supervisor_nombre or "Supervisor"
+        actor_nom = supervisor_nombre or ("Mecánico" if es_mecanico else "Supervisor")
+        tipo_comentario = "AVANCE" if es_mecanico else "SUPERVISION"
         if fecha_notificacion_cambio and fecha_utc is not None:
             fecha_fmt = fecha_utc.strftime("%d-%m-%Y %H:%M UTC")
             if texto_anterior.strip() == texto_nuevo:
@@ -1132,26 +1146,26 @@ class AveriasService:
                 )
             else:
                 comentario_texto = (
-                    f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'. "
+                    f"Cambio de avería '{texto_anterior}' a '{texto_nuevo}'. "
                     f"Fecha de notificación: {fecha_fmt}."
                 )
         else:
             comentario_texto = (
-                f"Avería #{detalle.id} modificada: de '{texto_anterior}' a '{texto_nuevo}'."
+                f"Cambio de avería '{texto_anterior}' a '{texto_nuevo}'."
             )
         if dto.justificacion:
             comentario_texto += f" Justificación: {dto.justificacion}"
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud_id,
             usuario_id=supervisor_id,
-            tipo="SUPERVISION",
+            tipo=tipo_comentario,
             comentario=comentario_texto,
             fecha_registro=now,
             fecha_evento=now,
         )
         self.repo.add_comentario(db, comentario_entry)
         await self.repo.flush(db)
-        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=sup_nom)
+        attach_comentario_safe(solicitud, comentario_entry, usuario_nombre=actor_nom)
 
         solicitud.fecha_actualizacion = now
         dto_resultado = orm_to_solicitud_dto(solicitud)

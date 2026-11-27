@@ -217,7 +217,7 @@ async def test_editar_falla_con_justificacion_opcional(
     assert detalle["descripcion_personalizada"] == nueva_descripcion
     comentario = next(c for c in solicitud["comentarios"] if c["tipo"] == "SUPERVISION")
     assert comentario["comentario"] == (
-        f"Avería #9905 modificada: de 'lucs no predn' a '{nueva_descripcion}'.{sufijo_bitacora}"
+        f"Cambio de avería 'lucs no predn' a '{nueva_descripcion}'.{sufijo_bitacora}"
     )
 
 

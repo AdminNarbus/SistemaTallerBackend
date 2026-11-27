@@ -36,6 +36,7 @@ def _work_order_event(path: str, method: str) -> Optional[Tuple[int, str, Option
         (r"/(?:taller|supervision/solicitudes)/(\d+)/terminar-avance$", "progress.finished"),
         (r"/(?:taller|supervision/solicitudes)/(\d+)/detalles/(\d+)/(?:check|resolver)$", "failure.status_changed"),
         (r"/(?:taller|supervision/solicitudes)/(\d+)/detalles/(\d+)/repuesto$", "failure.parts_changed"),
+        (r"/(?:taller|supervision/solicitudes)/(\d+)/detalles/(\d+)$", "failure.updated"),
         (r"/(?:taller|supervision/solicitudes)/(\d+)/detalles$", "failure.added"),
         (r"/taller/(\d+)/comentarios$", "comment.added"),
         (r"/taller/(\d+)/finalizar$", "finalized"),

@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleException, NotFoundException
-from app.modules.taller.constants import EstadoSolicitud
+from app.modules.taller.constants import EstadoFalla, EstadoSolicitud
 from app.modules.taller.models.taller_asignacion_falla import TallerAsignacionFalla
 from app.modules.taller.models.taller_solicitud_comentario import TallerSolicitudComentario
 from app.modules.taller.models.taller_solicitud_mecanico import TallerSolicitudMecanico
@@ -181,10 +181,11 @@ class CuadrillaService:
         solicitud_id: int,
         mecanico_id: int,
         dto: AgregarColaboradorDTO,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
-        """Agrega un nuevo colaborador al equipo de trabajo en caliente."""
+        """Agrega uno o más colaboradores al equipo y sus fallas activas en caliente."""
         logger.info(
-            "[MANTENCION] Agregando colaborador en caliente | solicitud_id=%s | solicitado_por=%s",
+            "[MANTENCION] Agregando colaborador(es) en caliente | solicitud_id=%s | solicitado_por=%s",
             solicitud_id,
             mecanico_id,
         )
@@ -195,7 +196,7 @@ class CuadrillaService:
         if not solicitud:
             raise NotFoundException("Solicitud de taller no encontrada")
 
-        if solicitud.estado != "EN_REPARACION":
+        if solicitud.estado != EstadoSolicitud.EN_REPARACION.value:
             raise BusinessRuleException(
                 "Solo se pueden agregar colaboradores cuando la solicitud está EN_REPARACION"
             )
@@ -208,8 +209,8 @@ class CuadrillaService:
                 "Solo un mecánico asignado activamente a la solicitud puede agregar colaboradores"
             )
 
-        colab_id = dto.colaborador_id
-        if not colab_id and dto.colaborador_nombre:
+        colab_ids = dto.effective_colaboradores_ids
+        if not colab_ids and dto.colaborador_nombre:
             encontrados = await user_repository.get_mecanicos_by_nombres_o_usernames(
                 db, [dto.colaborador_nombre]
             )
@@ -217,42 +218,155 @@ class CuadrillaService:
                 raise NotFoundException(
                     f"No se encontró un mecánico con nombre '{dto.colaborador_nombre}'"
                 )
-            colab_id = encontrados[0].id
+            colab_ids = [encontrados[0].id]
 
-        if not colab_id:
+        if not colab_ids:
             raise BusinessRuleException(
                 "Debes indicar el ID o nombre del colaborador a agregar"
             )
 
-        if colab_id == mecanico_id:
+        if mecanico_id in colab_ids:
             raise BusinessRuleException(
                 "Un mecánico no puede agregarse a sí mismo como colaborador"
             )
 
-        ya_activo = any(
-            m.mecanico_id == colab_id and m.is_activo for m in solicitud.mecanicos
+        users_map = await user_repository.get_by_ids_map(
+            db, list(dict.fromkeys([mecanico_id, *colab_ids]))
         )
-        if ya_activo:
+        for c_id in colab_ids:
+            u_colab = users_map.get(c_id)
+            if not u_colab or not u_colab.is_active:
+                raise BusinessRuleException(
+                    "El mecánico colaborador indicado no existe o se encuentra inactivo"
+                )
+
+        sol_detalles_map = {d.id: d for d in (solicitud.detalles or [])}
+        if dto.detalles_ids is not None:
+            detalles_objetivo = list(dict.fromkeys(dto.detalles_ids))
+            for d_id in detalles_objetivo:
+                det = sol_detalles_map.get(d_id)
+                if not det:
+                    raise NotFoundException(f"La falla con ID {d_id} no pertenece a esta solicitud")
+                if det.resuelto or det.estado == EstadoFalla.RESUELTA.value:
+                    raise BusinessRuleException(
+                        f"No se puede incorporar colaboradores a la falla resuelta '{describir_detalle_averia(det)}'."
+                    )
+        else:
+            asigs_actor = await self.repo.get_asignaciones_activas(
+                db, solicitud_id=solicitud_id, mecanicos_ids=[mecanico_id]
+            )
+            detalles_objetivo = list(dict.fromkeys(
+                a.detalle_id
+                for a in asigs_actor
+                if a.detalle_id in sol_detalles_map
+                and not sol_detalles_map[a.detalle_id].resuelto
+                and sol_detalles_map[a.detalle_id].estado != EstadoFalla.RESUELTA.value
+            ))
+
+        presencias_activas_ids = {
+            m.mecanico_id for m in (solicitud.mecanicos or []) if m.is_activo
+        }
+        if not detalles_objetivo:
+            for c_id in colab_ids:
+                if c_id in presencias_activas_ids:
+                    raise BusinessRuleException("El mecánico ya está activo en esta solicitud")
+
+        asigs_colabs = (
+            await self.repo.get_asignaciones_activas(
+                db,
+                solicitud_id=solicitud_id,
+                detalles_ids=detalles_objetivo,
+                mecanicos_ids=colab_ids,
+            )
+            if detalles_objetivo
+            else []
+        )
+        activas_existentes = {(a.mecanico_id, a.detalle_id) for a in asigs_colabs}
+
+        now = datetime.now(timezone.utc)
+        u_actor = users_map.get(mecanico_id)
+        actor_nom = u_actor.nombre_completo if u_actor else (mecanico_nombre or "Mecánico")
+        nuevas_presencias = 0
+        nuevas_asigs = 0
+
+        for c_id in colab_ids:
+            u_colab = users_map[c_id]
+            if c_id not in presencias_activas_ids:
+                colab_entry = TallerSolicitudMecanico(
+                    solicitud_id=solicitud.id,
+                    mecanico_id=c_id,
+                    asignado_por_id=mecanico_id,
+                    es_lider_responsable=False,
+                    is_activo=True,
+                    fecha_asignacion=now,
+                )
+                colab_entry.mecanico = u_colab
+                self.repo.add_mecanico(db, colab_entry)
+                attach_mecanico_safe(solicitud, colab_entry)
+                presencias_activas_ids.add(c_id)
+                nuevas_presencias += 1
+
+            for d_id in detalles_objetivo:
+                if (c_id, d_id) in activas_existentes:
+                    continue
+                nueva_asig = TallerAsignacionFalla(
+                    solicitud_id=solicitud.id,
+                    detalle_id=d_id,
+                    mecanico_id=c_id,
+                    asignado_por_id=mecanico_id,
+                    origen="MECANICO",
+                    is_activo=True,
+                    fecha_asignacion=now,
+                    resuelto_en_esta_asignacion=False,
+                )
+                nueva_asig.mecanico = u_colab
+                if u_actor:
+                    nueva_asig.asignado_por = u_actor
+                self.repo.add_asignacion_falla(db, nueva_asig)
+                detalle = sol_detalles_map[d_id]
+                if not getattr(detalle, "asignaciones", None):
+                    detalle.asignaciones = []
+                detalle.asignaciones.append(nueva_asig)
+                if not getattr(solicitud, "asignaciones_fallas", None):
+                    solicitud.asignaciones_fallas = []
+                solicitud.asignaciones_fallas.append(nueva_asig)
+                activas_existentes.add((c_id, d_id))
+                nuevas_asigs += 1
+
+        if nuevas_asigs == 0 and nuevas_presencias == 0:
             raise BusinessRuleException(
-                "El mecánico ya está activo en esta solicitud"
+                "Los mecánicos seleccionados ya se encuentran activos en las fallas indicadas."
             )
 
-        colab_entry = TallerSolicitudMecanico(
-            solicitud_id=solicitud.id,
-            mecanico_id=colab_id,
-            es_lider_responsable=False,
-            is_activo=True,
-            fecha_asignacion=datetime.now(timezone.utc),
-        )
-        u_colab = await user_repository.get_by_id(db, colab_id)
-        if u_colab:
-            colab_entry.mecanico = u_colab
-        self.repo.add_mecanico(db, colab_entry)
-        attach_mecanico_safe(solicitud, colab_entry)
-        solicitud.fecha_actualizacion = datetime.now(timezone.utc)
+        colab_nombres = [users_map[c_id].nombre_completo for c_id in colab_ids if c_id in users_map]
+        if detalles_objetivo:
+            fallas_nombres = [
+                describir_detalle_averia(sol_detalles_map[d_id])
+                for d_id in detalles_objetivo
+                if d_id in sol_detalles_map
+            ]
+            fallas_str = ", ".join(fallas_nombres)
+            base_texto = f"Incorporación al equipo: {unir_nombres(colab_nombres)} en {fallas_str}"
+        else:
+            base_texto = f"Incorporación al equipo: {unir_nombres(colab_nombres)}"
 
+        comentario_entry = TallerSolicitudComentario(
+            solicitud_id=solicitud.id,
+            usuario_id=mecanico_id,
+            tipo="ASIGNACION",
+            comentario=agregar_texto(base_texto, dto.comentario),
+            fecha_registro=now,
+        )
+        if u_actor:
+            comentario_entry.usuario = u_actor
+        self.repo.add_comentario(db, comentario_entry)
+        attach_comentario_safe(solicitud, comentario_entry, actor_nom)
+        solicitud.fecha_actualizacion = now
+
+        await db.flush()
+        respuesta = await SolicitudService(repository=self.repo).get_solicitud(db, solicitud_id)
         await db.commit()
-        return orm_to_solicitud_dto(solicitud)
+        return respuesta
 
     async def desasignar_mecanico(
         self,
@@ -456,17 +570,26 @@ class CuadrillaService:
             raise NotFoundException("Solicitud de taller no encontrada")
         estado_ot_anterior = solicitud.estado
 
+        if solicitud.estado in (EstadoSolicitud.FINALIZADO.value, "CANCELADO"):
+            raise BusinessRuleException(
+                "No puedes asignarte fallas en una solicitud finalizada o cancelada"
+            )
+
         if not dto.detalles_ids:
             raise BusinessRuleException(
                 "Debe seleccionar al menos una falla para autoasignarse"
             )
 
+        detalles_unicos_ids = list(dict.fromkeys(dto.detalles_ids))
         sol_detalles_map = {d.id: d for d in solicitud.detalles}
-        for d_id in dto.detalles_ids:
-            if d_id not in sol_detalles_map:
+        for d_id in detalles_unicos_ids:
+            det = sol_detalles_map.get(d_id)
+            if not det:
                 raise NotFoundException(
                     f"La falla con ID {d_id} no pertenece a esta solicitud"
                 )
+            if dto.unirse_a_activas and (det.resuelto or det.estado == EstadoFalla.RESUELTA.value):
+                raise BusinessRuleException("No puedes unirte a una falla que ya fue resuelta.")
 
         now = datetime.now(timezone.utc)
         asignadas_count = 0
@@ -485,11 +608,17 @@ class CuadrillaService:
             from app.modules.auth.repository.user_repository import user_repository
 
             users_map = await user_repository.get_by_ids_map(db, mecanicos_objetivo)
+            for c_id in (dto.colaboradores_ids or []):
+                u_c = users_map.get(c_id)
+                if not u_c or not u_c.is_active:
+                    raise BusinessRuleException(
+                        "El mecánico colaborador indicado no existe o se encuentra inactivo"
+                    )
             u_mec = users_map.get(mecanico_id)
             mec_nom = u_mec.nombre_completo if u_mec else (mecanico_nombre or "Mecánico")
 
         asigs_activas_todas = await self.repo.get_asignaciones_activas(
-            db, solicitud_id=solicitud_id, detalles_ids=dto.detalles_ids
+            db, solicitud_id=solicitud_id, detalles_ids=detalles_unicos_ids
         )
         presencias_activas_existentes = (
             await self.repo.get_presencias_activas_mecanicos(
@@ -497,31 +626,34 @@ class CuadrillaService:
             )
         )
 
+        detalles_con_otros_activos: set[int] = set()
         for asig in asigs_activas_todas:
             if asig.mecanico_id not in mecanicos_objetivo:
-                det_ocupado = sol_detalles_map.get(asig.detalle_id)
-                falla_nom = (
-                    describir_detalle_averia(det_ocupado)
-                    if det_ocupado
-                    else f"ID {asig.detalle_id}"
-                )
-                mec_ocupante = (
-                    asig.mecanico.nombre_completo
-                    if getattr(asig, "mecanico", None)
-                    and getattr(asig.mecanico, "nombre_completo", None)
-                    else None
-                )
-                if not mec_ocupante:
-                    u_ocup = await self.repo.get_usuario_by_id(db, asig.mecanico_id)
-                    mec_ocupante = (
-                        u_ocup.nombre_completo
-                        if u_ocup
-                        else f"Mecánico #{asig.mecanico_id}"
+                detalles_con_otros_activos.add(asig.detalle_id)
+                if not dto.unirse_a_activas:
+                    det_ocupado = sol_detalles_map.get(asig.detalle_id)
+                    falla_nom = (
+                        describir_detalle_averia(det_ocupado)
+                        if det_ocupado
+                        else f"ID {asig.detalle_id}"
                     )
-                raise BusinessRuleException(
-                    f"La falla '{falla_nom}' ya se encuentra tomada activamente por el mecánico {mec_ocupante}. "
-                    f"Debe ser liberada antes de que otro mecánico pueda tomarla."
-                )
+                    mec_ocupante = (
+                        asig.mecanico.nombre_completo
+                        if getattr(asig, "mecanico", None)
+                        and getattr(asig.mecanico, "nombre_completo", None)
+                        else None
+                    )
+                    if not mec_ocupante:
+                        u_ocup = await self.repo.get_usuario_by_id(db, asig.mecanico_id)
+                        mec_ocupante = (
+                            u_ocup.nombre_completo
+                            if u_ocup
+                            else f"Mecánico #{asig.mecanico_id}"
+                        )
+                    raise BusinessRuleException(
+                        f"La falla '{falla_nom}' ya se encuentra tomada activamente por el mecánico {mec_ocupante}. "
+                        f"Debe ser liberada antes de que otro mecánico pueda tomarla."
+                    )
 
         activas_existentes = {
             (a.mecanico_id, a.detalle_id)
@@ -531,7 +663,7 @@ class CuadrillaService:
 
         for m_id in mecanicos_objetivo:
             u_target = users_map.get(m_id)
-            for d_id in dict.fromkeys(dto.detalles_ids):
+            for d_id in detalles_unicos_ids:
                 if (m_id, d_id) in activas_existentes:
                     continue
 
@@ -580,9 +712,14 @@ class CuadrillaService:
                 attach_mecanico_safe(solicitud, nueva_presencia)
                 presencias_activas_existentes.add(m_id)
 
-        for d_id in dict.fromkeys(dto.detalles_ids):
+        if asignadas_count == 0 and dto.unirse_a_activas:
+            raise BusinessRuleException(
+                "Ya te encuentras asignado activamente a las fallas seleccionadas."
+            )
+
+        for d_id in detalles_unicos_ids:
             aprobar_detalle(sol_detalles_map[d_id], AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", now))
-        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", fecha_evento=now, detalles_ids=tuple(dto.detalles_ids)))
+        await aprobar_como_ot(db, solicitud, AprobacionOT(mecanico_id, mec_nom, "Autoasignación de fallas", fecha_evento=now, detalles_ids=tuple(detalles_unicos_ids)))
 
         if solicitud.estado in [
             EstadoSolicitud.PENDIENTE.value,
@@ -601,13 +738,21 @@ class CuadrillaService:
 
         fallas_nombres = [
             describir_detalle_averia(sol_detalles_map[d_id])
-            for d_id in dict.fromkeys(dto.detalles_ids)
+            for d_id in detalles_unicos_ids
             if d_id in sol_detalles_map
         ]
         fallas_str = ", ".join(fallas_nombres) if fallas_nombres else "fallas seleccionadas"
         colab_str = f" ({unir_nombres([mec_nom, *colab_nombres])})" if colab_nombres else ""
 
-        texto_bitacora = agregar_texto(f"Inicio: {fallas_str}{colab_str}", dto.comentario)
+        if detalles_con_otros_activos:
+            if set(detalles_unicos_ids).issubset(detalles_con_otros_activos):
+                prefijo = "Se unió al equipo en"
+            else:
+                prefijo = "Inicio e incorporación al equipo"
+        else:
+            prefijo = "Inicio"
+
+        texto_bitacora = agregar_texto(f"{prefijo}: {fallas_str}{colab_str}", dto.comentario)
 
         comentario_entry = TallerSolicitudComentario(
             solicitud_id=solicitud.id,

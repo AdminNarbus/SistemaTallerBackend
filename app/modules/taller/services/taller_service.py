@@ -282,9 +282,14 @@ class TallerService:
         solicitud_id: int,
         mecanico_id: int,
         dto: AgregarColaboradorDTO,
+        mecanico_nombre: Optional[str] = None,
     ) -> SolicitudDTO:
         result = await self.cuadrilla_srv.agregar_colaborador(
-            db, solicitud_id=solicitud_id, mecanico_id=mecanico_id, dto=dto
+            db,
+            solicitud_id=solicitud_id,
+            mecanico_id=mecanico_id,
+            dto=dto,
+            mecanico_nombre=mecanico_nombre,
         )
         return result
 
